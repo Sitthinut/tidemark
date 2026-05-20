@@ -1,0 +1,375 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { Icon } from "@/components/Icon";
+import { AddHoldingsSheet, type AddedHolding } from "@/components/AddHoldingsSheet";
+import {
+  type AppId,
+  BucketsPanel,
+  ChatPanel,
+  NotesPanel,
+  PlanPanel,
+} from "@/components/AppPanels";
+import { ChatScreen } from "@/components/screens/ChatScreen";
+import { ConnectScreen } from "@/components/screens/ConnectScreen";
+import { JournalScreen } from "@/components/screens/JournalScreen";
+import { MarketsScreen } from "@/components/screens/MarketsScreen";
+import { ModelPortfoliosScreen } from "@/components/screens/ModelPortfoliosScreen";
+import { PortfolioScreen } from "@/components/screens/PortfolioScreen";
+import {
+  SettingsScreen,
+  type Theme,
+} from "@/components/screens/SettingsScreen";
+import { USER_GOALS } from "@/lib/mock/data";
+import { useViewport } from "@/lib/useViewport";
+
+type Screen =
+  | "connect"
+  | "portfolio"
+  | "markets"
+  | "chat"
+  | "journal"
+  | "models"
+  | "settings";
+
+const MOBILE_NAV: { id: Screen; icon: string; label: string }[] = [
+  { id: "portfolio", icon: "home", label: "Portfolio" },
+  { id: "markets", icon: "pulse", label: "Markets" },
+  { id: "chat", icon: "chat", label: "Chat" },
+  { id: "journal", icon: "book", label: "Journal" },
+];
+
+// Wide shell drops "chat" from the rail — chat lives in the right dock instead.
+const WIDE_NAV: { id: Screen; icon: string; label: string }[] = [
+  { id: "portfolio", icon: "home", label: "Portfolio" },
+  { id: "markets", icon: "pulse", label: "Markets" },
+  { id: "journal", icon: "book", label: "Journal" },
+];
+
+const APPS_RAIL: { id: AppId; icon: string; label: string }[] = [
+  { id: "chat", icon: "chat", label: "Chat" },
+  { id: "buckets", icon: "chart", label: "Buckets" },
+  { id: "plan", icon: "insight", label: "Plan" },
+  { id: "notes", icon: "book", label: "Notes" },
+];
+
+const THEME_STORAGE_KEY = "compass-theme";
+
+export function App() {
+  const viewport = useViewport();
+  const isWide = viewport !== "mobile";
+  const isDesktop = viewport === "desktop";
+
+  const [theme, setTheme] = useState<Theme>("system");
+  const [screen, setScreen] = useState<Screen>("portfolio");
+  const [pendingPrompt, setPendingPrompt] = useState<string | null>(null);
+  const [importOpen, setImportOpen] = useState(false);
+  const [, setExtraHoldings] = useState<AddedHolding[]>([]);
+  const [, setSavedReading] = useState<unknown[]>([]);
+  const [selectedModelId, setSelectedModelId] = useState<string>(
+    USER_GOALS.selectedModelId,
+  );
+  // Wide-only: which app panel is open on the right. Desktop opens chat by default.
+  const [activeApp, setActiveApp] = useState<AppId | null>("chat");
+  const [accountMenuOpen, setAccountMenuOpen] = useState(false);
+
+  // Load theme from localStorage on mount
+  useEffect(() => {
+    try {
+      const stored = window.localStorage.getItem(THEME_STORAGE_KEY) as Theme | null;
+      if (stored && ["light", "dark", "system"].includes(stored)) {
+        setTheme(stored);
+      }
+    } catch {
+      // ignore (private browsing / SSR)
+    }
+  }, []);
+
+  // Apply theme + viewport attribute to root, persist theme
+  useEffect(() => {
+    document.documentElement.setAttribute("data-theme", theme);
+    try {
+      window.localStorage.setItem(THEME_STORAGE_KEY, theme);
+    } catch {
+      // ignore
+    }
+  }, [theme]);
+  useEffect(() => {
+    document.documentElement.setAttribute("data-viewport", viewport);
+  }, [viewport]);
+
+  // If we resize mobile → wide while on the Chat screen, hop into the dock.
+  useEffect(() => {
+    if (isWide && screen === "chat") {
+      setScreen("portfolio");
+      setActiveApp("chat");
+    }
+  }, [isWide, screen]);
+
+  // Cross-screen events
+  useEffect(() => {
+    const navHandler = (e: Event) => {
+      const target = (e as CustomEvent<Screen>).detail;
+      if (isWide && target === "chat") setActiveApp("chat");
+      else setScreen(target);
+    };
+    const promptHandler = (e: Event) => {
+      setPendingPrompt((e as CustomEvent<string>).detail);
+      if (isWide) setActiveApp("chat");
+      else setScreen("chat");
+    };
+    const saveReadingHandler = (e: Event) => {
+      const article = (e as CustomEvent<unknown>).detail;
+      setSavedReading((prev) => [...prev, article]);
+    };
+    window.addEventListener("nav", navHandler);
+    window.addEventListener("ai-prompt", promptHandler);
+    window.addEventListener("save-reading", saveReadingHandler);
+    return () => {
+      window.removeEventListener("nav", navHandler);
+      window.removeEventListener("ai-prompt", promptHandler);
+      window.removeEventListener("save-reading", saveReadingHandler);
+    };
+  }, [isWide]);
+
+  // Helper: opening chat goes to dock on wide, screen on mobile.
+  const openChat = () => {
+    if (isWide) setActiveApp("chat");
+    else setScreen("chat");
+  };
+
+  const renderScreen = () => {
+    if (screen === "connect") {
+      return <ConnectScreen onConnect={() => setScreen("portfolio")} />;
+    }
+    if (screen === "portfolio") {
+      return (
+        <PortfolioScreen
+          onOpenSettings={() => setScreen("settings")}
+          onOpenModels={() => setScreen("models")}
+          onOpenChat={openChat}
+          onOpenImport={() => setImportOpen(true)}
+        />
+      );
+    }
+    if (screen === "markets") return <MarketsScreen />;
+    if (screen === "chat") {
+      return (
+        <ChatScreen
+          persona="advisor"
+          seedPrompt={pendingPrompt}
+          onPromptConsumed={() => setPendingPrompt(null)}
+        />
+      );
+    }
+    if (screen === "journal") {
+      return (
+        <JournalScreen
+          onOpenChat={openChat}
+          onOpenModels={() => setScreen("models")}
+          onOpenSettings={() => setScreen("settings")}
+        />
+      );
+    }
+    if (screen === "models") {
+      return (
+        <ModelPortfoliosScreen
+          selectedId={selectedModelId}
+          onSelect={(id) => {
+            setSelectedModelId(id);
+            USER_GOALS.selectedModelId = id;
+          }}
+          onBack={() => setScreen("portfolio")}
+        />
+      );
+    }
+    if (screen === "settings") {
+      return (
+        <SettingsScreen
+          theme={theme}
+          onThemeChange={(t) => setTheme(t)}
+          onBack={() => setScreen("portfolio")}
+        />
+      );
+    }
+    return null;
+  };
+
+  // ===== MOBILE SHELL (unchanged behaviour from original) =====
+  if (!isWide) {
+    const hideNav =
+      screen === "connect" || screen === "settings" || screen === "models";
+    return (
+      <div className="app-root">
+        <div className="app-frame" data-screen-label={screen}>
+          {renderScreen()}
+          {!hideNav && (
+            <nav className="bottom-nav">
+              {MOBILE_NAV.map((item) => (
+                <button
+                  key={item.id}
+                  data-active={screen === item.id}
+                  onClick={() => setScreen(item.id)}
+                >
+                  <Icon name={item.icon} size={17} />
+                  <span>{item.label}</span>
+                </button>
+              ))}
+            </nav>
+          )}
+        </div>
+        <AddHoldingsSheet
+          open={importOpen}
+          onClose={() => setImportOpen(false)}
+          onAdd={(rows) => setExtraHoldings((prev) => [...prev, ...rows])}
+        />
+      </div>
+    );
+  }
+
+  // ===== WIDE SHELL (tablet + desktop) =====
+  // Onboarding and full-screen modal-ish routes still render solo.
+  if (screen === "connect") {
+    return (
+      <div className="app-root">
+        <div
+          className="app-frame"
+          data-screen-label={screen}
+          style={{ maxWidth: 520 }}
+        >
+          {renderScreen()}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className={`ra-shell ${viewport} ${activeApp ? "panel-open" : "panel-closed"}`}
+      data-screen-label={screen}
+    >
+      {/* ===== Left nav rail ===== */}
+      <aside className="ra-rail">
+        <div className="ra-rail-brand">
+          <span className="brand-mark"></span>
+          {isDesktop && <span className="ra-rail-brand-text">Compass</span>}
+        </div>
+        <nav className="ra-rail-nav">
+          {WIDE_NAV.map((item) => (
+            <button
+              key={item.id}
+              className="ra-rail-item"
+              data-active={screen === item.id}
+              onClick={() => setScreen(item.id)}
+              aria-label={item.label}
+            >
+              <Icon name={item.icon} size={18} />
+              <span className="ra-rail-item-label">{item.label}</span>
+            </button>
+          ))}
+        </nav>
+        <div className="ra-rail-foot">
+          <button
+            className="ra-rail-avatar-btn"
+            onClick={() => setAccountMenuOpen((o) => !o)}
+            aria-label="Account"
+          >
+            <span className="ra-rail-avatar">PN</span>
+            {isDesktop && (
+              <div className="ra-rail-acct-text">
+                <div className="ra-rail-acct-name">Pim N.</div>
+                <div className="ra-rail-acct-sub">Live · Demo Broker</div>
+              </div>
+            )}
+          </button>
+          {accountMenuOpen && (
+            <div
+              className="ra-account-menu"
+              onMouseLeave={() => setAccountMenuOpen(false)}
+            >
+              <button
+                onClick={() => {
+                  setAccountMenuOpen(false);
+                  setScreen("settings");
+                }}
+              >
+                <Icon name="settings" size={14} /> Settings
+              </button>
+              <button
+                onClick={() => {
+                  setAccountMenuOpen(false);
+                  setScreen("models");
+                }}
+              >
+                <Icon name="insight" size={14} /> Model portfolios
+              </button>
+              <button onClick={() => setAccountMenuOpen(false)}>
+                <Icon name="user" size={14} /> Account
+              </button>
+              <hr />
+              <button
+                onClick={() => {
+                  setAccountMenuOpen(false);
+                  setScreen("connect");
+                }}
+              >
+                <Icon name="refresh" size={14} /> Sign out
+              </button>
+            </div>
+          )}
+        </div>
+      </aside>
+
+      {/* ===== Main content ===== */}
+      <main className="ra-main">
+        <div className="ra-main-inner" data-screen-label={screen}>
+          {renderScreen()}
+        </div>
+      </main>
+
+      {/* ===== Apps panel ===== */}
+      {activeApp && (
+        <section className="ra-panel">
+          {activeApp === "chat" && (
+            <ChatPanel
+              seedPrompt={pendingPrompt}
+              onPromptConsumed={() => setPendingPrompt(null)}
+              onClose={() => setActiveApp(null)}
+            />
+          )}
+          {activeApp === "buckets" && (
+            <BucketsPanel onClose={() => setActiveApp(null)} />
+          )}
+          {activeApp === "plan" && (
+            <PlanPanel onClose={() => setActiveApp(null)} />
+          )}
+          {activeApp === "notes" && (
+            <NotesPanel onClose={() => setActiveApp(null)} />
+          )}
+        </section>
+      )}
+
+      {/* ===== Right apps icon rail ===== */}
+      <aside className="ra-apps-rail">
+        {APPS_RAIL.map((a) => (
+          <button
+            key={a.id}
+            className="ra-apps-rail-btn"
+            data-active={activeApp === a.id}
+            onClick={() => setActiveApp(activeApp === a.id ? null : a.id)}
+            aria-label={a.label}
+          >
+            <Icon name={a.icon} size={18} />
+            <span className="ra-apps-rail-label">{a.label}</span>
+          </button>
+        ))}
+      </aside>
+
+      <AddHoldingsSheet
+        open={importOpen}
+        onClose={() => setImportOpen(false)}
+        onAdd={(rows) => setExtraHoldings((prev) => [...prev, ...rows])}
+      />
+    </div>
+  );
+}
