@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 
 export type Viewport = "mobile" | "tablet" | "desktop";
 
-const MOBILE_MAX = 900;
+const MOBILE_MAX = 700;
 const TABLET_MAX = 1200;
 
 function widthToViewport(w: number): Viewport {
@@ -14,7 +14,7 @@ function widthToViewport(w: number): Viewport {
 }
 
 /**
- * Returns the current viewport bucket: mobile (<900) | tablet (900–1199) | desktop (≥1200).
+ * Returns the current viewport bucket: mobile (<700) | tablet (700–1199) | desktop (≥1200).
  * Safe to call in client components; reads window.innerWidth synchronously since
  * the App is mounted with ssr: false.
  */

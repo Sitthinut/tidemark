@@ -137,7 +137,6 @@ html { background: var(--bg) !important; }
 }
 .app-frame {
   width: 100%;
-  max-width: 440px;
   min-height: 100vh;
   background: var(--bg);
   position: relative;
@@ -177,6 +176,7 @@ html { background: var(--bg) !important; }
   background: var(--ink);
   position: relative;
   display: inline-block;
+  flex-shrink: 0;
 }
 .topbar .brand-mark::after {
   content: "";
@@ -194,6 +194,7 @@ html { background: var(--bg) !important; }
   border-radius: 4px;
   background: var(--card-soft);
   border: 1px solid var(--line-soft);
+  flex-shrink: 0;
 }
 .topbar .icon-btn {
   width: 28px; height: 28px;
@@ -1085,10 +1086,6 @@ textarea.sheet-input:focus { border-color: var(--accent); }
   background: var(--ink);
 }
 
-@media (min-width: 900px) {
-  .app-frame { box-shadow: var(--shadow-lg); }
-}
-
 .screen { opacity: 1; }
 
 
@@ -1254,8 +1251,8 @@ textarea.sheet-input:focus { border-color: var(--accent); }
  * Responsive shell styles for Investment Agent.
  *
  * Breakpoints:
- *   <  900px   mobile   — original .app-frame layout (defined in styles.css)
- *   900–1199   tablet   — .ra-shell.tablet, Gmail-style icon+label nav
+ *   <  700px   mobile   — original .app-frame layout (defined in styles.css)
+ *   700–1199   tablet   — .ra-shell.tablet, Gmail-style icon+label nav
  *   >= 1200    desktop  — .ra-shell.desktop, wide labeled nav
  * ========================================================================== */
 
@@ -1290,32 +1287,6 @@ textarea.sheet-input:focus { border-color: var(--accent); }
 
 .ra-shell.tablet .ra-rail  { padding: 18px 6px; align-items: center; }
 .ra-shell.desktop .ra-rail { padding: 18px 12px; }
-
-.ra-rail-brand {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  padding: 4px 8px 22px;
-  font-size: 16px;
-  font-weight: 500;
-  letter-spacing: -0.02em;
-}
-.ra-shell.tablet .ra-rail-brand { padding: 4px 0 18px; }
-.ra-rail-brand .brand-mark {
-  width: 24px; height: 24px;
-  border-radius: 7px;
-  background: var(--ink);
-  position: relative;
-  display: inline-block;
-}
-.ra-rail-brand .brand-mark::after {
-  content: "";
-  position: absolute;
-  inset: 5px;
-  border-radius: 4px;
-  background: var(--accent);
-}
-.ra-rail-brand-text { font-weight: 500; }
 
 .ra-rail-nav { flex: 1; display: flex; flex-direction: column; gap: 2px; width: 100%; }
 
@@ -1430,8 +1401,8 @@ textarea.sheet-input:focus { border-color: var(--accent); }
 }
 .ra-shell.desktop .ra-main-inner { max-width: 880px; }
 
-/* Hide the brand block inside reused screens (left rail provides it) */
-.ra-main .topbar .brand { display: none; }
+/* Each reused screen renders its own topbar (with brand) inside .ra-main,
+   matching the mobile pattern now that the left rail no longer carries one. */
 .ra-main .topbar { padding-top: 18px; }
 /* Hide the per-screen avatar pill since left rail has account control */
 .ra-main .topbar .avatar { display: none; }
@@ -1556,7 +1527,7 @@ textarea.sheet-input:focus { border-color: var(--accent); }
 /* ----- Per-viewport tweaks to reused screens ----- */
 /* The mobile shell adds 96px bottom padding for the floating nav.
    On wide we don't have that nav, so re-claim the space. */
-@media (min-width: 900px) {
+@media (min-width: 700px) {
   .ra-main .app-frame { max-width: 100%; border: 0; box-shadow: none; }
   /* Hide the floating bottom nav if anything inside a screen renders one */
   .ra-shell .bottom-nav { display: none; }

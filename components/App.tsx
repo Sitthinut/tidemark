@@ -250,10 +250,6 @@ export function App() {
     >
       {/* ===== Left nav rail ===== */}
       <aside className="ra-rail">
-        <div className="ra-rail-brand">
-          <span className="brand-mark"></span>
-          {isDesktop && <span className="ra-rail-brand-text">Compass</span>}
-        </div>
         <nav className="ra-rail-nav">
           {WIDE_NAV.map((item) => (
             <button
