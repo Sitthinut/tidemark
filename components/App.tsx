@@ -46,7 +46,14 @@ export function App() {
   const isWide = viewport !== "mobile";
   const isDesktop = viewport === "desktop";
 
-  const [theme, setTheme] = useState<Theme>("system");
+  const [theme, setTheme] = useState<Theme>(() => {
+    if (typeof window === "undefined") return "system";
+    try {
+      const stored = window.localStorage.getItem(THEME_STORAGE_KEY);
+      if (stored === "light" || stored === "dark" || stored === "system") return stored;
+    } catch {}
+    return "system";
+  });
   const [screen, setScreen] = useState<Screen>("portfolio");
   const [pendingPrompt, setPendingPrompt] = useState<string | null>(null);
   const [importOpen, setImportOpen] = useState(false);
@@ -60,26 +67,11 @@ export function App() {
   const [activeApp, setActiveApp] = useState<AppId | null>("chat");
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
 
-  // Load theme from localStorage on mount
-  useEffect(() => {
-    try {
-      const stored = window.localStorage.getItem(THEME_STORAGE_KEY) as Theme | null;
-      if (stored && ["light", "dark", "system"].includes(stored)) {
-        setTheme(stored);
-      }
-    } catch {
-      // ignore (private browsing / SSR)
-    }
-  }, []);
-
-  // Apply theme + viewport attribute to root, persist theme
   useEffect(() => {
     document.documentElement.setAttribute("data-theme", theme);
     try {
       window.localStorage.setItem(THEME_STORAGE_KEY, theme);
-    } catch {
-      // ignore
-    }
+    } catch {}
   }, [theme]);
   useEffect(() => {
     document.documentElement.setAttribute("data-viewport", viewport);
