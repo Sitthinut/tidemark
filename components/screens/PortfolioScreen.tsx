@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { type BucketFormValues, BucketSheet } from "@/components/BucketSheet";
 import { MiniBars, MiniLine, ModelDonut, PerfChart } from "@/components/charts";
 import { FeedbackRow } from "@/components/FeedbackRow";
 import { Icon } from "@/components/Icon";
@@ -9,6 +10,7 @@ import {
   usePortfolioView,
   useSelectedModelId,
 } from "@/lib/fetchers/legacy";
+import { invalidate } from "@/lib/fetchers/swr";
 import { fmtPct } from "@/lib/format";
 import {
   ANALYSIS,
@@ -19,6 +21,18 @@ import {
   SECTOR_BREAKDOWN,
 } from "@/lib/mock/data";
 import type { AssetClass, BenchmarkKey, Holding, Portfolio } from "@/lib/mock/types";
+
+function portfolioToFormValues(p: Portfolio): BucketFormValues {
+  return {
+    id: p.id,
+    name: p.name,
+    typeLabel: p.typeLabel || "Free",
+    icon: p.icon || "○",
+    color: p.color || "var(--accent)",
+    brokerage: p.brokerage,
+    notes: p.notes || "",
+  };
+}
 
 const SEV_COLOR: Record<string, string> = {
   good: "var(--gain)",
@@ -81,6 +95,44 @@ export function PortfolioScreen({
   const [filter, setFilter] = useState<AssetClass | "all">("all");
   const [benchmark, setBenchmark] = useState<"none" | BenchmarkKey>("none");
   const [feedback, setFeedback] = useState<Record<string, "up" | "down" | null>>({});
+  const [bucketSheet, setBucketSheet] = useState<
+    { mode: "create" } | { mode: "edit"; bucket: Portfolio } | null
+  >(null);
+
+  async function saveBucket(values: BucketFormValues) {
+    const isEdit = bucketSheet?.mode === "edit";
+    if (isEdit) {
+      const res = await fetch(`/api/buckets/${encodeURIComponent(values.id)}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          name: values.name,
+          typeLabel: values.typeLabel,
+          icon: values.icon,
+          color: values.color,
+          brokerage: values.brokerage,
+          notes: values.notes,
+        }),
+      });
+      if (!res.ok) throw new Error(`Update failed (${res.status})`);
+    } else {
+      const res = await fetch("/api/buckets", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(values),
+      });
+      if (!res.ok) throw new Error(`Create failed (${res.status})`);
+    }
+    invalidate("/api/buckets");
+  }
+
+  async function deleteBucket(id: string) {
+    const res = await fetch(`/api/buckets/${encodeURIComponent(id)}`, { method: "DELETE" });
+    if (!res.ok) throw new Error(`Delete failed (${res.status})`);
+    invalidate("/api/buckets");
+    invalidate(/^\/api\/holdings/);
+    if (activePfId === id) setActivePfId("all");
+  }
 
   const { portfolios, aggregate, isLoading } = usePortfolioView();
   const { models } = useModelPortfoliosView();
@@ -195,8 +247,11 @@ export function PortfolioScreen({
               long-term holdings, plus optional buckets for tax-advantaged accounts.
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-              <button className="btn primary" onClick={onOpenImport}>
-                <Icon name="plus" size={13} /> Add your first holdings
+              <button className="btn primary" onClick={() => setBucketSheet({ mode: "create" })}>
+                <Icon name="plus" size={13} /> Create your first bucket
+              </button>
+              <button className="btn ghost" onClick={onOpenImport}>
+                Import existing holdings
               </button>
               <button className="btn ghost" onClick={onOpenModels}>
                 Browse model portfolios
@@ -204,6 +259,11 @@ export function PortfolioScreen({
             </div>
           </div>
         </div>
+        <BucketSheet
+          open={bucketSheet?.mode === "create"}
+          onClose={() => setBucketSheet(null)}
+          onSave={saveBucket}
+        />
       </div>
     );
   }
@@ -283,17 +343,23 @@ export function PortfolioScreen({
             border: "1px dashed var(--line)",
             color: "var(--muted)",
           }}
-          onClick={() =>
-            window.dispatchEvent(
-              new CustomEvent("ai-prompt", {
-                detail:
-                  "Help me set up a new portfolio bucket. What types make sense and what should I separate?",
-              }),
-            )
-          }
+          onClick={() => setBucketSheet({ mode: "create" })}
         >
           <Icon name="plus" size={12} /> New
         </button>
+        {activePf && (
+          <button
+            style={{
+              background: "transparent",
+              border: "1px solid var(--line-soft)",
+              color: "var(--muted)",
+            }}
+            onClick={() => setBucketSheet({ mode: "edit", bucket: activePf })}
+            aria-label={`Edit ${activePf.name}`}
+          >
+            <Icon name="settings" size={12} /> Edit
+          </button>
+        )}
       </div>
 
       {activePf?.notes && <div className="pf-notes">{activePf.notes}</div>}
@@ -820,6 +886,16 @@ export function PortfolioScreen({
           ⓘ Educational analysis only. Not personalised financial advice.
         </div>
       </div>
+
+      <BucketSheet
+        open={!!bucketSheet}
+        initial={bucketSheet?.mode === "edit" ? portfolioToFormValues(bucketSheet.bucket) : null}
+        onClose={() => setBucketSheet(null)}
+        onSave={saveBucket}
+        onDelete={
+          bucketSheet?.mode === "edit" ? () => deleteBucket(bucketSheet.bucket.id) : undefined
+        }
+      />
     </div>
   );
 }
