@@ -4,8 +4,20 @@
 // existing screens can drop their mock imports without rewriting layout.
 
 import { useMemo } from "react";
-import { adaptAggregate, adaptModelPortfolios, adaptPortfolios } from "@/lib/portfolio/adapter";
-import { useBuckets, useHoldings, useModelPortfolios, usePlan, useQuotes } from "./portfolio";
+import {
+  adaptAggregate,
+  adaptJournal,
+  adaptModelPortfolios,
+  adaptPortfolios,
+} from "@/lib/portfolio/adapter";
+import {
+  useBuckets,
+  useHoldings,
+  useJournalEntries,
+  useModelPortfolios,
+  usePlan,
+  useQuotes,
+} from "./portfolio";
 
 export function usePortfolioView() {
   const { data: buckets, error: e1 } = useBuckets();
@@ -36,4 +48,10 @@ export function useModelPortfoliosView() {
 export function useSelectedModelId(): string | null {
   const { data: plan } = usePlan();
   return plan?.selectedModelId ?? null;
+}
+
+export function useJournalView() {
+  const { data, error } = useJournalEntries();
+  const journal = useMemo(() => (data ? adaptJournal(data) : null), [data]);
+  return { journal, isLoading: !data, error };
 }

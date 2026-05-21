@@ -2,7 +2,8 @@
 
 import { Icon } from "@/components/Icon";
 import { ChatScreen } from "@/components/screens/ChatScreen";
-import { ANALYSIS, PORTFOLIOS, USER_JOURNAL } from "@/lib/mock/data";
+import { useJournalView, usePortfolioView } from "@/lib/fetchers/legacy";
+import { ANALYSIS } from "@/lib/mock/data";
 
 export type AppId = "chat" | "buckets" | "plan" | "notes";
 
@@ -45,26 +46,33 @@ export function ChatPanel({
 }
 
 export function BucketsPanel({ onClose }: { onClose: () => void }) {
+  const { portfolios, isLoading } = usePortfolioView();
   const fmt = (n: number) => `฿${Math.round(n).toLocaleString("en-US")}`;
   return (
     <>
       <PanelHeader title="Buckets" onClose={onClose} />
       <div className="ra-panel-body" style={{ padding: "10px 14px 14px" }}>
-        {PORTFOLIOS.map((p) => (
-          <div className="ra-bucket-card" key={p.id}>
-            <span className="ra-bucket-icon">{p.icon}</span>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div className="ra-bucket-name">{p.name}</div>
-              <div className="ra-bucket-sub">{p.typeLabel}</div>
-            </div>
-            <div style={{ textAlign: "right" }}>
-              <div className="num" style={{ fontSize: 12.5 }}>
-                {fmt(p.totalValue)}
+        {isLoading || !portfolios ? (
+          <div style={{ padding: 12, color: "var(--muted)", fontSize: 12.5 }}>Loading…</div>
+        ) : portfolios.length === 0 ? (
+          <div style={{ padding: 12, color: "var(--muted)", fontSize: 12.5 }}>No buckets yet.</div>
+        ) : (
+          portfolios.map((p) => (
+            <div className="ra-bucket-card" key={p.id}>
+              <span className="ra-bucket-icon">{p.icon}</span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div className="ra-bucket-name">{p.name}</div>
+                <div className="ra-bucket-sub">{p.typeLabel}</div>
               </div>
-              <div className="delta up num">+{p.perfPct.ytd}% YTD</div>
+              <div style={{ textAlign: "right" }}>
+                <div className="num" style={{ fontSize: 12.5 }}>
+                  {fmt(p.totalValue)}
+                </div>
+                <div className="delta up num">+{p.perfPct.ytd.toFixed(1)}% YTD</div>
+              </div>
             </div>
-          </div>
-        ))}
+          ))
+        )}
         <button className="btn ghost sm" style={{ width: "100%", marginTop: 10, display: "flex" }}>
           <Icon name="plus" size={12} /> New portfolio
         </button>
@@ -155,7 +163,8 @@ export function PlanPanel({ onClose }: { onClose: () => void }) {
 }
 
 export function NotesPanel({ onClose }: { onClose: () => void }) {
-  const notes = USER_JOURNAL.notes;
+  const { journal } = useJournalView();
+  const notes = journal?.notes ?? [];
   return (
     <>
       <PanelHeader title="Pinned notes" onClose={onClose} />

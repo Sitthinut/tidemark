@@ -3,6 +3,7 @@
 
 import type { Bucket } from "@/lib/db/queries/buckets";
 import type { Holding as DbHolding } from "@/lib/db/queries/holdings";
+import type { JournalEntry } from "@/lib/db/queries/journal";
 import type { ModelPortfolio as DbModelPortfolio } from "@/lib/db/queries/models";
 import type { FundQuote } from "@/lib/db/queries/quotes";
 import type {
@@ -10,9 +11,12 @@ import type {
   AssetClass,
   Holding,
   ModelPortfolio,
+  Note,
   Portfolio,
   PortfolioType,
+  ReadingItem,
   RiskBand,
+  UserJournal,
 } from "@/lib/mock/types";
 
 const DEFAULT_ASSET_CLASS: AssetClass = "equity";
@@ -165,4 +169,96 @@ export function adaptModelPortfolio(m: DbModelPortfolio): ModelPortfolio {
 
 export function adaptModelPortfolios(models: DbModelPortfolio[]): ModelPortfolio[] {
   return models.map(adaptModelPortfolio);
+}
+
+// Reverse: legacy ModelPortfolio → DB insert payload (id + createdAt set server-side
+// or by the caller; everything else mirrors the legacy fields).
+export function modelPortfolioToInsert(m: ModelPortfolio): {
+  id: string;
+  name: string;
+  tagline: string | null;
+  blurb: string | null;
+  builtIn: boolean;
+  allocation: ModelPortfolio["mix"];
+  expectedReturn: number | null;
+  expectedVolatility: number | null;
+  ter: number | null;
+  horizon: string | null;
+  risk: string | null;
+  pros: string[];
+  cons: string[];
+} {
+  return {
+    id: m.id,
+    name: m.name,
+    tagline: m.tagline || null,
+    blurb: m.blurb || null,
+    builtIn: false,
+    allocation: m.mix,
+    expectedReturn: m.expectedReturn,
+    expectedVolatility: m.expectedVol,
+    ter: m.ter,
+    horizon: m.horizon || null,
+    risk: m.risk,
+    pros: m.pros,
+    cons: m.cons,
+  };
+}
+
+const DAY_MS = 86_400_000;
+
+function relativeDate(iso: string, now: Date = new Date()): string {
+  const then = new Date(iso);
+  if (Number.isNaN(then.getTime())) return iso;
+  const days = Math.max(0, Math.floor((now.getTime() - then.getTime()) / DAY_MS));
+  if (days === 0) return "Today";
+  if (days === 1) return "1 day ago";
+  if (days < 7) return `${days} days ago`;
+  if (days < 14) return "1 week ago";
+  if (days < 30) return `${Math.floor(days / 7)} weeks ago`;
+  if (days < 60) return "1 month ago";
+  return `${Math.floor(days / 30)} months ago`;
+}
+
+function noteFromEntry(e: JournalEntry): Note {
+  return {
+    id: `j${e.id}`,
+    title: e.title ?? "",
+    body: e.body ?? "",
+    source: e.source ?? "manual",
+    date: relativeDate(e.createdAt),
+    tags: e.tags ?? [],
+  };
+}
+
+function readingFromEntry(e: JournalEntry): ReadingItem {
+  return {
+    id: `j${e.id}`,
+    title: e.title ?? "",
+    source: e.source ?? "",
+    url: e.url ?? "#",
+    summary: e.body ?? "",
+    readTime: 0,
+    status: "unread",
+    savedDate: relativeDate(e.createdAt),
+  };
+}
+
+// Synthesizes the legacy UserJournal shape from journal_entries.
+// `plan`, `feedback`, and `savedModels` are Phase 2/4 surface and stay empty
+// for now — the screens render the empty states fine.
+export function adaptJournal(entries: JournalEntry[]): UserJournal {
+  const notes: Note[] = [];
+  const reading: ReadingItem[] = [];
+  for (const e of entries) {
+    if (e.kind === "reading") reading.push(readingFromEntry(e));
+    else notes.push(noteFromEntry(e));
+  }
+  return {
+    notes,
+    reading,
+    plan: { target: "", monthlyContribution: 0, nextRebalanceDate: "", commitments: [] },
+    feedback: [],
+    savedModels: [],
+  };
 }

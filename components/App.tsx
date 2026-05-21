@@ -11,7 +11,9 @@ import { MarketsScreen } from "@/components/screens/MarketsScreen";
 import { ModelPortfoliosScreen } from "@/components/screens/ModelPortfoliosScreen";
 import { PortfolioScreen } from "@/components/screens/PortfolioScreen";
 import { SettingsScreen, type Theme } from "@/components/screens/SettingsScreen";
-import { USER_GOALS } from "@/lib/mock/data";
+import { useSelectedModelId } from "@/lib/fetchers/legacy";
+import { usePlan } from "@/lib/fetchers/portfolio";
+import { invalidate } from "@/lib/fetchers/swr";
 import { useViewport } from "@/lib/useViewport";
 
 type Screen = "connect" | "portfolio" | "markets" | "chat" | "journal" | "models" | "settings";
@@ -50,7 +52,10 @@ export function App() {
   const [importOpen, setImportOpen] = useState(false);
   const [, setExtraHoldings] = useState<AddedHolding[]>([]);
   const [, setSavedReading] = useState<unknown[]>([]);
-  const [selectedModelId, setSelectedModelId] = useState<string>(USER_GOALS.selectedModelId);
+  const planSelectedModelId = useSelectedModelId();
+  const { data: plan } = usePlan();
+  const [selectedModelOverride, setSelectedModelOverride] = useState<string | null>(null);
+  const selectedModelId = selectedModelOverride ?? planSelectedModelId ?? "bogle3";
   // Wide-only: which app panel is open on the right. Desktop opens chat by default.
   const [activeApp, setActiveApp] = useState<AppId | null>("chat");
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
@@ -157,9 +162,21 @@ export function App() {
       return (
         <ModelPortfoliosScreen
           selectedId={selectedModelId}
-          onSelect={(id) => {
-            setSelectedModelId(id);
-            USER_GOALS.selectedModelId = id;
+          onSelect={async (id) => {
+            setSelectedModelOverride(id);
+            try {
+              await fetch("/api/plan", {
+                method: "PUT",
+                headers: { "content-type": "application/json" },
+                body: JSON.stringify({
+                  markdown: plan?.markdown ?? "",
+                  selectedModelId: id,
+                }),
+              });
+              invalidate("/api/plan");
+            } catch (err) {
+              console.error("Failed to persist selected model:", err);
+            }
           }}
           onBack={() => setScreen("portfolio")}
         />

@@ -3,8 +3,10 @@
 import { useRef, useState } from "react";
 import { ModelDonut } from "@/components/charts";
 import { Icon } from "@/components/Icon";
-import { MODEL_PORTFOLIOS } from "@/lib/mock/data";
+import { useModelPortfoliosView } from "@/lib/fetchers/legacy";
+import { invalidate } from "@/lib/fetchers/swr";
 import type { ModelPortfolio } from "@/lib/mock/types";
+import { modelPortfolioToInsert } from "@/lib/portfolio/adapter";
 
 export interface ModelPortfoliosScreenProps {
   selectedId: string;
@@ -17,19 +19,33 @@ export function ModelPortfoliosScreen({
   onSelect,
   onBack,
 }: ModelPortfoliosScreenProps) {
-  // Snapshot the list at mount; the runtime can mutate MODEL_PORTFOLIOS for added customs.
-  const [models, setModels] = useState<ModelPortfolio[]>(() => [...MODEL_PORTFOLIOS]);
+  const { models, isLoading } = useModelPortfoliosView();
   const [openId, setOpenId] = useState<string | null>(null);
   const [addOpen, setAddOpen] = useState(false);
   const [filter, setFilter] = useState<"all" | "curated" | "custom">("all");
-  const open = models.find((m) => m.id === openId);
+
+  const list = models ?? [];
+  const open = list.find((m) => m.id === openId);
 
   const filtered =
     filter === "custom"
-      ? models.filter((m) => m.isCustom)
+      ? list.filter((m) => m.isCustom)
       : filter === "curated"
-        ? models.filter((m) => !m.isCustom)
-        : models;
+        ? list.filter((m) => !m.isCustom)
+        : list;
+
+  const addModel = async (m: ModelPortfolio) => {
+    try {
+      await fetch("/api/models", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(modelPortfolioToInsert(m)),
+      });
+      invalidate("/api/models");
+    } catch (err) {
+      console.error("Failed to save custom model:", err);
+    }
+  };
 
   if (open) {
     return (
@@ -39,6 +55,19 @@ export function ModelPortfoliosScreen({
         onBack={() => setOpenId(null)}
         onSelect={onSelect}
       />
+    );
+  }
+
+  if (isLoading) {
+    return (
+      <div className="screen">
+        <div className="topbar">
+          <div className="brand" style={{ flex: 1 }}>
+            <span>Model portfolios</span>
+          </div>
+        </div>
+        <div style={{ padding: 24, color: "var(--muted)" }}>Loading…</div>
+      </div>
     );
   }
 
@@ -100,21 +129,21 @@ export function ModelPortfoliosScreen({
 
       <div className="filter-chips" style={{ padding: "0 16px 12px" }}>
         <span className="chip" data-active={filter === "all"} onClick={() => setFilter("all")}>
-          All · {models.length}
+          All · {list.length}
         </span>
         <span
           className="chip"
           data-active={filter === "curated"}
           onClick={() => setFilter("curated")}
         >
-          Curated · {models.filter((m) => !m.isCustom).length}
+          Curated · {list.filter((m) => !m.isCustom).length}
         </span>
         <span
           className="chip"
           data-active={filter === "custom"}
           onClick={() => setFilter("custom")}
         >
-          Yours · {models.filter((m) => m.isCustom).length}
+          Yours · {list.filter((m) => m.isCustom).length}
         </span>
       </div>
 
@@ -282,11 +311,7 @@ export function ModelPortfoliosScreen({
         </div>
       </div>
 
-      <AddCustomModelSheet
-        open={addOpen}
-        onClose={() => setAddOpen(false)}
-        onAdd={(m) => setModels((prev) => [...prev, m])}
-      />
+      <AddCustomModelSheet open={addOpen} onClose={() => setAddOpen(false)} onAdd={addModel} />
     </div>
   );
 }

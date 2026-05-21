@@ -2,12 +2,13 @@
 
 import type { Bucket } from "@/lib/db/queries/buckets";
 import type { Holding as DbHolding } from "@/lib/db/queries/holdings";
+import type { JournalEntry } from "@/lib/db/queries/journal";
 import type { ModelPortfolio as DbModelPortfolio } from "@/lib/db/queries/models";
 import type { Plan } from "@/lib/db/queries/plan";
 import type { FundQuote } from "@/lib/db/queries/quotes";
 import { useResource } from "./swr";
 
-export type { Bucket, DbHolding, DbModelPortfolio, FundQuote, Plan };
+export type { Bucket, DbHolding, DbModelPortfolio, FundQuote, JournalEntry, Plan };
 
 export function useBuckets() {
   return useResource<Bucket[]>("/api/buckets");
@@ -28,4 +29,8 @@ export function useModelPortfolios() {
 
 export function usePlan() {
   return useResource<Plan>("/api/plan");
+}
+
+export function useJournalEntries() {
+  return useResource<JournalEntry[]>("/api/journal");
 }
