@@ -7,16 +7,26 @@
 
 ## State of the world
 
-The prototype is functionally complete:
+**Phase 1 is shipped.** As of 2026-05-21:
 
-- 7 screens (Portfolio, Markets, Chat, Journal, Models, Connect, Settings)
-- Responsive shell (mobile <700 / tablet 700-1199 / desktop ≥1200)
-- Direction-C aesthetic, light/dark/system themes
-- Mobile bottom nav + wide-shell left rail + right-dock apps panel (Chat /
-  Buckets / Plan / Notes)
-- All data lives in `lib/mock/data.ts`. All AI is mock. No persistence.
+- SQLite + Drizzle persistence layer; 10 tables, daily backups.
+- `/api/buckets`, `/api/holdings`, `/api/journal`, `/api/plan`, `/api/models`,
+  `/api/quotes`, `/api/settings` all live; PortfolioScreen, JournalScreen,
+  ModelPortfoliosScreen, App, AppPanels all read via SWR fetchers.
+- Bucket + holding CRUD wired to the UI (BucketSheet, HoldingSheet).
+- Add holdings sheet (CSV file upload / paste / manual) writes through to
+  `/api/holdings`.
+- **Phase 3 partial:** Yahoo Finance client + cache + `/api/market/indices`;
+  MarketsScreen pulls live SET / S&P / Nasdaq / Nikkei / USD-THB with 24h
+  cache and graceful 429 fallback. News, digest, learn content, and Thai
+  mutual-fund NAVs still mocked (no public API; AIMC or scrape is a later
+  pass).
 
-The prototype looks finished but does nothing. This plan turns it into software.
+What's still mocked: ANALYSIS scores (Phase 2 AI computes), chat panel
+content (Phase 2), market news (Phase 3b), benchmark + drift + contrib
+series on PortfolioScreen (need NAV history backfill).
+
+The 7-screen UI is intact and responsive across mobile / tablet / desktop.
 
 **Tooling already in place** (pre-Phase-1 setup pass, 2026-05-21):
 
@@ -54,13 +64,13 @@ exposes the gaps that need polish; polishing on mock data risks rework.
 
 ## Phases at a glance
 
-| # | Phase | Effort | Unlocks |
+| # | Phase | Status | Unlocks |
 | - | --- | --- | --- |
-| 1 | Persistence | 1–2 days | State survives reloads. Real schema forces honest data shapes. |
-| 2 | AI chat | 2–3 days | The "wow" moment. App becomes useful. |
-| 2.5 | Multi-user mode (opt.) | 1–2 days | Self-host to a remote VM for shared use. Skip on localhost. |
-| 3 | Market data | 1 day | Charts show real prices. Chat can reason about live market. |
-| 4 | Portfolio import | 2–3 days | App holds **your** money, not demo money. |
+| 1 | Persistence | ✅ Shipped 2026-05-21 | State survives reloads. Real schema forces honest data shapes. |
+| 2 | AI chat | Pending (needs OpenRouter key) | The "wow" moment. App becomes useful. |
+| 2.5 | Multi-user mode (opt.) | Pending (needs deploy decision) | Self-host to a remote VM for shared use. Skip on localhost. |
+| 3 | Market data | 🟡 Partial — indices live; funds + news deferred | Charts show real prices. Chat can reason about live market. |
+| 4 | Portfolio import | 🟡 Partial — CSV / paste / manual live; OCR pending AI key | App holds **your** money, not demo money. |
 
 ## Phase 1 — Persistence
 
