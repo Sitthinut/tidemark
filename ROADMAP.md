@@ -44,8 +44,10 @@ Easiest → hardest, lowest risk → highest risk:
 
 1. **Persistence** — mechanical, no third-party unknowns, unlocks everything.
 2. **AI chat** — highest user-visible value once persistence is in.
-3. **Market data** — moderate plumbing; needed to make charts real.
-4. **Portfolio import** — hardest because brokerage data sources are unreliable.
+3. **Multi-user mode (optional)** — only needed before deploying to a shared
+   instance. Localhost users skip this phase entirely.
+4. **Market data** — moderate plumbing; needed to make charts real.
+5. **Portfolio import** — hardest because brokerage data sources are unreliable.
 
 Aesthetics deliberately come last (and inline, not as a phase). Real data
 exposes the gaps that need polish; polishing on mock data risks rework.
@@ -56,6 +58,7 @@ exposes the gaps that need polish; polishing on mock data risks rework.
 | - | --- | --- | --- |
 | 1 | Persistence | 1–2 days | State survives reloads. Real schema forces honest data shapes. |
 | 2 | AI chat | 2–3 days | The "wow" moment. App becomes useful. |
+| 2.5 | Multi-user mode (opt.) | 1–2 days | Self-host to a remote VM for shared use. Skip on localhost. |
 | 3 | Market data | 1 day | Charts show real prices. Chat can reason about live market. |
 | 4 | Portfolio import | 2–3 days | App holds **your** money, not demo money. |
 
@@ -69,10 +72,28 @@ the data layer is honest TypeScript (not module-level mutable mock).
 - **SQLite via `better-sqlite3`** (synchronous, embedded, zero-config) +
   **Drizzle ORM** (typed, migration-friendly, lightweight).
 - Why not Prisma: heavier, slower codegen, opinionated CLI.
-- Why not Supabase / Postgres: this is a personal app on localhost; cloud DB
-  adds latency, auth, and an account dependency you don't need.
-- Migration path: Drizzle's dialect-swap to Postgres is one config change if
-  you ever go hosted.
+- Why not Supabase / Postgres: this is a personal app, single VM at most.
+  SQLite in WAL mode handles ~10K reads + ~1K writes/sec; family-scale
+  multi-user is nowhere near that limit. Managed Postgres adds operational
+  overhead with no current benefit.
+- Migration paths:
+  - **SQLite → Turso (libSQL):** drop-in compatible, edge-replicated, free
+    tier ample. Drizzle has first-class support. Hours, not days.
+  - **SQLite → Postgres:** Drizzle dialect-swap is one config change; the
+    migration generator handles most of it.
+
+### Portable Drizzle rules
+
+To keep both migration paths open, write schemas in the portable subset:
+
+- Use Drizzle's `mode: "json"` for JSON columns (not raw TEXT). Reads/writes
+  stay typed.
+- Use Drizzle's `boolean()` (not raw INTEGER 0/1) — maps correctly per dialect.
+- Store dates as ISO-8601 strings; avoid SQLite-only datetime functions.
+- Avoid `json_each` / `json_extract` in app code — use Drizzle's typed JSON
+  access. Composite indexes via Drizzle's `index()` builder, not raw DDL.
+- Single-table booleans / enums as TEXT (`"pending" | "accepted" | "rejected"`),
+  not integers — readable in any dialect, validates at the Zod boundary.
 
 ### Schema (sketch)
 
@@ -402,9 +423,167 @@ CREATE TABLE plan_proposals (
 - **Tool-loop runaway**: cap at e.g. 5 tool calls per turn; fail-safe with a
   hard timeout.
 - **Streaming + Next.js**: App Router streams via `ReadableStream`. Easy to
-  get wrong; copy the Anthropic SDK example verbatim first.
+  get wrong; copy the AI SDK example verbatim first.
 - **Cost**: cap input context (don't dump all chat history; summarize beyond
   N turns).
+
+---
+
+## Phase 2.5 — Multi-user mode (optional)
+
+**Goal:** the app can run in either **single-user mode** (default — no auth,
+localhost) or **shared-deployment mode** (auth enabled, multiple sessioned
+users sharing a server-side AI key). Localhost users skip this phase. Required
+before deploying to a remote VM.
+
+### Stack pick
+
+- **[better-auth](https://www.better-auth.com/)** — TypeScript-first, modern,
+  actively maintained, Drizzle-native. Replaces the deprecated Lucia.
+- **Sign-in methods (both, user picks at sign-in):**
+  - **Passkey** (`@better-auth/passkey` plugin) — WebAuthn, primary method
+    after first sign-in. Phishing-resistant, no shared secret, works on
+    iOS / Android / desktop via platform authenticators.
+  - **Email magic link** (`@better-auth/magic-link` plugin) — bootstrap for
+    first sign-in and fallback when a user is on a device without their
+    passkey. Email via Resend free tier (3K/month, no SMTP setup).
+- **Why not NextAuth/Auth.js v5:** heavier, more opinionated, perpetual beta.
+- **Why not Clerk:** vendor lock-in for an OSS project; free-tier MAU limit.
+
+### The "server-side AI key" pattern
+
+```
+[user browser] → [API route on this server] → [OpenRouter]
+                    ↑ has OPENROUTER_API_KEY in env
+                    ↑ verifies session before forwarding
+                    ↑ enforces per-user token quota
+```
+
+The OpenRouter key never leaves the server. Users never see it. All chat
+turns go through the API route, which:
+
+1. Verifies the better-auth session cookie.
+2. Loads the user's daily token usage (`usage` table).
+3. Refuses the turn if over quota; otherwise forwards to OpenRouter.
+4. After the stream completes, updates `usage` with input/output tokens
+   (the AI SDK exposes `usage` in the final chunk).
+
+### Schema additions
+
+```sql
+-- better-auth handles its own tables (user, session, account, verification,
+-- passkey). Run `npx @better-auth/cli generate` to emit Drizzle schema for
+-- these — keep them in lib/db/schema/auth.ts, separate from app tables.
+
+-- Per-user daily usage cap (your tables)
+CREATE TABLE usage (
+  user_id TEXT NOT NULL REFERENCES user(id),
+  date TEXT NOT NULL,                 -- YYYY-MM-DD
+  input_tokens INTEGER DEFAULT 0,
+  output_tokens INTEGER DEFAULT 0,
+  PRIMARY KEY (user_id, date)
+);
+
+-- App tables that were single-user become per-user
+ALTER TABLE buckets ADD COLUMN user_id TEXT REFERENCES user(id);
+ALTER TABLE journal_entries ADD COLUMN user_id TEXT REFERENCES user(id);
+ALTER TABLE plans ADD COLUMN user_id TEXT REFERENCES user(id);
+ALTER TABLE chat_threads ADD COLUMN user_id TEXT REFERENCES user(id);
+-- model_portfolios: keep built-ins user-less; user-defined get user_id.
+```
+
+In single-user mode, `user_id` columns are NULL — all queries filter
+`WHERE user_id IS NULL OR user_id = $session_user`.
+
+### Configuration
+
+Env vars (documented in `.env.example`, neutral framing — no mention of
+who the users are):
+
+```
+AUTH_ENABLED=false                  # default; flip to true for shared deploy
+AUTH_ALLOWED_EMAILS=a@b.com,c@d.com # comma-separated allowlist; only these emails can sign up
+AUTH_SECRET=...                     # better-auth signing key
+RESEND_API_KEY=...                  # only required if magic-link enabled
+PUBLIC_APP_URL=https://...          # canonical URL for magic-link callbacks + passkey rpID
+DAILY_TOKEN_BUDGET_PER_USER=200000  # input+output tokens/user/day; 0 = unlimited
+```
+
+The allowlist is the simplest way to keep the deployment closed without
+building an admin UI. To add someone, edit the env var and restart.
+
+### File layout
+
+```
+lib/
+  auth/
+    server.ts             # betterAuth() instance + plugins (passkey, magicLink)
+    middleware.ts         # session check helper for API routes
+    config.ts             # reads AUTH_ENABLED + allowlist; exposes isAuthEnabled()
+  db/
+    schema/
+      auth.ts             # generated by @better-auth/cli
+      app.ts              # existing tables, with user_id added
+  usage/
+    quota.ts              # readUsage(userId), recordUsage(userId, in, out), isOverQuota()
+
+app/
+  api/
+    auth/[...all]/route.ts  # better-auth catch-all handler
+  (auth)/
+    sign-in/page.tsx      # passkey button + "email me a link" fallback
+    callback/page.tsx     # magic-link landing
+```
+
+### Implementation order
+
+1. `npm install better-auth @better-auth/passkey @better-auth/magic-link resend`.
+2. `lib/auth/server.ts` — `betterAuth({...})` with Drizzle adapter, passkey
+   plugin (`rpName: "Tidemark"`, `rpID: PUBLIC_APP_URL host`), magic-link
+   plugin (Resend sender).
+3. `npx @better-auth/cli generate` → emits `lib/db/schema/auth.ts`. Commit it.
+4. `drizzle-kit generate` → migration for auth tables + `user_id` columns +
+   `usage` table.
+5. `app/api/auth/[...all]/route.ts` — wire the catch-all.
+6. Sign-in page: passkey button (primary) + "email me a link" link (fallback).
+   First-time users hit magic link → land authenticated → prompted to
+   register a passkey for next time.
+7. `lib/auth/middleware.ts` — `requireUser(req)` helper. If `AUTH_ENABLED`,
+   verify session; else return a synthetic single-user. Use in every API
+   route.
+8. Update every Drizzle query in `lib/db/queries/*` to take `userId` (or
+   `null` for single-user). Add `WHERE user_id = ?` filters.
+9. `lib/usage/quota.ts` + wire into `app/api/chat/route.ts`. Refuse turns
+   when over quota; show clear error in chat UI.
+10. `.env.example` updated. README's "Modes" section added.
+
+### Acceptance criteria
+
+- With `AUTH_ENABLED=false`, app behaves exactly as Phase 2 (no login screen,
+  no friction).
+- With `AUTH_ENABLED=true`:
+  - First sign-in via magic link works end-to-end (request → email → click →
+    authenticated session).
+  - Authenticated user can register a passkey; subsequent sign-ins use it
+    with no email step.
+  - Two browser sessions for two different allowed emails see fully isolated
+    portfolios, journals, and chat history.
+  - Hitting daily token quota returns a clear error in the chat UI; usage
+    resets at UTC midnight.
+- `OPENROUTER_API_KEY` is never exposed to the browser (verify via DevTools
+  → Network → response headers).
+- Repo docs frame this as "single-user / shared deployment" — no mention of
+  specific user groups.
+
+### Risk
+
+- **Email deliverability:** Resend's free tier requires domain verification
+  for production. Until that's done, sign-in emails may hit spam. Document
+  the verification step in deployment instructions.
+- **Passkey `rpID` mismatch:** if `PUBLIC_APP_URL` changes (e.g., temporary
+  staging domain), existing passkeys break. Pin the production URL early.
+- **Allowlist drift:** restarting to add a user is awkward. Acceptable at
+  small scale; revisit if it ever becomes friction.
 
 ---
 
@@ -536,6 +715,95 @@ once you have a clear personal need.
 
 ---
 
+## Deployment
+
+Two supported modes; both are first-class.
+
+### Mode A — localhost (single user)
+
+```bash
+npm install
+npm run dev      # or `npm run build && npm run start` for production
+```
+
+That's it. `data/app.db` lives in the repo's `data/`, backups in
+`data/backups/`. No auth, no env beyond `OPENROUTER_API_KEY`. Reach the app
+at `http://localhost:3000`.
+
+### Mode B — shared self-host (multi-user, single VM)
+
+Targets a single Linux VM (any cloud VPS or home server). Requires Phase 2.5.
+
+**Stack on the VM:**
+
+- **Node 24** (use `nvm` or the distro's nodesource repo).
+- **Caddy** as reverse proxy — automatic HTTPS via Let's Encrypt, ~5-line
+  Caddyfile. No certbot, no Nginx config tedium.
+- **systemd** to keep the Node process alive across reboots. PM2 is fine too
+  if you prefer a friendlier UX.
+- **SQLite file** at `/opt/tidemark/data/app.db`. Daily backups via the
+  existing `lib/db/backup.ts`; mirror to an off-VM object store (e.g.
+  Cloudflare R2 — 10 GB free, no egress) via `rclone` cron.
+
+**Caddyfile (the whole thing):**
+
+```caddyfile
+tidemark.example.com {
+    reverse_proxy localhost:3000
+}
+```
+
+**systemd unit (sketch, `/etc/systemd/system/tidemark.service`):**
+
+```ini
+[Unit]
+Description=Tidemark
+After=network.target
+
+[Service]
+WorkingDirectory=/opt/tidemark
+EnvironmentFile=/opt/tidemark/.env
+ExecStart=/usr/bin/node node_modules/.bin/next start -p 3000
+Restart=always
+User=tidemark
+
+[Install]
+WantedBy=multi-user.target
+```
+
+**First-deploy checklist:**
+
+1. Provision VM (any flavor — 1 vCPU / 1 GB RAM is enough for small scale).
+2. Open inbound 80 + 443 in the cloud provider's firewall **and** in the
+   VM's local firewall (`ufw` or `firewalld`). The local firewall is the
+   common gotcha — providers like Oracle Cloud ship Ubuntu images with
+   iptables rules already in place.
+3. Point your DNS A record at the VM.
+4. Install Node, Caddy, clone the repo, `npm ci`, `npm run build`.
+5. Create `/opt/tidemark/.env` with `AUTH_ENABLED=true`,
+   `AUTH_ALLOWED_EMAILS`, `AUTH_SECRET`, `PUBLIC_APP_URL`,
+   `OPENROUTER_API_KEY`, `RESEND_API_KEY`, `DAILY_TOKEN_BUDGET_PER_USER`.
+6. `systemctl enable --now tidemark`, `systemctl reload caddy`.
+7. Visit the URL — sign in via magic link, register a passkey, done.
+
+**Optional hardening:**
+
+- Put **Cloudflare** in front (free tier) for DDoS + bot scraping protection.
+- **Fail2ban** on `/api/auth/*` if you see brute-force attempts in logs.
+- Move SQLite to a dedicated block volume so the boot volume isn't your
+  single point of data loss.
+
+### What this is not
+
+- **Not Vercel-deployable as-is.** SQLite + serverless = ephemeral filesystem.
+  To run on Vercel, swap the DB to Turso (libSQL) — one Drizzle config change
+  thanks to the portable schema rules in Phase 1.
+- **Not horizontally scalable.** Single VM only. SQLite is one writer. If you
+  ever need multiple app instances, that's the Turso / Postgres trigger
+  point, and a different architecture conversation.
+
+---
+
 ## Decisions you need to make before Phase 1
 
 | Decision | Default | Alternative |
@@ -544,11 +812,17 @@ once you have a clear personal need.
 | Client data layer | SWR | React Query, plain fetch + setState |
 | AI provider | Vercel AI SDK + OpenRouter | Anthropic SDK direct (locks to one provider) |
 | Chat model | TBD — decide after first real calls | Sonnet 4.6, GPT-5, etc. via OpenRouter (one-string change) |
+| Auth (Phase 2.5) | better-auth + passkey (primary) + magic link (fallback) | NextAuth v5 (heavier), Clerk (vendor lock-in), hand-rolled (more code) |
+| Email transport | Resend free tier (3K/month) | SMTP via Postmark / SES if Resend caps bite |
 | Market data: Thai funds | Playwright scrape of fund-supermarket pages | AIMC public data feed |
 
 ## Explicitly out of scope (until you decide otherwise)
 
-- **Auth / multi-user / cloud hosting** — personal app, localhost only.
+- **Public sign-ups** — multi-user mode (Phase 2.5) is allowlist-gated, not
+  open. No SaaS, no billing, no admin UI.
+- **Horizontal scaling / multi-region** — single VM, single SQLite writer. If
+  that ever changes, the trigger is migrating to Turso or Postgres, not
+  layering on top of SQLite.
 - **Broker scraping / unofficial APIs** — high maintenance burden, defer to
   Phase 4b when you have a clear need.
 - **Aesthetic overhaul** — handled inline per phase. After each phase, walk
@@ -566,6 +840,9 @@ After each phase, look for:
   be empty (Journal with 0 entries, Buckets with 0 holdings).
 - **Phase 2 done**: streaming UI density, citation/tool-call card design,
   proposal card design.
+- **Phase 2.5 done**: sign-in screen polish, passkey-registration prompt,
+  quota-exceeded message in chat, account/profile UI (minimal — name + sign
+  out + revoke passkeys).
 - **Phase 3 done**: chart tooltips, time-range chips, missing-data graceful
   degradation.
 - **Phase 4 done**: import flow polish (drag-and-drop affordance, OCR
