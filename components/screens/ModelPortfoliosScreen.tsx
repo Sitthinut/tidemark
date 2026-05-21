@@ -1,8 +1,8 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { Icon } from "@/components/Icon";
 import { ModelDonut } from "@/components/charts";
+import { Icon } from "@/components/Icon";
 import { MODEL_PORTFOLIOS } from "@/lib/mock/data";
 import type { ModelPortfolio } from "@/lib/mock/types";
 
@@ -18,9 +18,7 @@ export function ModelPortfoliosScreen({
   onBack,
 }: ModelPortfoliosScreenProps) {
   // Snapshot the list at mount; the runtime can mutate MODEL_PORTFOLIOS for added customs.
-  const [models, setModels] = useState<ModelPortfolio[]>(() => [
-    ...MODEL_PORTFOLIOS,
-  ]);
+  const [models, setModels] = useState<ModelPortfolio[]>(() => [...MODEL_PORTFOLIOS]);
   const [openId, setOpenId] = useState<string | null>(null);
   const [addOpen, setAddOpen] = useState(false);
   const [filter, setFilter] = useState<"all" | "curated" | "custom">("all");
@@ -47,12 +45,7 @@ export function ModelPortfoliosScreen({
   return (
     <div className="screen">
       <div className="topbar">
-        <button
-          className="icon-btn"
-          onClick={onBack}
-          aria-label="Back"
-          style={{ marginRight: 8 }}
-        >
+        <button className="icon-btn" onClick={onBack} aria-label="Back" style={{ marginRight: 8 }}>
           <svg
             width="13"
             height="13"
@@ -100,17 +93,13 @@ export function ModelPortfoliosScreen({
           }}
         >
           Time-tested index-investing strategies. Pick one as your{" "}
-          <strong style={{ fontWeight: 500 }}>target allocation</strong>, or add
-          your own from a URL, image, or by chatting with the advisor.
+          <strong style={{ fontWeight: 500 }}>target allocation</strong>, or add your own from a
+          URL, image, or by chatting with the advisor.
         </p>
       </div>
 
       <div className="filter-chips" style={{ padding: "0 16px 12px" }}>
-        <span
-          className="chip"
-          data-active={filter === "all"}
-          onClick={() => setFilter("all")}
-        >
+        <span className="chip" data-active={filter === "all"} onClick={() => setFilter("all")}>
           All · {models.length}
         </span>
         <span
@@ -143,8 +132,7 @@ export function ModelPortfoliosScreen({
             className="card"
             style={{
               cursor: "pointer",
-              borderColor:
-                selectedId === m.id ? "var(--accent)" : "var(--line-soft)",
+              borderColor: selectedId === m.id ? "var(--accent)" : "var(--line-soft)",
               borderWidth: selectedId === m.id ? 2 : 1,
               padding: 14,
             }}
@@ -213,12 +201,10 @@ export function ModelPortfoliosScreen({
                     {m.expectedReturn.toFixed(1)}%
                   </span>
                   <span className="num">
-                    <span style={{ color: "var(--muted)" }}>Vol</span>{" "}
-                    {m.expectedVol.toFixed(1)}%
+                    <span style={{ color: "var(--muted)" }}>Vol</span> {m.expectedVol.toFixed(1)}%
                   </span>
                   <span className="num">
-                    <span style={{ color: "var(--muted)" }}>TER</span>{" "}
-                    {m.ter.toFixed(2)}%
+                    <span style={{ color: "var(--muted)" }}>TER</span> {m.ter.toFixed(2)}%
                   </span>
                 </div>
               </div>
@@ -291,8 +277,8 @@ export function ModelPortfoliosScreen({
             fontFamily: "var(--font-mono)",
           }}
         >
-          ⓘ Expected return/vol are historical estimates, not guarantees. Past
-          performance does not predict future results.
+          ⓘ Expected return/vol are historical estimates, not guarantees. Past performance does not
+          predict future results.
         </div>
       </div>
 
@@ -319,12 +305,7 @@ function ModelDetail({
   return (
     <div className="screen">
       <div className="topbar">
-        <button
-          className="icon-btn"
-          onClick={onBack}
-          aria-label="Back"
-          style={{ marginRight: 8 }}
-        >
+        <button className="icon-btn" onClick={onBack} aria-label="Back" style={{ marginRight: 8 }}>
           <svg
             width="13"
             height="13"
@@ -344,9 +325,7 @@ function ModelDetail({
       </div>
 
       <div style={{ padding: "4px 20px 8px" }}>
-        <div style={{ fontSize: 13, color: "var(--muted)", marginBottom: 4 }}>
-          {model.tagline}
-        </div>
+        <div style={{ fontSize: 13, color: "var(--muted)", marginBottom: 4 }}>{model.tagline}</div>
         <p
           style={{
             fontSize: 14,
@@ -405,17 +384,17 @@ function ModelDetail({
           {[
             {
               lbl: "EXPECTED RETURN",
-              val: model.expectedReturn.toFixed(1) + "%",
+              val: `${model.expectedReturn.toFixed(1)}%`,
               color: "var(--gain)",
             },
             {
               lbl: "VOLATILITY",
-              val: model.expectedVol.toFixed(1) + "%",
+              val: `${model.expectedVol.toFixed(1)}%`,
               color: "var(--ink)",
             },
             {
               lbl: "BLENDED TER",
-              val: model.ter.toFixed(2) + "%",
+              val: `${model.ter.toFixed(2)}%`,
               color: "var(--ink)",
             },
           ].map((s) => (
@@ -435,10 +414,7 @@ function ModelDetail({
               >
                 {s.lbl}
               </div>
-              <div
-                className="num"
-                style={{ fontSize: 16, fontWeight: 500, color: s.color }}
-              >
+              <div className="num" style={{ fontSize: 16, fontWeight: 500, color: s.color }}>
                 {s.val}
               </div>
             </div>
@@ -448,9 +424,7 @@ function ModelDetail({
 
       <div className="section">
         <div className="card">
-          <div
-            style={{ display: "flex", gap: 16, fontSize: 12.5, marginBottom: 12 }}
-          >
+          <div style={{ display: "flex", gap: 16, fontSize: 12.5, marginBottom: 12 }}>
             <div>
               <div
                 style={{
@@ -477,11 +451,7 @@ function ModelDetail({
               >
                 RISK
               </div>
-              <div
-                style={{ fontWeight: 500, textTransform: "capitalize" }}
-              >
-                {model.risk}
-              </div>
+              <div style={{ fontWeight: 500, textTransform: "capitalize" }}>{model.risk}</div>
             </div>
           </div>
 
@@ -597,9 +567,7 @@ function AddCustomModelSheet({
   onClose: () => void;
   onAdd: (model: ModelPortfolio) => void;
 }) {
-  const [method, setMethod] = useState<"url" | "text" | "image" | "chat">(
-    "url",
-  );
+  const [method, setMethod] = useState<"url" | "text" | "image" | "chat">("url");
   const [url, setUrl] = useState("");
   const [pasteText, setPasteText] = useState("");
   const [name, setName] = useState("");
@@ -647,8 +615,7 @@ function AddCustomModelSheet({
         setExtracted({
           name: name || "From screenshot",
           tagline: "Extracted from image · review and confirm",
-          blurb:
-            "AI parsed allocation chart from your image. Verify the breakdown looks right.",
+          blurb: "AI parsed allocation chart from your image. Verify the breakdown looks right.",
           mix: [
             { label: "Equity", pct: 60, color: "var(--accent)" },
             { label: "Bonds", pct: 30, color: "#F4A434" },
@@ -671,14 +638,7 @@ function AddCustomModelSheet({
       const matches = [
         ...pasteText.matchAll(/(\d+)\s*%?\s*([A-Za-z][A-Za-z\s\-/]+?)(?:[,.\n]|$)/g),
       ].slice(0, 6);
-      const colors = [
-        "var(--accent)",
-        "#F4A434",
-        "#7C7CFF",
-        "#C76A8F",
-        "#5BA7B5",
-        "#9E9EA8",
-      ];
+      const colors = ["var(--accent)", "#F4A434", "#7C7CFF", "#C76A8F", "#5BA7B5", "#9E9EA8"];
       const mix = matches.map((m, i) => ({
         label: m[2].trim(),
         pct: Number(m[1]),
@@ -715,7 +675,7 @@ function AddCustomModelSheet({
   const confirm = () => {
     if (!extracted) return;
     onAdd({
-      id: "custom_" + Date.now(),
+      id: `custom_${Date.now()}`,
       name: extracted.name,
       tagline: extracted.tagline,
       blurb: extracted.blurb,
@@ -758,9 +718,7 @@ function AddCustomModelSheet({
           >
             <input
               value={extracted.name}
-              onChange={(e) =>
-                setExtracted({ ...extracted, name: e.target.value })
-              }
+              onChange={(e) => setExtracted({ ...extracted, name: e.target.value })}
               style={{
                 fontSize: 16,
                 fontWeight: 500,
@@ -774,9 +732,7 @@ function AddCustomModelSheet({
                 fontFamily: "var(--font-sans)",
               }}
             />
-            <div style={{ fontSize: 12, color: "var(--muted)" }}>
-              {extracted.tagline}
-            </div>
+            <div style={{ fontSize: 12, color: "var(--muted)" }}>{extracted.tagline}</div>
           </div>
 
           <div className="card" style={{ marginBottom: 12 }}>
@@ -827,25 +783,15 @@ function AddCustomModelSheet({
               marginBottom: 12,
             }}
           >
-            <strong style={{ fontWeight: 500, color: "var(--ink-soft)" }}>
-              Source:
-            </strong>{" "}
+            <strong style={{ fontWeight: 500, color: "var(--ink-soft)" }}>Source:</strong>{" "}
             {extracted.source}
           </div>
 
           <div style={{ display: "flex", gap: 8 }}>
-            <button
-              className="btn ghost"
-              style={{ flex: 1 }}
-              onClick={() => setExtracted(null)}
-            >
+            <button className="btn ghost" style={{ flex: 1 }} onClick={() => setExtracted(null)}>
               Back
             </button>
-            <button
-              className="btn primary"
-              style={{ flex: 2 }}
-              onClick={confirm}
-            >
+            <button className="btn primary" style={{ flex: 2 }} onClick={confirm}>
               Save model <Icon name="check" size={13} />
             </button>
           </div>
@@ -860,8 +806,8 @@ function AddCustomModelSheet({
         <div className="sheet-handle"></div>
         <div className="sheet-title">Add a custom model</div>
         <div className="sheet-subtitle">
-          Bring any allocation from outside Tidemark. The AI parses, you confirm,
-          and it&apos;s saved to your Journal.
+          Bring any allocation from outside Tidemark. The AI parses, you confirm, and it&apos;s
+          saved to your Journal.
         </div>
 
         <div style={{ marginBottom: 14 }}>
@@ -960,10 +906,7 @@ function AddCustomModelSheet({
               style={{ display: "none" }}
               onChange={handleImage}
             />
-            <div
-              className="drop-zone"
-              onClick={() => fileRef.current?.click()}
-            >
+            <div className="drop-zone" onClick={() => fileRef.current?.click()}>
               <svg
                 width="32"
                 height="32"
@@ -977,9 +920,7 @@ function AddCustomModelSheet({
                 <path d="M21 15l-5-5L5 21" />
               </svg>
               <div className="dz-title">Drop an allocation chart</div>
-              <div className="dz-sub">
-                or tap to browse · AI will read the breakdown
-              </div>
+              <div className="dz-sub">or tap to browse · AI will read the breakdown</div>
             </div>
           </>
         )}
@@ -1023,10 +964,7 @@ function AddCustomModelSheet({
                 </div>
               )}
             </div>
-            <button
-              className="btn ghost sm full"
-              onClick={() => setImgPreview(null)}
-            >
+            <button className="btn ghost sm full" onClick={() => setImgPreview(null)}>
               Use a different image
             </button>
           </div>
@@ -1061,8 +999,8 @@ function AddCustomModelSheet({
                 opacity: 0.85,
               }}
             >
-              The advisor will ask 3–5 questions and propose an allocation. You
-              confirm and it&apos;s saved.
+              The advisor will ask 3–5 questions and propose an allocation. You confirm and
+              it&apos;s saved.
             </div>
             <button className="btn sm primary" onClick={startChat}>
               <Icon name="chat" size={12} /> Start conversation
@@ -1094,8 +1032,7 @@ function AddCustomModelSheet({
                 if (method === "text") ingestText();
               }}
             >
-              {processing ? "Reading…" : "Parse"}{" "}
-              <Icon name="arrowRight" size={13} />
+              {processing ? "Reading…" : "Parse"} <Icon name="arrowRight" size={13} />
             </button>
           </div>
         )}

@@ -8,11 +8,7 @@ export interface SettingsScreenProps {
   onBack: () => void;
 }
 
-export function SettingsScreen({
-  theme,
-  onThemeChange,
-  onBack,
-}: SettingsScreenProps) {
+export function SettingsScreen({ theme, onThemeChange, onBack }: SettingsScreenProps) {
   const themeOpts = [
     {
       key: "light" as const,
@@ -75,12 +71,7 @@ export function SettingsScreen({
   return (
     <div className="screen">
       <div className="topbar">
-        <button
-          className="icon-btn"
-          onClick={onBack}
-          aria-label="Back"
-          style={{ marginRight: 8 }}
-        >
+        <button className="icon-btn" onClick={onBack} aria-label="Back" style={{ marginRight: 8 }}>
           <svg
             width="13"
             height="13"
@@ -103,9 +94,7 @@ export function SettingsScreen({
         <div className="section-header">
           <h3>Appearance</h3>
         </div>
-        <div
-          style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}
-        >
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
           {themeOpts.map((opt) => (
             <button
               key={opt.key}
@@ -118,10 +107,8 @@ export function SettingsScreen({
                 flexDirection: "column",
                 alignItems: "center",
                 gap: 8,
-                background:
-                  theme === opt.key ? "var(--accent-soft)" : "var(--paper)",
-                borderColor:
-                  theme === opt.key ? "var(--accent)" : "var(--line-soft)",
+                background: theme === opt.key ? "var(--accent-soft)" : "var(--paper)",
+                borderColor: theme === opt.key ? "var(--accent)" : "var(--line-soft)",
                 borderWidth: theme === opt.key ? 1.5 : 1,
                 color: theme === opt.key ? "var(--accent-ink)" : "var(--ink)",
                 fontFamily: "var(--font-sans)",
@@ -186,10 +173,7 @@ export function SettingsScreen({
           }}
         >
           Manage your investment plan in{" "}
-          <strong style={{ fontWeight: 500, color: "var(--ink-soft)" }}>
-            Journal → Plan
-          </strong>
-          .
+          <strong style={{ fontWeight: 500, color: "var(--ink-soft)" }}>Journal → Plan</strong>.
         </div>
       </div>
 
@@ -200,19 +184,16 @@ export function SettingsScreen({
         <div className="card">
           <ul className="bullet-list">
             <li>
-              <span className="marker">v0.1</span>Open-source AI investment
-              companion · MIT licensed
+              <span className="marker">v0.1</span>Open-source AI investment companion · MIT licensed
             </li>
             <li>
               <span className="marker">↗</span>github.com/Sitthinut/tidemark
             </li>
             <li>
-              <span className="marker">⚠</span>Educational tool — not licensed
-              financial advice
+              <span className="marker">⚠</span>Educational tool — not licensed financial advice
             </li>
             <li>
-              <span className="marker">∞</span>Built with Claude · runs your data
-              locally
+              <span className="marker">∞</span>Built with Claude · runs your data locally
             </li>
           </ul>
         </div>

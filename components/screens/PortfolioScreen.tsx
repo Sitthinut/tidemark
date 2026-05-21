@@ -1,9 +1,9 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Icon } from "@/components/Icon";
-import { FeedbackRow } from "@/components/FeedbackRow";
 import { MiniBars, MiniLine, ModelDonut, PerfChart } from "@/components/charts";
+import { FeedbackRow } from "@/components/FeedbackRow";
+import { Icon } from "@/components/Icon";
 import { fmtPct } from "@/lib/format";
 import {
   ANALYSIS,
@@ -144,15 +144,13 @@ export function PortfolioScreen({
 
   const minV = Math.min(...view.series.map((s) => s.v));
   const maxV = Math.max(...view.series.map((s) => s.v));
-  const fmtK = (n: number) =>
-    "฿" + Math.round(n / 1000).toLocaleString("en-US") + "k";
+  const fmtK = (n: number) => `฿${Math.round(n / 1000).toLocaleString("en-US")}k`;
 
   const targetModel = activePf?.targetModelId
     ? MODEL_PORTFOLIOS.find((m) => m.id === activePf.targetModelId)
     : MODEL_PORTFOLIOS.find((m) => m.id === USER_GOALS.selectedModelId);
 
-  const showAnalysis =
-    activePfId === "all" || (activePf && activePf.targetModelId);
+  const showAnalysis = activePfId === "all" || activePf?.targetModelId;
 
   return (
     <div className="screen">
@@ -205,11 +203,7 @@ export function PortfolioScreen({
           <span className="pf-sub">{PORTFOLIOS.length} BUCKETS</span>
         </button>
         {PORTFOLIOS.map((p) => (
-          <button
-            key={p.id}
-            data-active={activePfId === p.id}
-            onClick={() => setActivePfId(p.id)}
-          >
+          <button key={p.id} data-active={activePfId === p.id} onClick={() => setActivePfId(p.id)}>
             <span className="pf-icon">{p.icon}</span> {p.name}
             <span className="pf-sub">{p.typeLabel.toUpperCase()}</span>
           </button>
@@ -237,17 +231,14 @@ export function PortfolioScreen({
 
       <div className="hero-block">
         <div className="hero-label">
-          {activePfId === "all" ? "Combined balance" : view.name} ·{" "}
-          {view.asOf.split(",")[0]}
+          {activePfId === "all" ? "Combined balance" : view.name} · {view.asOf.split(",")[0]}
         </div>
         <div className="hero-value">
           ฿{Math.floor(view.totalValue).toLocaleString("en-US")}
-          <span className="cents">
-            .{view.totalValue.toFixed(2).split(".")[1] || "00"}
-          </span>
+          <span className="cents">.{view.totalValue.toFixed(2).split(".")[1] || "00"}</span>
         </div>
         <div className="hero-sub">
-          <span className={"delta-pill" + (pnl < 0 ? " down" : "")}>
+          <span className={`delta-pill${pnl < 0 ? " down" : ""}`}>
             <svg width="10" height="10" viewBox="0 0 12 12" fill="none">
               <path
                 d={pnl >= 0 ? "M6 2L10 7H2L6 2Z" : "M6 10L2 5H10L6 10Z"}
@@ -265,9 +256,7 @@ export function PortfolioScreen({
           [
             {
               lbl: "TODAY",
-              val:
-                view.holdings.reduce((s, h) => s + h.d1 * h.value, 0) /
-                view.totalValue,
+              val: view.holdings.reduce((s, h) => s + h.d1 * h.value, 0) / view.totalValue,
             },
             { lbl: "7D", val: view.perfPct.d7 },
             { lbl: "30D", val: view.perfPct.d30 },
@@ -276,10 +265,7 @@ export function PortfolioScreen({
         ).map((s) => (
           <div key={s.lbl}>
             <div className="lbl">{s.lbl}</div>
-            <div
-              className="val"
-              style={{ color: s.val >= 0 ? "var(--gain)" : "var(--loss)" }}
-            >
+            <div className="val" style={{ color: s.val >= 0 ? "var(--gain)" : "var(--loss)" }}>
               {fmtPct(s.val, s.val < 1 && s.val > -1 ? 2 : 1)}
             </div>
           </div>
@@ -290,11 +276,7 @@ export function PortfolioScreen({
         <div className="row between" style={{ marginBottom: 8 }}>
           <div className="range-pills">
             {["1M", "3M", "6M", "1Y", "All"].map((r) => (
-              <button
-                key={r}
-                data-active={range === r}
-                onClick={() => setRange(r)}
-              >
+              <button key={r} data-active={range === r} onClick={() => setRange(r)}>
                 {r}
               </button>
             ))}
@@ -307,17 +289,14 @@ export function PortfolioScreen({
           data={view.series}
           benchmarkData={benchmark !== "none" ? BENCHMARKS[benchmark] : null}
           benchmarkLabel={
-            { sp500: "S&P 500", set: "SET", m60_40: "60/40", none: null }[
-              benchmark
-            ] as string | null
+            { sp500: "S&P 500", set: "SET", m60_40: "60/40", none: null }[benchmark] as
+              | string
+              | null
           }
           height={130}
           accent="var(--accent)"
         />
-        <div
-          className="filter-chips"
-          style={{ padding: "8px 0 0", marginLeft: -8 }}
-        >
+        <div className="filter-chips" style={{ padding: "8px 0 0", marginLeft: -8 }}>
           <span
             style={{
               fontSize: 11,
@@ -358,10 +337,10 @@ export function PortfolioScreen({
           <div className="chart-row">
             <div className="chart-card">
               <div className="h">DRIFT FROM TARGET · 6M</div>
-              <div className="v" style={{ color: "var(--amber)" }}>+6.2pp</div>
-              <div
-                style={{ fontSize: 11, color: "var(--muted)", marginBottom: 8 }}
-              >
+              <div className="v" style={{ color: "var(--amber)" }}>
+                +6.2pp
+              </div>
+              <div style={{ fontSize: 11, color: "var(--muted)", marginBottom: 8 }}>
                 Trending up — time to consider a rebalance
               </div>
               <MiniLine data={DRIFT_SERIES} accent="var(--amber)" height={48} />
@@ -371,19 +350,12 @@ export function PortfolioScreen({
               <div className="h">GEOGRAPHY</div>
               <div className="stacked-bar">
                 {GEO_BREAKDOWN.map((g) => (
-                  <span
-                    key={g.label}
-                    style={{ width: `${g.pct}%`, background: g.color }}
-                  ></span>
+                  <span key={g.label} style={{ width: `${g.pct}%`, background: g.color }}></span>
                 ))}
               </div>
               <div className="stack-sm" style={{ fontSize: 11 }}>
                 {GEO_BREAKDOWN.map((g) => (
-                  <div
-                    key={g.label}
-                    className="row between"
-                    style={{ gap: 6, padding: "2px 0" }}
-                  >
+                  <div key={g.label} className="row between" style={{ gap: 6, padding: "2px 0" }}>
                     <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
                       <span
                         style={{
@@ -407,19 +379,12 @@ export function PortfolioScreen({
               <div className="h">SECTOR · ROLL-UP</div>
               <div className="stacked-bar">
                 {SECTOR_BREAKDOWN.map((g) => (
-                  <span
-                    key={g.label}
-                    style={{ width: `${g.pct}%`, background: g.color }}
-                  ></span>
+                  <span key={g.label} style={{ width: `${g.pct}%`, background: g.color }}></span>
                 ))}
               </div>
               <div className="stack-sm" style={{ fontSize: 11 }}>
                 {SECTOR_BREAKDOWN.slice(0, 5).map((g) => (
-                  <div
-                    key={g.label}
-                    className="row between"
-                    style={{ gap: 6, padding: "2px 0" }}
-                  >
+                  <div key={g.label} className="row between" style={{ gap: 6, padding: "2px 0" }}>
                     <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
                       <span
                         style={{
@@ -436,9 +401,7 @@ export function PortfolioScreen({
                     </span>
                   </div>
                 ))}
-                <div
-                  style={{ fontSize: 10, color: "var(--muted)", paddingTop: 4 }}
-                >
+                <div style={{ fontSize: 10, color: "var(--muted)", paddingTop: 4 }}>
                   + 3 more sectors
                 </div>
               </div>
@@ -447,17 +410,10 @@ export function PortfolioScreen({
             <div className="chart-card">
               <div className="h">CONTRIBUTIONS · 6M</div>
               <div className="v">
-                ฿
-                {Math.round(
-                  CONTRIB_SERIES.reduce((s, c) => s + c.v, 0) / 1000,
-                )}
-                k
+                ฿{Math.round(CONTRIB_SERIES.reduce((s, c) => s + c.v, 0) / 1000)}k
               </div>
-              <div
-                style={{ fontSize: 11, color: "var(--muted)", marginBottom: 8 }}
-              >
-                Total added · {CONTRIB_SERIES.filter((c) => c.v > 0).length}{" "}
-                deposits
+              <div style={{ fontSize: 11, color: "var(--muted)", marginBottom: 8 }}>
+                Total added · {CONTRIB_SERIES.filter((c) => c.v > 0).length} deposits
               </div>
               <MiniBars data={CONTRIB_SERIES} accent="var(--accent)" height={48} />
             </div>
@@ -469,11 +425,7 @@ export function PortfolioScreen({
         <div className="section" style={{ marginTop: 8 }}>
           <div className="section-header" style={{ padding: "0 4px" }}>
             <h3>Plan & health</h3>
-            <span
-              className="link"
-              onClick={onOpenModels}
-              style={{ cursor: "pointer" }}
-            >
+            <span className="link" onClick={onOpenModels} style={{ cursor: "pointer" }}>
               Target: {targetModel.name} →
             </span>
           </div>
@@ -502,10 +454,7 @@ export function PortfolioScreen({
                 className="card-soft"
                 style={{ padding: "8px 8px", textAlign: "center" }}
               >
-                <div
-                  className="num"
-                  style={{ fontSize: 18, fontWeight: 500, color: s.color }}
-                >
+                <div className="num" style={{ fontSize: 18, fontWeight: 500, color: s.color }}>
                   {ANALYSIS.scores[s.key]}
                 </div>
                 <div
@@ -582,8 +531,7 @@ export function PortfolioScreen({
                 }
                 style={{
                   padding: "10px 12px",
-                  borderBottom:
-                    i < arr.length - 1 ? "1px solid var(--line-soft)" : "none",
+                  borderBottom: i < arr.length - 1 ? "1px solid var(--line-soft)" : "none",
                   cursor: "pointer",
                   display: "flex",
                   alignItems: "center",
@@ -689,27 +637,18 @@ export function PortfolioScreen({
               topic="rebalance"
               label="HELPFUL?"
               value={feedback.rebalance ?? null}
-              onChange={(rating) =>
-                setFeedback({ ...feedback, rebalance: rating })
-              }
+              onChange={(rating) => setFeedback({ ...feedback, rebalance: rating })}
             />
           </div>
         </div>
       )}
 
-      <div
-        className="section-header"
-        style={{ padding: "0 20px", marginBottom: 4, marginTop: 18 }}
-      >
+      <div className="section-header" style={{ padding: "0 20px", marginBottom: 4, marginTop: 18 }}>
         <h3>Holdings</h3>
         <span className="link">{view.holdings.length} funds</span>
       </div>
       <div className="filter-chips">
-        <span
-          className="chip"
-          data-active={filter === "all"}
-          onClick={() => setFilter("all")}
-        >
+        <span className="chip" data-active={filter === "all"} onClick={() => setFilter("all")}>
           All
         </span>
         <span
@@ -719,11 +658,7 @@ export function PortfolioScreen({
         >
           Stocks {byClass.equity.toFixed(0)}%
         </span>
-        <span
-          className="chip"
-          data-active={filter === "bond"}
-          onClick={() => setFilter("bond")}
-        >
+        <span className="chip" data-active={filter === "bond"} onClick={() => setFilter("bond")}>
           Bonds {byClass.bond.toFixed(0)}%
         </span>
         {byClass.alternative > 0.5 && (
@@ -736,11 +671,7 @@ export function PortfolioScreen({
           </span>
         )}
         {byClass.cash > 0.5 && (
-          <span
-            className="chip"
-            data-active={filter === "cash"}
-            onClick={() => setFilter("cash")}
-          >
+          <span className="chip" data-active={filter === "cash"} onClick={() => setFilter("cash")}>
             Cash {byClass.cash.toFixed(0)}%
           </span>
         )}
@@ -761,10 +692,8 @@ export function PortfolioScreen({
                 </div>
               </div>
               <div className="stack-xs" style={{ alignItems: "flex-end" }}>
-                <div className="value">
-                  ฿{Math.round(h.value).toLocaleString("en-US")}
-                </div>
-                <div className={"pct " + (h.d1 >= 0 ? "delta up" : "delta down")}>
+                <div className="value">฿{Math.round(h.value).toLocaleString("en-US")}</div>
+                <div className={`pct ${h.d1 >= 0 ? "delta up" : "delta down"}`}>
                   {fmtPct(h.d1, 2)}
                 </div>
               </div>
@@ -775,11 +704,7 @@ export function PortfolioScreen({
 
       {activePfId === "all" && targetModel && (
         <div className="section" style={{ marginTop: 14 }}>
-          <div
-            className="card"
-            style={{ padding: 14, cursor: "pointer" }}
-            onClick={onOpenModels}
-          >
+          <div className="card" style={{ padding: 14, cursor: "pointer" }} onClick={onOpenModels}>
             <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
               <ModelDonut mix={targetModel.mix} size={44} thickness={7} />
               <div style={{ flex: 1, minWidth: 0 }}>
@@ -803,9 +728,7 @@ export function PortfolioScreen({
                 >
                   {targetModel.name}
                 </div>
-                <div
-                  style={{ fontSize: 12, color: "var(--muted)", marginTop: 2 }}
-                >
+                <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 2 }}>
                   Browse {MODEL_PORTFOLIOS.length - 1} other index strategies →
                 </div>
               </div>

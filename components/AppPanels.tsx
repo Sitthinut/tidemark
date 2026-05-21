@@ -38,18 +38,14 @@ export function ChatPanel({
     <>
       <PanelHeader title="Chat" showDot onClose={onClose} />
       <div className="ra-panel-body ra-chat-body">
-        <ChatScreen
-          persona="advisor"
-          seedPrompt={seedPrompt}
-          onPromptConsumed={onPromptConsumed}
-        />
+        <ChatScreen persona="advisor" seedPrompt={seedPrompt} onPromptConsumed={onPromptConsumed} />
       </div>
     </>
   );
 }
 
 export function BucketsPanel({ onClose }: { onClose: () => void }) {
-  const fmt = (n: number) => "฿" + Math.round(n).toLocaleString("en-US");
+  const fmt = (n: number) => `฿${Math.round(n).toLocaleString("en-US")}`;
   return (
     <>
       <PanelHeader title="Buckets" onClose={onClose} />
@@ -69,10 +65,7 @@ export function BucketsPanel({ onClose }: { onClose: () => void }) {
             </div>
           </div>
         ))}
-        <button
-          className="btn ghost sm"
-          style={{ width: "100%", marginTop: 10, display: "flex" }}
-        >
+        <button className="btn ghost sm" style={{ width: "100%", marginTop: 10, display: "flex" }}>
           <Icon name="plus" size={12} /> New portfolio
         </button>
       </div>
@@ -89,10 +82,7 @@ const SEV_TAG: Record<string, string> = {
 
 export function PlanPanel({ onClose }: { onClose: () => void }) {
   const score = Math.round(
-    (ANALYSIS.scores.diversification +
-      ANALYSIS.scores.alignment +
-      ANALYSIS.scores.fees) /
-      3,
+    (ANALYSIS.scores.diversification + ANALYSIS.scores.alignment + ANALYSIS.scores.fees) / 3,
   );
   const dashLen = (150.8 * score) / 100;
   return (

@@ -30,18 +30,12 @@ export interface AddHoldingsSheetProps {
   onAdd: (rows: AddedHolding[]) => void;
 }
 
-export function AddHoldingsSheet({
-  open,
-  onClose,
-  onAdd,
-}: AddHoldingsSheetProps) {
+export function AddHoldingsSheet({ open, onClose, onAdd }: AddHoldingsSheetProps) {
   const [method, setMethod] = useState<"paste" | "image" | "manual">("paste");
   const [pasteText, setPasteText] = useState("");
   const [imgPreview, setImgPreview] = useState<string | null>(null);
   const [imgProcessing, setImgProcessing] = useState(false);
-  const [imgExtracted, setImgExtracted] = useState<ExtractedHolding[] | null>(
-    null,
-  );
+  const [imgExtracted, setImgExtracted] = useState<ExtractedHolding[] | null>(null);
   const [rows, setRows] = useState<Row[]>([
     { ticker: "", units: "", value: "" },
     { ticker: "", units: "", value: "" },
@@ -56,7 +50,7 @@ export function AddHoldingsSheet({
     return lines
       .map((line) => {
         const m = line.match(
-          /([A-Z][A-Z0-9&\-]+)\s*[:,]?\s*([\d,]+(?:\.\d+)?)\s*(?:units|shares)?(?:\s*[,@]?\s*([\d,]+(?:\.\d+)?))?/i,
+          /([A-Z][A-Z0-9&-]+)\s*[:,]?\s*([\d,]+(?:\.\d+)?)\s*(?:units|shares)?(?:\s*[,@]?\s*([\d,]+(?:\.\d+)?))?/i,
         );
         if (!m) return null;
         return {
@@ -100,8 +94,7 @@ export function AddHoldingsSheet({
     let toAdd: ExtractedHolding[] = [];
     if (method === "paste") toAdd = parsePaste();
     if (method === "image" && imgExtracted) toAdd = imgExtracted;
-    if (method === "manual")
-      toAdd = rows.filter((r) => r.ticker && (r.units || r.value));
+    if (method === "manual") toAdd = rows.filter((r) => r.ticker && (r.units || r.value));
 
     const enriched: AddedHolding[] = toAdd.map((t) => ({
       ticker: t.ticker,
@@ -127,16 +120,14 @@ export function AddHoldingsSheet({
     setRows(copy);
   };
 
-  const addRow = () =>
-    setRows([...rows, { ticker: "", units: "", value: "" }]);
-  const removeRow = (i: number) =>
-    setRows(rows.filter((_, idx) => idx !== i));
+  const addRow = () => setRows([...rows, { ticker: "", units: "", value: "" }]);
+  const removeRow = (i: number) => setRows(rows.filter((_, idx) => idx !== i));
 
   const previewCount =
     method === "paste"
       ? parsePaste().length
       : method === "image"
-        ? imgExtracted?.length ?? 0
+        ? (imgExtracted?.length ?? 0)
         : rows.filter((r) => r.ticker && (r.units || r.value)).length;
 
   return (
@@ -145,8 +136,7 @@ export function AddHoldingsSheet({
         <div className="sheet-handle"></div>
         <div className="sheet-title">Add holdings</div>
         <div className="sheet-subtitle">
-          Combine holdings from any Thai brokerage. Read-only — we never trade
-          for you.
+          Combine holdings from any Thai brokerage. Read-only — we never trade for you.
         </div>
 
         <div style={{ marginBottom: 14 }}>
@@ -193,10 +183,7 @@ export function AddHoldingsSheet({
           <button data-active={method === "image"} onClick={() => setMethod("image")}>
             📷 Image
           </button>
-          <button
-            data-active={method === "manual"}
-            onClick={() => setMethod("manual")}
-          >
+          <button data-active={method === "manual"} onClick={() => setMethod("manual")}>
             ✎ Type
           </button>
         </div>
@@ -263,8 +250,8 @@ export function AddHoldingsSheet({
                 lineHeight: 1.5,
               }}
             >
-              ⓘ <strong style={{ fontWeight: 500 }}>Privacy:</strong> the image
-              is processed on-device. We never upload or store screenshots.
+              ⓘ <strong style={{ fontWeight: 500 }}>Privacy:</strong> the image is processed
+              on-device. We never upload or store screenshots.
             </div>
           </>
         )}
@@ -309,9 +296,7 @@ export function AddHoldingsSheet({
                       <span style={{ background: "white" }}></span>
                       <span style={{ background: "white" }}></span>
                     </div>
-                    <div
-                      style={{ fontSize: 12, fontFamily: "var(--font-mono)" }}
-                    >
+                    <div style={{ fontSize: 12, fontFamily: "var(--font-mono)" }}>
                       Extracting holdings…
                     </div>
                   </div>
@@ -423,11 +408,7 @@ export function AddHoldingsSheet({
                 </button>
               </div>
             ))}
-            <button
-              className="btn ghost sm"
-              style={{ marginTop: 6 }}
-              onClick={addRow}
-            >
+            <button className="btn ghost sm" style={{ marginTop: 6 }} onClick={addRow}>
               <Icon name="plus" size={12} /> Add row
             </button>
           </div>
@@ -449,9 +430,8 @@ export function AddHoldingsSheet({
         >
           <Icon name="sparkle" size={14} />
           <div>
-            <strong style={{ fontWeight: 500 }}>Or ask the advisor:</strong> say
-            &quot;Add 50k of K-FIXED from my SCB account&quot; in chat. The
-            agent confirms before applying.
+            <strong style={{ fontWeight: 500 }}>Or ask the advisor:</strong> say &quot;Add 50k of
+            K-FIXED from my SCB account&quot; in chat. The agent confirms before applying.
           </div>
         </div>
 

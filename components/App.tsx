@@ -1,36 +1,20 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { type AddedHolding, AddHoldingsSheet } from "@/components/AddHoldingsSheet";
+import { type AppId, BucketsPanel, ChatPanel, NotesPanel, PlanPanel } from "@/components/AppPanels";
 import { Icon } from "@/components/Icon";
-import { AddHoldingsSheet, type AddedHolding } from "@/components/AddHoldingsSheet";
-import {
-  type AppId,
-  BucketsPanel,
-  ChatPanel,
-  NotesPanel,
-  PlanPanel,
-} from "@/components/AppPanels";
 import { ChatScreen } from "@/components/screens/ChatScreen";
 import { ConnectScreen } from "@/components/screens/ConnectScreen";
 import { JournalScreen } from "@/components/screens/JournalScreen";
 import { MarketsScreen } from "@/components/screens/MarketsScreen";
 import { ModelPortfoliosScreen } from "@/components/screens/ModelPortfoliosScreen";
 import { PortfolioScreen } from "@/components/screens/PortfolioScreen";
-import {
-  SettingsScreen,
-  type Theme,
-} from "@/components/screens/SettingsScreen";
+import { SettingsScreen, type Theme } from "@/components/screens/SettingsScreen";
 import { USER_GOALS } from "@/lib/mock/data";
 import { useViewport } from "@/lib/useViewport";
 
-type Screen =
-  | "connect"
-  | "portfolio"
-  | "markets"
-  | "chat"
-  | "journal"
-  | "models"
-  | "settings";
+type Screen = "connect" | "portfolio" | "markets" | "chat" | "journal" | "models" | "settings";
 
 const MOBILE_NAV: { id: Screen; icon: string; label: string }[] = [
   { id: "portfolio", icon: "home", label: "Portfolio" },
@@ -66,9 +50,7 @@ export function App() {
   const [importOpen, setImportOpen] = useState(false);
   const [, setExtraHoldings] = useState<AddedHolding[]>([]);
   const [, setSavedReading] = useState<unknown[]>([]);
-  const [selectedModelId, setSelectedModelId] = useState<string>(
-    USER_GOALS.selectedModelId,
-  );
+  const [selectedModelId, setSelectedModelId] = useState<string>(USER_GOALS.selectedModelId);
   // Wide-only: which app panel is open on the right. Desktop opens chat by default.
   const [activeApp, setActiveApp] = useState<AppId | null>("chat");
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
@@ -197,8 +179,7 @@ export function App() {
 
   // ===== MOBILE SHELL (unchanged behaviour from original) =====
   if (!isWide) {
-    const hideNav =
-      screen === "connect" || screen === "settings" || screen === "models";
+    const hideNav = screen === "connect" || screen === "settings" || screen === "models";
     return (
       <div className="app-root">
         <div className="app-frame" data-screen-label={screen}>
@@ -232,11 +213,7 @@ export function App() {
   if (screen === "connect") {
     return (
       <div className="app-root">
-        <div
-          className="app-frame"
-          data-screen-label={screen}
-          style={{ maxWidth: 520 }}
-        >
+        <div className="app-frame" data-screen-label={screen} style={{ maxWidth: 520 }}>
           {renderScreen()}
         </div>
       </div>
@@ -279,10 +256,7 @@ export function App() {
             )}
           </button>
           {accountMenuOpen && (
-            <div
-              className="ra-account-menu"
-              onMouseLeave={() => setAccountMenuOpen(false)}
-            >
+            <div className="ra-account-menu" onMouseLeave={() => setAccountMenuOpen(false)}>
               <button
                 onClick={() => {
                   setAccountMenuOpen(false);
@@ -333,15 +307,9 @@ export function App() {
               onClose={() => setActiveApp(null)}
             />
           )}
-          {activeApp === "buckets" && (
-            <BucketsPanel onClose={() => setActiveApp(null)} />
-          )}
-          {activeApp === "plan" && (
-            <PlanPanel onClose={() => setActiveApp(null)} />
-          )}
-          {activeApp === "notes" && (
-            <NotesPanel onClose={() => setActiveApp(null)} />
-          )}
+          {activeApp === "buckets" && <BucketsPanel onClose={() => setActiveApp(null)} />}
+          {activeApp === "plan" && <PlanPanel onClose={() => setActiveApp(null)} />}
+          {activeApp === "notes" && <NotesPanel onClose={() => setActiveApp(null)} />}
         </section>
       )}
 

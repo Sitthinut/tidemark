@@ -28,9 +28,14 @@ export function Sparkline({
     return [x, y] as const;
   });
   const path = pts.map((p, i) => (i === 0 ? `M${p[0]},${p[1]}` : `L${p[0]},${p[1]}`)).join(" ");
-  const fillPath = path + ` L${width},${height} L0,${height} Z`;
+  const fillPath = `${path} L${width},${height} L0,${height} Z`;
   return (
-    <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} style={{ overflow: "visible" }}>
+    <svg
+      width={width}
+      height={height}
+      viewBox={`0 0 ${width} ${height}`}
+      style={{ overflow: "visible" }}
+    >
       {showFill && <path d={fillPath} fill={color} opacity="0.10"></path>}
       <path
         d={path}
@@ -85,18 +90,14 @@ export function PerfChart({
     });
 
   const pts = toPts(data);
-  const linePath = pts
-    .map((p, i) => (i === 0 ? `M${p[0]},${p[1]}` : `L${p[0]},${p[1]}`))
-    .join(" ");
+  const linePath = pts.map((p, i) => (i === 0 ? `M${p[0]},${p[1]}` : `L${p[0]},${p[1]}`)).join(" ");
   const fillPath =
     linePath +
     ` L${pts[pts.length - 1][0]},${height - padBottom} L${pts[0][0]},${height - padBottom} Z`;
 
   const benchPts = benchSeries ? toPts(benchSeries) : null;
   const benchPath = benchPts
-    ? benchPts
-        .map((p, i) => (i === 0 ? `M${p[0]},${p[1]}` : `L${p[0]},${p[1]}`))
-        .join(" ")
+    ? benchPts.map((p, i) => (i === 0 ? `M${p[0]},${p[1]}` : `L${p[0]},${p[1]}`)).join(" ")
     : null;
 
   return (
@@ -282,6 +283,9 @@ export function MiniLine({
   height?: number;
   width?: number;
 }) {
+  // useId() gives a stable id across SSR + hydration (no Math.random in render).
+  // Must be called before any early return to satisfy rules of hooks.
+  const rawId = useId();
   if (!data || data.length === 0) return null;
   const vals = data.map((d) => (typeof d === "number" ? d : d.v));
   const min = Math.min(...vals),
@@ -293,10 +297,8 @@ export function MiniLine({
     return [x, y] as const;
   });
   const path = pts.map((p, i) => (i === 0 ? `M${p[0]},${p[1]}` : `L${p[0]},${p[1]}`)).join(" ");
-  const fillPath = path + ` L${width},${height} L0,${height} Z`;
-  // useId() gives a stable id across SSR + hydration (no Math.random in render)
-  const rawId = useId();
-  const gid = "mg-" + rawId.replace(/:/g, "");
+  const fillPath = `${path} L${width},${height} L0,${height} Z`;
+  const gid = `mg-${rawId.replace(/:/g, "")}`;
   return (
     <svg
       width="100%"

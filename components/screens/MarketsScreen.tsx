@@ -80,12 +80,9 @@ function MarketsToday({ markets }: { markets: Markets }) {
                 key={idx.sym}
                 style={{
                   padding: 12,
-                  borderRight:
-                    i % 2 === 0 ? "1px solid var(--line-soft)" : "none",
+                  borderRight: i % 2 === 0 ? "1px solid var(--line-soft)" : "none",
                   borderBottom:
-                    i < markets.indices.length - 2
-                      ? "1px solid var(--line-soft)"
-                      : "none",
+                    i < markets.indices.length - 2 ? "1px solid var(--line-soft)" : "none",
                 }}
               >
                 <div
@@ -98,10 +95,7 @@ function MarketsToday({ markets }: { markets: Markets }) {
                 >
                   {idx.sym}
                 </div>
-                <div
-                  className="num"
-                  style={{ fontSize: 16, marginTop: 3, fontWeight: 500 }}
-                >
+                <div className="num" style={{ fontSize: 16, marginTop: 3, fontWeight: 500 }}>
                   {idx.val.toLocaleString("en-US", {
                     minimumFractionDigits: 2,
                     maximumFractionDigits: 2,
@@ -109,7 +103,7 @@ function MarketsToday({ markets }: { markets: Markets }) {
                   {idx.isYield ? "%" : ""}
                 </div>
                 <div
-                  className={"delta " + (idx.d >= 0 ? "up" : "down")}
+                  className={`delta ${idx.d >= 0 ? "up" : "down"}`}
                   style={{ fontSize: 11, marginTop: 1 }}
                 >
                   {idx.d >= 0 ? "▲" : "▼"} {Math.abs(idx.d).toFixed(2)}%
@@ -172,9 +166,7 @@ function MarketsLearn() {
             <div className="meta-row">
               <span>{a.tag}</span>
               <span>· {a.readTime} MIN READ</span>
-              <span style={{ marginLeft: "auto", color: "var(--accent-ink)" }}>
-                📑 SAVE
-              </span>
+              <span style={{ marginLeft: "auto", color: "var(--accent-ink)" }}>📑 SAVE</span>
             </div>
             <div className="a-title">{a.title}</div>
             <div className="a-blurb">{a.blurb}</div>
@@ -196,10 +188,7 @@ function MarketsLearn() {
             style={{ background: "var(--accent-soft)", borderColor: "transparent" }}
             onClick={() => saveArticle(a)}
           >
-            <div
-              className="meta-row"
-              style={{ color: "var(--accent-ink)", opacity: 0.7 }}
-            >
+            <div className="meta-row" style={{ color: "var(--accent-ink)", opacity: 0.7 }}>
               <span>{a.tag}</span>
               <span>· {a.readTime} MIN READ</span>
               <span style={{ marginLeft: "auto" }}>📑 SAVE</span>
@@ -207,10 +196,7 @@ function MarketsLearn() {
             <div className="a-title" style={{ color: "var(--accent-ink)" }}>
               {a.title}
             </div>
-            <div
-              className="a-blurb"
-              style={{ color: "var(--accent-ink)", opacity: 0.85 }}
-            >
+            <div className="a-blurb" style={{ color: "var(--accent-ink)", opacity: 0.85 }}>
               {a.blurb}
             </div>
           </div>
@@ -224,10 +210,7 @@ function MarketsLearn() {
         <div className="filter-chips" style={{ padding: "0 4px" }}>
           {L.topics.map((t) => (
             <span key={t.id} className="chip">
-              {t.label}{" "}
-              <span style={{ color: "var(--muted)", marginLeft: 4 }}>
-                {t.count}
-              </span>
+              {t.label} <span style={{ color: "var(--muted)", marginLeft: 4 }}>{t.count}</span>
             </span>
           ))}
         </div>
@@ -255,14 +238,12 @@ function MarketsLearn() {
               marginBottom: 12,
             }}
           >
-            Paste a link in chat and ask the advisor to read it. It&apos;ll
-            save the summary to your Journal.
+            Paste a link in chat and ask the advisor to read it. It&apos;ll save the summary to your
+            Journal.
           </div>
           <button
             className="btn ghost sm"
-            onClick={() =>
-              window.dispatchEvent(new CustomEvent("nav", { detail: "chat" }))
-            }
+            onClick={() => window.dispatchEvent(new CustomEvent("nav", { detail: "chat" }))}
           >
             <Icon name="chat" size={12} /> Send a link to the advisor
           </button>

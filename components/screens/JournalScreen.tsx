@@ -1,24 +1,19 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Icon } from "@/components/Icon";
 import { ModelDonut } from "@/components/charts";
+import { Icon } from "@/components/Icon";
 import {
   MODEL_PORTFOLIOS,
-  USER_GOALS,
-  USER_JOURNAL,
-  USER_PLAN,
   parseBullets,
   parseCommitments,
   parsePlan,
   parseQuestions,
+  USER_GOALS,
+  USER_JOURNAL,
+  USER_PLAN,
 } from "@/lib/mock/data";
-import type {
-  FeedbackItem,
-  ModelPortfolio,
-  Note,
-  ReadingItem,
-} from "@/lib/mock/types";
+import type { FeedbackItem, ModelPortfolio, Note, ReadingItem } from "@/lib/mock/types";
 
 type Tab = "plan" | "notes" | "models" | "reading" | "feedback";
 
@@ -28,11 +23,7 @@ export interface JournalScreenProps {
   onOpenSettings: () => void;
 }
 
-export function JournalScreen({
-  onOpenChat,
-  onOpenModels,
-  onOpenSettings,
-}: JournalScreenProps) {
+export function JournalScreen({ onOpenChat, onOpenModels, onOpenSettings }: JournalScreenProps) {
   const [tab, setTab] = useState<Tab>("plan");
   const journal = USER_JOURNAL;
 
@@ -43,11 +34,7 @@ export function JournalScreen({
           <span>Journal</span>
           <span className="brand-chip">PICHANON N.</span>
         </div>
-        <button
-          className="icon-btn"
-          aria-label="Settings"
-          onClick={onOpenSettings}
-        >
+        <button className="icon-btn" aria-label="Settings" onClick={onOpenSettings}>
           <svg
             width="13"
             height="13"
@@ -74,19 +61,13 @@ export function JournalScreen({
             { id: "feedback", label: "Feedback" },
           ] as { id: Tab; label: string }[]
         ).map((t) => (
-          <button
-            key={t.id}
-            data-active={tab === t.id}
-            onClick={() => setTab(t.id)}
-          >
+          <button key={t.id} data-active={tab === t.id} onClick={() => setTab(t.id)}>
             {t.label}
           </button>
         ))}
       </div>
 
-      {tab === "plan" && (
-        <JournalPlan onOpenModels={onOpenModels} onOpenChat={onOpenChat} />
-      )}
+      {tab === "plan" && <JournalPlan onOpenModels={onOpenModels} onOpenChat={onOpenChat} />}
       {tab === "notes" && <JournalNotes notes={journal.notes} />}
       {tab === "models" && (
         <JournalModels saved={journal.savedModels} onOpenModels={onOpenModels} />
@@ -106,12 +87,10 @@ function JournalPlan({
 }) {
   const [editorOpen, setEditorOpen] = useState(false);
   const [, setTick] = useState(0);
-  const parsed = useMemo(() => parsePlan(USER_PLAN.markdown), [USER_PLAN.markdown]);
-  const targetModel = MODEL_PORTFOLIOS.find(
-    (m) => m.id === USER_GOALS.selectedModelId,
-  );
+  const parsed = useMemo(() => parsePlan(USER_PLAN.markdown), []);
+  const targetModel = MODEL_PORTFOLIOS.find((m) => m.id === USER_GOALS.selectedModelId);
 
-  const isEmpty = !USER_PLAN.markdown || !USER_PLAN.markdown.trim();
+  const isEmpty = !USER_PLAN.markdown?.trim();
 
   if (isEmpty) {
     return (
@@ -139,9 +118,8 @@ function JournalPlan({
                 margin: "0 auto 20px",
               }}
             >
-              A short brief about what you care about, your target allocation,
-              and rules you set for yourself. The advisor reads it before every
-              conversation.
+              A short brief about what you care about, your target allocation, and rules you set for
+              yourself. The advisor reads it before every conversation.
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
               <button className="btn primary" onClick={() => setEditorOpen(true)}>
@@ -175,11 +153,7 @@ function JournalPlan({
       <div className="section" style={{ marginTop: 0 }}>
         <div className="row between" style={{ padding: "0 4px", marginBottom: 10 }}>
           <div>
-            <div
-              style={{ fontSize: 16, fontWeight: 500, letterSpacing: "-0.02em" }}
-            >
-              Your plan
-            </div>
+            <div style={{ fontSize: 16, fontWeight: 500, letterSpacing: "-0.02em" }}>Your plan</div>
             <div
               style={{
                 fontSize: 11.5,
@@ -241,8 +215,7 @@ function JournalPlan({
               key={i}
               style={{
                 padding: "10px 0",
-                borderBottom:
-                  i < arr.length - 1 ? "1px solid var(--line-soft)" : "none",
+                borderBottom: i < arr.length - 1 ? "1px solid var(--line-soft)" : "none",
                 display: "flex",
                 justifyContent: "space-between",
                 gap: 12,
@@ -303,7 +276,7 @@ function PlanSpineCard({
   onAdd: () => void;
   onBrowse?: () => void;
 }) {
-  if (!body || !body.trim()) {
+  if (!body?.trim()) {
     return (
       <div
         onClick={onAdd}
@@ -348,10 +321,7 @@ function PlanSpineCard({
       <SpineCardShell label={label}>
         <div className="stack-sm">
           {items.map((c, i) => (
-            <div
-              key={i}
-              style={{ display: "flex", alignItems: "flex-start", gap: 10 }}
-            >
+            <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
               <span
                 style={{
                   width: 16,
@@ -360,8 +330,7 @@ function PlanSpineCard({
                   marginTop: 1,
                   flexShrink: 0,
                   border: "1.5px solid var(--amber)",
-                  background:
-                    "color-mix(in oklab, var(--amber) 20%, transparent)",
+                  background: "color-mix(in oklab, var(--amber) 20%, transparent)",
                 }}
               ></span>
               <div
@@ -453,22 +422,14 @@ function PlanSpineCard({
             >
               {model.name}
             </div>
-            <div
-              style={{ fontSize: 11.5, color: "var(--muted)", lineHeight: 1.35 }}
-            >
+            <div style={{ fontSize: 11.5, color: "var(--muted)", lineHeight: 1.35 }}>
               {model.mix.map((m) => `${m.pct}% ${m.label}`).join(" · ")}
             </div>
           </div>
         </div>
-        <div style={{ fontSize: 12.5, color: "var(--ink-soft)", lineHeight: 1.5 }}>
-          {body}
-        </div>
+        <div style={{ fontSize: 12.5, color: "var(--ink-soft)", lineHeight: 1.5 }}>{body}</div>
         {onBrowse && (
-          <button
-            className="btn ghost sm"
-            style={{ marginTop: 10 }}
-            onClick={onBrowse}
-          >
+          <button className="btn ghost sm" style={{ marginTop: 10 }} onClick={onBrowse}>
             Browse other models →
           </button>
         )}
@@ -492,13 +453,7 @@ function PlanSpineCard({
   );
 }
 
-function SpineCardShell({
-  label,
-  children,
-}: {
-  label: string;
-  children: React.ReactNode;
-}) {
+function SpineCardShell({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="card" style={{ marginBottom: 8, padding: 14 }}>
       <div
@@ -538,11 +493,7 @@ function PlanExtraCard({ title, body }: { title: string; body: string }) {
           {qs.map((q, i) => (
             <div
               key={i}
-              onClick={() =>
-                window.dispatchEvent(
-                  new CustomEvent("ai-prompt", { detail: q }),
-                )
-              }
+              onClick={() => window.dispatchEvent(new CustomEvent("ai-prompt", { detail: q }))}
               style={{
                 display: "flex",
                 alignItems: "center",
@@ -625,16 +576,12 @@ Comfortable with 20% drawdowns. Won't sell.
 - No active funds`;
 
   const insertSection = (heading: string) => {
-    setText(text + `\n\n## ${heading}\n`);
+    setText(`${text}\n\n## ${heading}\n`);
   };
 
   return (
     <div className="sheet-overlay" onClick={onClose}>
-      <div
-        className="sheet"
-        onClick={(e) => e.stopPropagation()}
-        style={{ maxHeight: "92vh" }}
-      >
+      <div className="sheet" onClick={(e) => e.stopPropagation()} style={{ maxHeight: "92vh" }}>
         <div className="sheet-handle"></div>
         <div className="row between" style={{ marginBottom: 4 }}>
           <div className="sheet-title">Edit your plan</div>
@@ -649,8 +596,8 @@ Comfortable with 20% drawdowns. Won't sell.
           </span>
         </div>
         <div className="sheet-subtitle">
-          Free-form. Use <code>## Heading</code> for sections. The advisor reads
-          this before every conversation.
+          Free-form. Use <code>## Heading</code> for sections. The advisor reads this before every
+          conversation.
         </div>
 
         <textarea
@@ -678,29 +625,20 @@ Comfortable with 20% drawdowns. Won't sell.
           SUGGESTED HEADINGS
         </div>
         <div className="filter-chips" style={{ padding: "6px 0 0" }}>
-          {[
-            "Target",
-            "Principles",
-            "Risk",
-            "Commitments",
-            "Open questions",
-            "Contributions",
-          ].map((h) => (
-            <span key={h} className="chip" onClick={() => insertSection(h)}>
-              + {h}
-            </span>
-          ))}
+          {["Target", "Principles", "Risk", "Commitments", "Open questions", "Contributions"].map(
+            (h) => (
+              <span key={h} className="chip" onClick={() => insertSection(h)}>
+                + {h}
+              </span>
+            ),
+          )}
         </div>
 
         <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
           <button className="btn ghost" style={{ flex: 1 }} onClick={onClose}>
             Cancel
           </button>
-          <button
-            className="btn primary"
-            style={{ flex: 2 }}
-            onClick={() => onSave(text)}
-          >
+          <button className="btn primary" style={{ flex: 2 }} onClick={() => onSave(text)}>
             Save plan <Icon name="check" size={13} />
           </button>
         </div>
@@ -721,8 +659,8 @@ function JournalNotes({ notes }: { notes: Note[] }) {
             lineHeight: 1.5,
           }}
         >
-          Insights you&apos;ve saved from chat and analysis. The advisor uses
-          these as context when answering future questions.
+          Insights you&apos;ve saved from chat and analysis. The advisor uses these as context when
+          answering future questions.
         </p>
         {notes.map((n) => (
           <div key={n.id} className="card" style={{ marginBottom: 8 }}>
@@ -778,13 +716,7 @@ function JournalNotes({ notes }: { notes: Note[] }) {
   );
 }
 
-function JournalModels({
-  saved,
-  onOpenModels,
-}: {
-  saved: string[];
-  onOpenModels: () => void;
-}) {
+function JournalModels({ saved, onOpenModels }: { saved: string[]; onOpenModels: () => void }) {
   const all = MODEL_PORTFOLIOS;
   const target = USER_GOALS.selectedModelId;
   const list = saved
@@ -851,11 +783,7 @@ function JournalModels({
             </div>
           </div>
         ))}
-        <button
-          className="btn ghost full"
-          onClick={onOpenModels}
-          style={{ marginTop: 8 }}
-        >
+        <button className="btn ghost full" onClick={onOpenModels} style={{ marginTop: 8 }}>
           Browse all {all.length} model portfolios →
         </button>
       </div>
@@ -875,23 +803,15 @@ function JournalReading({ reading }: { reading: ReadingItem[] }) {
             lineHeight: 1.5,
           }}
         >
-          Articles saved from Markets &gt; Learn, or links you&apos;ve asked the
-          advisor to read.
+          Articles saved from Markets &gt; Learn, or links you&apos;ve asked the advisor to read.
         </p>
         {reading.map((r) => (
           <div key={r.id} className="article-card">
             <div className="meta-row">
               <span>{r.source.toUpperCase()}</span>
               <span>· {r.readTime} MIN READ</span>
-              <span
-                style={{ marginLeft: "auto" }}
-                className={`status-pip ${r.status}`}
-              >
-                {r.status === "read"
-                  ? "✓ READ"
-                  : r.status === "in_progress"
-                    ? "READING"
-                    : "UNREAD"}
+              <span style={{ marginLeft: "auto" }} className={`status-pip ${r.status}`}>
+                {r.status === "read" ? "✓ READ" : r.status === "in_progress" ? "READING" : "UNREAD"}
               </span>
             </div>
             <div className="a-title">{r.title}</div>
@@ -920,8 +840,8 @@ function JournalFeedback({ feedback }: { feedback: FeedbackItem[] }) {
             lineHeight: 1.5,
           }}
         >
-          What you&apos;ve agreed and disagreed with. The advisor avoids
-          repeating advice you&apos;ve already rejected.
+          What you&apos;ve agreed and disagreed with. The advisor avoids repeating advice
+          you&apos;ve already rejected.
         </p>
         <div
           style={{
@@ -932,10 +852,7 @@ function JournalFeedback({ feedback }: { feedback: FeedbackItem[] }) {
           }}
         >
           <div className="card-soft" style={{ padding: 14, textAlign: "center" }}>
-            <div
-              className="num"
-              style={{ fontSize: 22, fontWeight: 500, color: "var(--gain)" }}
-            >
+            <div className="num" style={{ fontSize: 22, fontWeight: 500, color: "var(--gain)" }}>
               {ups}
             </div>
             <div
@@ -950,10 +867,7 @@ function JournalFeedback({ feedback }: { feedback: FeedbackItem[] }) {
             </div>
           </div>
           <div className="card-soft" style={{ padding: 14, textAlign: "center" }}>
-            <div
-              className="num"
-              style={{ fontSize: 22, fontWeight: 500, color: "var(--loss)" }}
-            >
+            <div className="num" style={{ fontSize: 22, fontWeight: 500, color: "var(--loss)" }}>
               {downs}
             </div>
             <div
@@ -970,11 +884,7 @@ function JournalFeedback({ feedback }: { feedback: FeedbackItem[] }) {
         </div>
 
         {feedback.map((f) => (
-          <div
-            key={f.id}
-            className="card"
-            style={{ marginBottom: 6, padding: "12px 14px" }}
-          >
+          <div key={f.id} className="card" style={{ marginBottom: 6, padding: "12px 14px" }}>
             <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
               <span
                 style={{

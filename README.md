@@ -25,11 +25,13 @@ for what's coming.
 
 ## Tech stack
 
-- [Next.js 15](https://nextjs.org/) (App Router) + React 18 + TypeScript 5
+- [Next.js 15](https://nextjs.org/) (App Router) + React 19 + TypeScript 5
 - Hand-rolled CSS — design tokens, light/dark/system themes (no Tailwind)
 - Hand-rolled SVG charts
+- [Biome](https://biomejs.dev/) for lint and format; [simple-git-hooks](https://github.com/toplenboren/simple-git-hooks)
+  with [lint-staged](https://github.com/lint-staged/lint-staged) for pre-commit
 - Planned: SQLite + [Drizzle ORM](https://orm.drizzle.team/) (Phase 1) and the
-  [Anthropic TypeScript SDK](https://github.com/anthropics/anthropic-sdk-typescript)
+  [Vercel AI SDK](https://sdk.vercel.ai/) via [OpenRouter](https://openrouter.ai/)
   (Phase 2) — see [ROADMAP.md](./ROADMAP.md)
 
 ## Quick start
@@ -50,7 +52,8 @@ Scripts:
 npm run dev        # dev server (hot reload)
 npm run build      # production build
 npm run start      # serve production build
-npm run lint       # ESLint
+npm run lint       # Biome check
+npm run format     # Biome check --write
 npm run typecheck  # tsc --noEmit
 ```
 

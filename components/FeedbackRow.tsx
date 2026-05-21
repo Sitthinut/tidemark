@@ -22,7 +22,7 @@ export function FeedbackRow({
       <button
         data-rating="up"
         data-active={value === "up"}
-        onClick={() => onChange && onChange(value === "up" ? null : "up")}
+        onClick={() => onChange?.(value === "up" ? null : "up")}
         aria-label="Helpful"
       >
         <svg
@@ -41,7 +41,7 @@ export function FeedbackRow({
       <button
         data-rating="down"
         data-active={value === "down"}
-        onClick={() => onChange && onChange(value === "down" ? null : "down")}
+        onClick={() => onChange?.(value === "down" ? null : "down")}
         aria-label="Not helpful"
       >
         <svg

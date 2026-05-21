@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Icon } from "@/components/Icon";
 import { FeedbackRow } from "@/components/FeedbackRow";
+import { Icon } from "@/components/Icon";
 import {
   AI_PERSONALITIES,
   MODEL_PORTFOLIOS,
@@ -59,9 +59,8 @@ function PlanProposalCard({
           <span>✓ APPLIED TO YOUR PLAN · {proposal.section.toUpperCase()}</span>
         </div>
         <div style={{ fontSize: 12.5, color: "var(--accent-ink)" }}>
-          Saved to{" "}
-          <strong style={{ fontWeight: 500 }}>{proposal.section}</strong>. View
-          in Journal → Plan.
+          Saved to <strong style={{ fontWeight: 500 }}>{proposal.section}</strong>. View in Journal
+          → Plan.
         </div>
       </div>
     );
@@ -96,20 +95,14 @@ function PlanProposalCard({
         {proposal.rm && proposal.add && "\n"}
         {proposal.add && <span className="add">{proposal.add}</span>}
       </div>
-      <div
-        style={{ fontSize: 11.5, color: "var(--ink-soft)", lineHeight: 1.45 }}
-      >
+      <div style={{ fontSize: 11.5, color: "var(--ink-soft)", lineHeight: 1.45 }}>
         {proposal.rationale}
       </div>
       <div className="actions">
         <button className="btn ghost sm" onClick={onReject}>
           Not now
         </button>
-        <button
-          className="btn primary sm"
-          onClick={onApply}
-          style={{ flex: 1 }}
-        >
+        <button className="btn primary sm" onClick={onApply} style={{ flex: 1 }}>
           <Icon name="check" size={12} /> Apply to plan
         </button>
       </div>
@@ -117,11 +110,7 @@ function PlanProposalCard({
   );
 }
 
-export function ChatScreen({
-  persona = "advisor",
-  seedPrompt,
-  onPromptConsumed,
-}: ChatScreenProps) {
+export function ChatScreen({ persona = "advisor", seedPrompt, onPromptConsumed }: ChatScreenProps) {
   void persona; // single advisor persona for MVP
   void MODEL_PORTFOLIOS;
   void USER_GOALS;
@@ -149,7 +138,7 @@ export function ChatScreen({
         ts: Date.now(),
       },
     ];
-  }, [portfolio]);
+  }, []);
 
   const [messages, setMessages] = useState<Message[]>(initial);
   const [input, setInput] = useState("");
@@ -161,7 +150,7 @@ export function ChatScreen({
     if (streamRef.current) {
       streamRef.current.scrollTop = streamRef.current.scrollHeight;
     }
-  }, [messages, loading]);
+  }, []);
 
   const ask = (prompt: string) => {
     if (!prompt.trim() || loading) return;
@@ -179,7 +168,7 @@ export function ChatScreen({
         const m = prompt.match(
           /(?:add|update|change|set|replace|remove)\s+(?:a|the)?\s*(?:rule|line|principle|note|item)?\s*[:"']?(.+?)["']?$/i,
         );
-        const newLine = m && m[1] ? m[1].trim() : prompt.split("about").pop()?.trim() ?? prompt;
+        const newLine = m?.[1] ? m[1].trim() : (prompt.split("about").pop()?.trim() ?? prompt);
         const sectionGuess = /risk/i.test(prompt)
           ? "Risk"
           : /commit|rule/i.test(prompt)
@@ -213,8 +202,7 @@ export function ChatScreen({
         ...m,
         {
           role: "ai",
-          text:
-            "This is a design preview — the live chat endpoint isn't wired up yet. Once `POST /api/chat` is in place it will stream the advisor's reply here, with your portfolio and plan loaded as context.",
+          text: "This is a design preview — the live chat endpoint isn't wired up yet. Once `POST /api/chat` is in place it will stream the advisor's reply here, with your portfolio and plan loaded as context.",
           ts: Date.now(),
         },
       ]);
@@ -233,10 +221,10 @@ export function ChatScreen({
   useEffect(() => {
     if (seedPrompt) {
       ask(seedPrompt);
-      onPromptConsumed && onPromptConsumed();
+      onPromptConsumed?.();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [seedPrompt]);
+  }, [seedPrompt, onPromptConsumed, ask]);
 
   const applyProposal = (idx: number, proposal: PlanProposal) => {
     const sectionHeader = `## ${proposal.section}`;
@@ -259,9 +247,7 @@ export function ChatScreen({
       },
       ...USER_PLAN.versions,
     ];
-    setMessages((prev) =>
-      prev.map((x, i) => (i === idx ? { ...x, applied: true } : x)),
-    );
+    setMessages((prev) => prev.map((x, i) => (i === idx ? { ...x, applied: true } : x)));
   };
 
   return (
@@ -356,12 +342,7 @@ export function ChatScreen({
 
       <div className="suggested-chips">
         {suggestions.map((s) => (
-          <button
-            key={s}
-            className="chip"
-            onClick={() => ask(s)}
-            disabled={loading}
-          >
+          <button key={s} className="chip" onClick={() => ask(s)} disabled={loading}>
             {s}
           </button>
         ))}

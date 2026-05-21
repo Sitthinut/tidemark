@@ -79,10 +79,7 @@ export function ConnectScreen({ onConnect }: ConnectScreenProps) {
               marginBottom: 36,
             }}
           >
-            <span
-              className="brand-mark"
-              style={{ width: 26, height: 26, borderRadius: 8 }}
-            ></span>
+            <span className="brand-mark" style={{ width: 26, height: 26, borderRadius: 8 }}></span>
             <span
               style={{
                 fontSize: 17,
@@ -115,20 +112,18 @@ export function ConnectScreen({ onConnect }: ConnectScreenProps) {
               marginBottom: 28,
             }}
           >
-            Connect your brokerage, see your funds in one place, and ask an AI
-            to critique your thinking. Open-source. Your data stays local.
+            Connect your brokerage, see your funds in one place, and ask an AI to critique your
+            thinking. Open-source. Your data stays local.
           </p>
           <ul className="bullet-list" style={{ marginBottom: 32 }}>
             <li>
-              <span className="marker">01</span>Read-only access — we can never
-              trade
+              <span className="marker">01</span>Read-only access — we can never trade
             </li>
             <li>
               <span className="marker">02</span>Portfolio analysis runs on-device
             </li>
             <li>
-              <span className="marker">03</span>Chat with a model that knows your
-              holdings
+              <span className="marker">03</span>Chat with a model that knows your holdings
             </li>
             <li>
               <span className="marker">04</span>Code on GitHub · MIT licensed
@@ -185,17 +180,14 @@ export function ConnectScreen({ onConnect }: ConnectScreenProps) {
                 className="broker-card"
                 onClick={() => setSelected(b.id)}
                 style={{
-                  borderColor:
-                    selected === b.id ? "var(--ink)" : "var(--line)",
+                  borderColor: selected === b.id ? "var(--ink)" : "var(--line)",
                   borderWidth: selected === b.id ? 2 : 1,
                 }}
               >
                 <div className="broker-logo">{b.abbr}</div>
                 <div style={{ flex: 1 }}>
                   <div style={{ fontSize: 15, fontWeight: 500 }}>{b.name}</div>
-                  <div style={{ fontSize: 12, color: "var(--muted)" }}>
-                    {b.desc}
-                  </div>
+                  <div style={{ fontSize: 12, color: "var(--muted)" }}>{b.desc}</div>
                 </div>
                 {!b.primary && (
                   <span className="tag" style={{ fontSize: 9 }}>
@@ -241,8 +233,8 @@ export function ConnectScreen({ onConnect }: ConnectScreenProps) {
                 lineHeight: 1.5,
               }}
             >
-              Read-only OAuth via the brokerage&apos;s partner API. We see
-              holdings &amp; NAVs, never your password or trading rights.
+              Read-only OAuth via the brokerage&apos;s partner API. We see holdings &amp; NAVs,
+              never your password or trading rights.
             </div>
           </div>
         </div>
@@ -388,9 +380,9 @@ function DraftPlanStep({ onDone }: { onDone: () => void }) {
               margin: 0,
             }}
           >
-            A short brief about what you care about, your target allocation, and
-            rules you set for yourself. The advisor reads it before every
-            conversation — so it gets smarter the more you write.
+            A short brief about what you care about, your target allocation, and rules you set for
+            yourself. The advisor reads it before every conversation — so it gets smarter the more
+            you write.
           </p>
         </div>
 
@@ -433,8 +425,8 @@ function DraftPlanStep({ onDone }: { onDone: () => void }) {
                     marginBottom: 10,
                   }}
                 >
-                  Five conversational questions → a drafted plan with target,
-                  principles, risk, and commitments.
+                  Five conversational questions → a drafted plan with target, principles, risk, and
+                  commitments.
                 </div>
                 <button
                   className="btn primary sm"
@@ -490,8 +482,8 @@ function DraftPlanStep({ onDone }: { onDone: () => void }) {
                     marginBottom: 10,
                   }}
                 >
-                  Free-form markdown editor. Skip sections you&apos;re not sure
-                  about — you can always edit later.
+                  Free-form markdown editor. Skip sections you&apos;re not sure about — you can
+                  always edit later.
                 </div>
                 <button className="btn ghost sm" onClick={onDone}>
                   Open editor <Icon name="arrowRight" size={12} />

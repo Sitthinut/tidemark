@@ -29,5 +29,6 @@ next-env.d.ts.bak
 .vercel
 
 # data
-/data/*.db
-/data/*.db-journal
+/data/**/*.db
+/data/**/*.db-journal
+/data/backups/

@@ -18,8 +18,7 @@ const ICON_PATHS: Record<string, string> = {
   close: "M18 6L6 18M6 6l12 12",
   check: "M5 12l5 5 9-11",
   info: "M12 16v-4M12 8h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z",
-  refresh:
-    "M3 12a9 9 0 015-8 9 9 0 0114 5M21 12a9 9 0 01-5 8 9 9 0 01-14-5M21 4v6h-6M3 20v-6h6",
+  refresh: "M3 12a9 9 0 015-8 9 9 0 0114 5M21 12a9 9 0 01-5 8 9 9 0 01-14-5M21 4v6h-6M3 20v-6h6",
   pulse: "M22 12h-4l-3 9L9 3l-3 9H2",
   bank: "M3 21h18M3 10h18M5 6l7-4 7 4M4 10v11M20 10v11M8 14v4M12 14v4M16 14v4",
   lock: "M5 11h14v10H5zM7 11V7a5 5 0 0110 0v4",
