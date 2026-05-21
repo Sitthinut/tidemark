@@ -1,7 +1,9 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Icon } from "@/components/Icon";
+import { useBuckets } from "@/lib/fetchers/portfolio";
+import { invalidate } from "@/lib/fetchers/swr";
 
 interface Row {
   ticker: string;
@@ -31,6 +33,7 @@ export interface AddHoldingsSheetProps {
 }
 
 export function AddHoldingsSheet({ open, onClose, onAdd }: AddHoldingsSheetProps) {
+  const { data: buckets } = useBuckets();
   const [method, setMethod] = useState<"paste" | "image" | "manual">("paste");
   const [pasteText, setPasteText] = useState("");
   const [imgPreview, setImgPreview] = useState<string | null>(null);
@@ -41,7 +44,18 @@ export function AddHoldingsSheet({ open, onClose, onAdd }: AddHoldingsSheetProps
     { ticker: "", units: "", value: "" },
   ]);
   const [source, setSource] = useState("Manual");
+  const [bucketId, setBucketId] = useState<string>("");
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const csvFileRef = useRef<HTMLInputElement>(null);
+
+  // Pick the first bucket as default once buckets load (or when the sheet opens).
+  useEffect(() => {
+    if (open && !bucketId && buckets && buckets.length > 0) {
+      setBucketId(buckets[0].id);
+    }
+  }, [open, bucketId, buckets]);
 
   if (!open) return null;
 
@@ -90,28 +104,85 @@ export function AddHoldingsSheet({ open, onClose, onAdd }: AddHoldingsSheetProps
     reader.readAsDataURL(file);
   };
 
-  const submit = () => {
+  const submit = async () => {
+    if (!bucketId) {
+      setSubmitError("Pick a bucket first");
+      return;
+    }
     let toAdd: ExtractedHolding[] = [];
     if (method === "paste") toAdd = parsePaste();
     if (method === "image" && imgExtracted) toAdd = imgExtracted;
     if (method === "manual") toAdd = rows.filter((r) => r.ticker && (r.units || r.value));
 
-    const enriched: AddedHolding[] = toAdd.map((t) => ({
-      ticker: t.ticker,
-      units: t.units,
-      value: t.value,
-      source: t.source || source,
-      addedAt: Date.now(),
-    }));
-    onAdd(enriched);
-    setPasteText("");
-    setRows([
-      { ticker: "", units: "", value: "" },
-      { ticker: "", units: "", value: "" },
-    ]);
-    setImgPreview(null);
-    setImgExtracted(null);
-    onClose();
+    if (toAdd.length === 0) {
+      setSubmitError("No valid rows to add");
+      return;
+    }
+
+    setSubmitting(true);
+    setSubmitError(null);
+    try {
+      for (const row of toAdd) {
+        const units = Number.parseFloat(row.units) || 0;
+        const value = row.value ? Number.parseFloat(row.value) || 0 : 0;
+        const avgCost = units > 0 && value > 0 ? value / units : 0;
+        const ticker = row.ticker.trim().toUpperCase();
+        const res = await fetch("/api/holdings", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            bucketId,
+            ticker,
+            englishName: ticker, // user can rename later via HoldingSheet
+            assetClass: "equity",
+            units,
+            avgCost,
+            ter: 0,
+            color: "var(--accent)",
+            source: row.source || source,
+          }),
+        });
+        if (!res.ok) throw new Error(`Add ${ticker} failed (${res.status})`);
+      }
+      invalidate(/^\/api\/holdings/);
+      onAdd(
+        toAdd.map((t) => ({
+          ticker: t.ticker,
+          units: t.units,
+          value: t.value,
+          source: t.source || source,
+          addedAt: Date.now(),
+        })),
+      );
+      setPasteText("");
+      setRows([
+        { ticker: "", units: "", value: "" },
+        { ticker: "", units: "", value: "" },
+      ]);
+      setImgPreview(null);
+      setImgExtracted(null);
+      onClose();
+    } catch (err) {
+      setSubmitError(err instanceof Error ? err.message : "Failed to add holdings");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleCsvFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const text = (ev.target?.result as string) ?? "";
+      // Drop a header row if it looks like one (no digits in the first line).
+      const lines = text.split(/\r?\n/);
+      const looksLikeHeader = lines[0] && !/\d/.test(lines[0]);
+      setPasteText((looksLikeHeader ? lines.slice(1) : lines).join("\n"));
+    };
+    reader.readAsText(file);
+    // Allow re-uploading the same file
+    e.target.value = "";
   };
 
   const updateRow = (i: number, field: keyof Row, val: string) => {
@@ -139,48 +210,95 @@ export function AddHoldingsSheet({ open, onClose, onAdd }: AddHoldingsSheetProps
           Combine holdings from any Thai brokerage. Read-only — we never trade for you.
         </div>
 
-        <div style={{ marginBottom: 14 }}>
-          <label
-            style={{
-              fontSize: 11,
-              fontFamily: "var(--font-mono)",
-              color: "var(--muted)",
-              letterSpacing: "0.04em",
-              marginBottom: 4,
-              display: "block",
-            }}
-          >
-            SOURCE
-          </label>
-          <select
-            value={source}
-            onChange={(e) => setSource(e.target.value)}
-            className="twk-field"
-            style={{
-              width: "100%",
-              padding: "8px 10px",
-              background: "var(--card-soft)",
-              border: "1px solid var(--line-soft)",
-              borderRadius: 8,
-              fontFamily: "var(--font-sans)",
-              fontSize: 13,
-              color: "var(--ink)",
-            }}
-          >
-            <option>Manual</option>
-            <option>SCB Easy Invest</option>
-            <option>Kasikorn (K-My Funds)</option>
-            <option>Krungsri Asset</option>
-            <option>BBLAM</option>
-            <option>Other Thai brokerage</option>
-          </select>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 14 }}>
+          <div>
+            <label
+              style={{
+                fontSize: 11,
+                fontFamily: "var(--font-mono)",
+                color: "var(--muted)",
+                letterSpacing: "0.04em",
+                marginBottom: 4,
+                display: "block",
+              }}
+            >
+              BUCKET
+            </label>
+            <select
+              value={bucketId}
+              onChange={(e) => setBucketId(e.target.value)}
+              className="twk-field"
+              style={{
+                width: "100%",
+                padding: "8px 10px",
+                background: "var(--card-soft)",
+                border: "1px solid var(--line-soft)",
+                borderRadius: 8,
+                fontFamily: "var(--font-sans)",
+                fontSize: 13,
+                color: "var(--ink)",
+              }}
+            >
+              {!buckets || buckets.length === 0 ? (
+                <option value="">No buckets yet</option>
+              ) : (
+                buckets.map((b) => (
+                  <option key={b.id} value={b.id}>
+                    {b.name}
+                  </option>
+                ))
+              )}
+            </select>
+          </div>
+          <div>
+            <label
+              style={{
+                fontSize: 11,
+                fontFamily: "var(--font-mono)",
+                color: "var(--muted)",
+                letterSpacing: "0.04em",
+                marginBottom: 4,
+                display: "block",
+              }}
+            >
+              SOURCE
+            </label>
+            <select
+              value={source}
+              onChange={(e) => setSource(e.target.value)}
+              className="twk-field"
+              style={{
+                width: "100%",
+                padding: "8px 10px",
+                background: "var(--card-soft)",
+                border: "1px solid var(--line-soft)",
+                borderRadius: 8,
+                fontFamily: "var(--font-sans)",
+                fontSize: 13,
+                color: "var(--ink)",
+              }}
+            >
+              <option>Manual</option>
+              <option>SCB Easy Invest</option>
+              <option>Kasikorn (K-My Funds)</option>
+              <option>Krungsri Asset</option>
+              <option>BBLAM</option>
+              <option>Other Thai brokerage</option>
+            </select>
+          </div>
         </div>
 
         <div className="method-tabs">
           <button data-active={method === "paste"} onClick={() => setMethod("paste")}>
-            📋 Paste
+            📋 Paste / CSV
           </button>
-          <button data-active={method === "image"} onClick={() => setMethod("image")}>
+          <button
+            data-active={method === "image"}
+            onClick={() => setMethod("image")}
+            disabled
+            title="Image OCR requires an AI key — coming in Phase 4b"
+            style={{ opacity: 0.5, cursor: "not-allowed" }}
+          >
             📷 Image
           </button>
           <button data-active={method === "manual"} onClick={() => setMethod("manual")}>
@@ -190,6 +308,22 @@ export function AddHoldingsSheet({ open, onClose, onAdd }: AddHoldingsSheetProps
 
         {method === "paste" && (
           <div>
+            <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
+              <input
+                ref={csvFileRef}
+                type="file"
+                accept=".csv,.txt,text/csv,text/plain"
+                style={{ display: "none" }}
+                onChange={handleCsvFile}
+              />
+              <button
+                type="button"
+                className="btn ghost sm"
+                onClick={() => csvFileRef.current?.click()}
+              >
+                <Icon name="plus" size={12} /> Upload CSV file
+              </button>
+            </div>
             <textarea
               className="sheet-input"
               placeholder={
@@ -435,19 +569,36 @@ export function AddHoldingsSheet({ open, onClose, onAdd }: AddHoldingsSheetProps
           </div>
         </div>
 
+        {submitError && (
+          <div
+            style={{
+              marginTop: 10,
+              padding: "8px 12px",
+              background: "var(--loss-soft, rgba(220,38,38,0.08))",
+              borderRadius: 8,
+              color: "var(--loss)",
+              fontSize: 12.5,
+            }}
+          >
+            {submitError}
+          </div>
+        )}
+
         <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
-          <button className="btn ghost" style={{ flex: 1 }} onClick={onClose}>
+          <button className="btn ghost" style={{ flex: 1 }} onClick={onClose} disabled={submitting}>
             Cancel
           </button>
           <button
             className="btn primary"
             style={{ flex: 2 }}
             onClick={submit}
-            disabled={previewCount === 0}
+            disabled={previewCount === 0 || submitting || !bucketId}
           >
-            {previewCount > 0
-              ? `Add ${previewCount} holding${previewCount > 1 ? "s" : ""}`
-              : "Add holdings"}
+            {submitting
+              ? "Adding…"
+              : previewCount > 0
+                ? `Add ${previewCount} holding${previewCount > 1 ? "s" : ""}`
+                : "Add holdings"}
             <Icon name="check" size={13} />
           </button>
         </div>
