@@ -28,10 +28,8 @@ next-env.d.ts.bak
 # vercel
 .vercel
 
-# data
-/data/**/*.db
-/data/**/*.db-journal
-/data/backups/
+# data — SQLite db, WAL/SHM sidecars, backups; all runtime-only
+/data/
 
 # local-only experiments — files ending in .local.ts / .local.test.ts stay
 # out of git. Useful for AI provider variants, scratch scripts, etc.
