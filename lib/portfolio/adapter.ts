@@ -6,6 +6,7 @@ import type { Holding as DbHolding } from "@/lib/db/queries/holdings";
 import type { JournalEntry } from "@/lib/db/queries/journal";
 import type { ModelPortfolio as DbModelPortfolio } from "@/lib/db/queries/models";
 import type { FundQuote } from "@/lib/db/queries/quotes";
+import { fmtRelativeDate } from "@/lib/format";
 import type {
   AggregatePortfolio,
   AssetClass,
@@ -205,28 +206,13 @@ export function modelPortfolioToInsert(m: ModelPortfolio): {
   };
 }
 
-const DAY_MS = 86_400_000;
-
-function relativeDate(iso: string, now: Date = new Date()): string {
-  const then = new Date(iso);
-  if (Number.isNaN(then.getTime())) return iso;
-  const days = Math.max(0, Math.floor((now.getTime() - then.getTime()) / DAY_MS));
-  if (days === 0) return "Today";
-  if (days === 1) return "1 day ago";
-  if (days < 7) return `${days} days ago`;
-  if (days < 14) return "1 week ago";
-  if (days < 30) return `${Math.floor(days / 7)} weeks ago`;
-  if (days < 60) return "1 month ago";
-  return `${Math.floor(days / 30)} months ago`;
-}
-
 function noteFromEntry(e: JournalEntry): Note {
   return {
     id: `j${e.id}`,
     title: e.title ?? "",
     body: e.body ?? "",
     source: e.source ?? "manual",
-    date: relativeDate(e.createdAt),
+    date: fmtRelativeDate(e.createdAt),
     tags: e.tags ?? [],
   };
 }
@@ -240,7 +226,7 @@ function readingFromEntry(e: JournalEntry): ReadingItem {
     summary: e.body ?? "",
     readTime: 0,
     status: "unread",
-    savedDate: relativeDate(e.createdAt),
+    savedDate: fmtRelativeDate(e.createdAt),
   };
 }
 

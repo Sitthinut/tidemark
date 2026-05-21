@@ -3,16 +3,11 @@
 import { useMemo, useState } from "react";
 import { ModelDonut } from "@/components/charts";
 import { Icon } from "@/components/Icon";
-import {
-  MODEL_PORTFOLIOS,
-  parseBullets,
-  parseCommitments,
-  parsePlan,
-  parseQuestions,
-  USER_GOALS,
-  USER_JOURNAL,
-  USER_PLAN,
-} from "@/lib/mock/data";
+import { useJournalView, useModelPortfoliosView, useSelectedModelId } from "@/lib/fetchers/legacy";
+import { usePlan } from "@/lib/fetchers/portfolio";
+import { invalidate } from "@/lib/fetchers/swr";
+import { fmtRelativeDate } from "@/lib/format";
+import { parseBullets, parseCommitments, parsePlan, parseQuestions } from "@/lib/mock/data";
 import type { FeedbackItem, ModelPortfolio, Note, ReadingItem } from "@/lib/mock/types";
 
 type Tab = "plan" | "notes" | "models" | "reading" | "feedback";
@@ -25,7 +20,7 @@ export interface JournalScreenProps {
 
 export function JournalScreen({ onOpenChat, onOpenModels, onOpenSettings }: JournalScreenProps) {
   const [tab, setTab] = useState<Tab>("plan");
-  const journal = USER_JOURNAL;
+  const { journal } = useJournalView();
 
   return (
     <div className="screen">
@@ -68,12 +63,12 @@ export function JournalScreen({ onOpenChat, onOpenModels, onOpenSettings }: Jour
       </div>
 
       {tab === "plan" && <JournalPlan onOpenModels={onOpenModels} onOpenChat={onOpenChat} />}
-      {tab === "notes" && <JournalNotes notes={journal.notes} />}
+      {tab === "notes" && <JournalNotes notes={journal?.notes ?? []} />}
       {tab === "models" && (
-        <JournalModels saved={journal.savedModels} onOpenModels={onOpenModels} />
+        <JournalModels saved={journal?.savedModels ?? []} onOpenModels={onOpenModels} />
       )}
-      {tab === "reading" && <JournalReading reading={journal.reading} />}
-      {tab === "feedback" && <JournalFeedback feedback={journal.feedback} />}
+      {tab === "reading" && <JournalReading reading={journal?.reading ?? []} />}
+      {tab === "feedback" && <JournalFeedback feedback={journal?.feedback ?? []} />}
     </div>
   );
 }
@@ -86,11 +81,37 @@ function JournalPlan({
   onOpenChat: () => void;
 }) {
   const [editorOpen, setEditorOpen] = useState(false);
-  const [, setTick] = useState(0);
-  const parsed = useMemo(() => parsePlan(USER_PLAN.markdown), []);
-  const targetModel = MODEL_PORTFOLIOS.find((m) => m.id === USER_GOALS.selectedModelId);
+  const { data: plan, isLoading: planLoading } = usePlan();
+  const { models } = useModelPortfoliosView();
+  const planSelectedModelId = useSelectedModelId();
 
-  const isEmpty = !USER_PLAN.markdown?.trim();
+  const markdown = plan?.markdown ?? "";
+  const parsed = useMemo(() => parsePlan(markdown), [markdown]);
+  const targetModel = models?.find((m) => m.id === planSelectedModelId);
+
+  const savePlan = async (md: string) => {
+    try {
+      await fetch("/api/plan", {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ markdown: md, selectedModelId: plan?.selectedModelId ?? null }),
+      });
+      invalidate("/api/plan");
+    } catch (err) {
+      console.error("Failed to save plan:", err);
+    }
+    setEditorOpen(false);
+  };
+
+  if (planLoading) {
+    return (
+      <div className="section" style={{ marginTop: 0 }}>
+        <div style={{ padding: 24, color: "var(--muted)" }}>Loading…</div>
+      </div>
+    );
+  }
+
+  const isEmpty = !markdown.trim();
 
   if (isEmpty) {
     return (
@@ -134,14 +155,9 @@ function JournalPlan({
 
         {editorOpen && (
           <PlanEditorSheet
-            initial={USER_PLAN.markdown}
+            initial={markdown}
             onClose={() => setEditorOpen(false)}
-            onSave={(md) => {
-              USER_PLAN.markdown = md;
-              USER_PLAN.lastUpdated = "Just now";
-              setEditorOpen(false);
-              setTick((t) => t + 1);
-            }}
+            onSave={savePlan}
           />
         )}
       </div>
@@ -161,7 +177,7 @@ function JournalPlan({
                 fontFamily: "var(--font-mono)",
               }}
             >
-              Updated {USER_PLAN.lastUpdated}
+              {plan?.updatedAt ? `Updated ${fmtRelativeDate(plan.updatedAt)}` : "Not saved yet"}
             </div>
           </div>
           <div style={{ display: "flex", gap: 6 }}>
@@ -205,56 +221,11 @@ function JournalPlan({
         ))}
       </div>
 
-      <div className="section">
-        <div className="section-header">
-          <h3>History</h3>
-        </div>
-        <div className="card" style={{ padding: "4px 14px" }}>
-          {USER_PLAN.versions.map((v, i, arr) => (
-            <div
-              key={i}
-              style={{
-                padding: "10px 0",
-                borderBottom: i < arr.length - 1 ? "1px solid var(--line-soft)" : "none",
-                display: "flex",
-                justifyContent: "space-between",
-                gap: 12,
-              }}
-            >
-              <div
-                style={{
-                  fontSize: 13,
-                  fontWeight: 500,
-                  letterSpacing: "-0.01em",
-                }}
-              >
-                {v.change}
-              </div>
-              <div
-                style={{
-                  fontSize: 11,
-                  color: "var(--muted)",
-                  fontFamily: "var(--font-mono)",
-                  flexShrink: 0,
-                }}
-              >
-                {v.date}
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-
       {editorOpen && (
         <PlanEditorSheet
-          initial={USER_PLAN.markdown}
+          initial={markdown}
           onClose={() => setEditorOpen(false)}
-          onSave={(md) => {
-            USER_PLAN.markdown = md;
-            USER_PLAN.lastUpdated = "Just now";
-            setEditorOpen(false);
-            setTick((t) => t + 1);
-          }}
+          onSave={savePlan}
         />
       )}
     </div>
@@ -717,8 +688,9 @@ function JournalNotes({ notes }: { notes: Note[] }) {
 }
 
 function JournalModels({ saved, onOpenModels }: { saved: string[]; onOpenModels: () => void }) {
-  const all = MODEL_PORTFOLIOS;
-  const target = USER_GOALS.selectedModelId;
+  const { models } = useModelPortfoliosView();
+  const target = useSelectedModelId();
+  const all = models ?? [];
   const list = saved
     .map((id) => all.find((m) => m.id === id))
     .filter((m): m is ModelPortfolio => Boolean(m));
