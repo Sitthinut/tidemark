@@ -1,37 +1,46 @@
 # Authentication & AI providers
 
-Macrotide ships with three independent toggles you mix and match to suit your deployment:
+## Design principle: secure by default
 
-| Toggle | Env var | What it does |
-|---|---|---|
-| Login required | `AUTH_REQUIRED=1` | Bounces visitors to `/onboarding` until they have a session cookie. |
-| Demo button | (always on) | Anyone can spin up an isolated in-memory SQLite, capped at 10 chat turns. |
-| AI key | `OPENROUTER_API_KEY` | Without it, chat returns a friendly stub message; rest of the app works. |
+Macrotide follows the **secure-by-default** principle ([Saltzer & Schroeder, 1975](https://en.wikipedia.org/wiki/Saltzer_and_Schroeder%27s_design_principles)): the safe configuration is the default, and you opt *in* to riskier behavior. A fresh clone with no env vars set will refuse to render the dashboard until you register a passkey. Misconfiguration fails closed, not open.
 
-The single-user dev path needs none of these — run `npm run dev`, hit `localhost:3000`, you get the dashboard. Everything below is for shared deployments.
+See [SECURITY.md](SECURITY.md) for the full threat model.
+
+## Defaults
+
+| Toggle | Env var | Default | Effect |
+| --- | --- | --- | --- |
+| Passkey auth | `AUTH_DISABLED=1` to opt out | required | Bounces visitors to `/onboarding` until a passkey login. |
+| Demo button | (always on) | available | Anyone can spin up an isolated in-memory SQLite, capped at 10 chat turns. |
+| AI key | `OPENROUTER_API_KEY` | unset | Without it, chat returns a friendly stub message; rest of the app works. |
 
 ---
 
-## Single-user (dev / personal laptop)
+## Local dev (sole user on loopback)
 
 ```sh
 cp .env.example .env.local
-# Edit .env.local — fill OPENROUTER_API_KEY for chat (optional).
+# In .env.local, uncomment to skip the passkey step in dev:
+AUTH_DISABLED=1
+# Optional — for real chat:
+OPENROUTER_API_KEY=sk-or-...
+
 npm run dev
 ```
 
-Visit http://localhost:3000. No login, your data lives in `data/app.db`.
+Visit <http://localhost:3000>. No login, your data lives in `data/app.db`. **Only set `AUTH_DISABLED` when you control the bind address** — `next dev` listens on `0.0.0.0` by default, so anyone on your LAN can hit it. Use `next dev -H 127.0.0.1` if you're on an untrusted network.
 
-## Shared deployment with passkey login
+## Shared deployment (default — secure)
 
 ```sh
 cp .env.example .env.local
 # In .env.local:
-AUTH_REQUIRED=1
 AUTH_SECRET=$(openssl rand -base64 32)
 PUBLIC_APP_URL=https://macrotide.example.com
 OPENROUTER_API_KEY=sk-or-...
 ```
+
+No `AUTH_DISABLED` line — auth is already required by default.
 
 On first visit the `/onboarding` screen shows three buttons:
 
@@ -52,7 +61,7 @@ On first visit the `/onboarding` screen shows three buttons:
 
 `/api/chat` resolves the model based on whether the request carries a demo cookie:
 
-```
+```text
                     demo cookie?
                   /              \
                 yes               no
@@ -80,7 +89,7 @@ Demo chat is routed through `DEMO_OPENROUTER_API_KEY`. If unset, it falls back t
 
 The `openrouter/free` router picks among ~25 free-tier models per request (volunteer GPUs; subject to OpenRouter's rate limits). For a pinned free model:
 
-```
+```sh
 DEMO_AI_MODEL=meta-llama/llama-3.3-70b-instruct:free
 ```
 
@@ -95,7 +104,7 @@ DEMO_AI_MODEL=meta-llama/llama-3.3-70b-instruct:free
 ## Where the data lives
 
 | Item | Storage |
-|---|---|
+| --- | --- |
 | Owner user/session/passkey | `data/app.db` (better-auth tables) |
 | Owner portfolio/journal/etc | `data/app.db` (app tables) |
 | Demo session data | In-memory SQLite, keyed by demo cookie, swept after 1h idle |
