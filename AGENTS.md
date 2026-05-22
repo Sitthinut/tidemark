@@ -109,6 +109,19 @@ that takes a write.
 **Components MUST NOT import from `@/lib/mock/data`.** Verify with
 `grep -rn 'from "@/lib/mock/data"' components/` — should return zero hits.
 
+## Holding ticker convention (provider routing)
+
+A holding's `ticker` field drives provider routing in
+[lib/market/registry.ts](./lib/market/registry.ts):
+
+| Pattern | Provider | Examples |
+| --- | --- | --- |
+| `TH:<fund-code>` | Thai SEC Open API | `TH:EXAMPLE-FUND-A` |
+| anything else (no colon) | Yahoo Finance | `^SET.BK`, `AAPL`, `PTT.BK`, `THB=X` |
+
+When adding a new provider, claim a colon-prefixed namespace (e.g. `CG:` for
+CoinGecko) and register it ahead of Yahoo in the registry list.
+
 ## Auth conventions
 
 - `AUTH_DISABLED=1` opt-out for trusted local dev only. Default is

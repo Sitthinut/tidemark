@@ -23,6 +23,28 @@ export function useQuotes() {
   return useResource<FundQuote[]>("/api/quotes");
 }
 
+export interface RefreshedQuote {
+  symbol: string;
+  ok: boolean;
+  price?: number;
+  previousClose?: number;
+  asOf?: string;
+  error?: string;
+}
+
+/**
+ * Live-refresh quotes through the provider registry (Yahoo / Thai SEC / …).
+ * Returned shape reflects post-fetch state. Cache hits are served from the
+ * DB; misses trigger a network call. Pass `null` to skip.
+ */
+export function useRefreshedQuotes(tickers: string[] | null) {
+  const key =
+    tickers && tickers.length
+      ? `/api/quotes?refresh=1&tickers=${encodeURIComponent(tickers.join(","))}`
+      : null;
+  return useResource<RefreshedQuote[]>(key);
+}
+
 export function useModelPortfolios() {
   return useResource<DbModelPortfolio[]>("/api/models");
 }
