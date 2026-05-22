@@ -81,7 +81,7 @@ OpenRouter proxies every major model behind one API:
 - Free-tier router (`openrouter/free`) covers demo use without billing.
 - Pay per-token credit; load up via the OpenRouter dashboard.
 
-If you want a specific model, set `AI_MODEL` to any id from [openrouter.ai/models](https://openrouter.ai/models). The default `openrouter/auto` lets OpenRouter pick the best model per prompt.
+If you want a specific model, set `AI_MODELS` to any id from [openrouter.ai/models](https://openrouter.ai/models). It's a comma-separated fallback chain — the first model is tried first, and the next one is used if the previous fails. The default `openrouter/auto` lets OpenRouter pick the best model per prompt.
 
 ### Demo provider isolation
 
@@ -90,7 +90,7 @@ Demo chat is routed through `DEMO_OPENROUTER_API_KEY`. If unset, it falls back t
 The `openrouter/free` router picks among ~25 free-tier models per request (volunteer GPUs; subject to OpenRouter's rate limits). For a pinned free model:
 
 ```sh
-DEMO_AI_MODEL=meta-llama/llama-3.3-70b-instruct:free
+DEMO_AI_MODELS=meta-llama/llama-3.3-70b-instruct:free
 ```
 
 ---

@@ -31,7 +31,7 @@
 - IP rate limit (20 RPM) on `/api/chat`. Security headers (X-CTO, X-Frame,
   HSTS, Referrer-Policy, Permissions-Policy with tight `publickey-credentials`)
   in `next.config.ts`.
-- 15 vitest tests including AsyncLocalStorage isolation + provider routing.
+- 23 vitest tests including AsyncLocalStorage isolation + provider routing.
 
 **Phase 2.5 scaffold shipped** (multi-user mode + demo button):
 
@@ -39,8 +39,8 @@
   SQLite. Endpoints at `/api/auth/[...all]`.
 - `/login` screen — passkey sign-in, account creation (registers a
   passkey on first sign-up), or "Try the demo".
-- `AUTH_REQUIRED=1` gates the dashboard on a session cookie. Demo cookie
-  bypasses the gate.
+- Auth is required by default; set `AUTH_DISABLED=1` to opt out (trusted
+  local dev only). Demo cookie bypasses the gate.
 - **Per-session demo DBs** — each demo gets its own isolated in-memory
   SQLite seeded with mock data. AsyncLocalStorage routes every query to the
   right DB. Idle TTL 1h, hard cap 200 concurrent. Real users still share
@@ -305,7 +305,7 @@ machinery; we'll wire mutations as plain `fetch` + `mutate()` calls.
 2. `lib/db/client.ts` + `lib/db/schema.ts` mirroring the schema above.
 3. `drizzle-kit generate` → first migration; `lib/db/client.ts` runs migrations on boot.
 4. `lib/mock/seed.ts` script that reads the current `lib/mock/data.ts` and inserts
-   into the DB. Add `npm run seed`. Wipes + reseeds for dev sanity.
+   into the DB. Add `npm run db:seed`. Wipes + reseeds for dev sanity.
 5. `lib/db/queries/*.ts` — typed wrappers (`listBuckets()`, `upsertHolding()`,
    etc.).
 6. `lib/db/backup.ts` — daily SQLite online backup via `db.backup()`. Called

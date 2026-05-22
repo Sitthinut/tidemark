@@ -48,12 +48,12 @@ cp .env.example .env.local
 chmod 600 .env.local
 # Edit .env.local — at minimum:
 #   PUBLIC_APP_URL=https://macrotide.yourdomain.com
-#   AUTH_REQUIRED=1
 #   AUTH_SECRET=$(openssl rand -base64 32)
 #   OPENROUTER_API_KEY=sk-or-...
-#   AI_MODEL=openrouter/auto    (or any model id from openrouter.ai/models)
+#   AI_MODELS=openrouter/auto   (comma-separated fallback chain; ids from openrouter.ai/models)
 #   # Optional: separate key for demo chat — see AUTH.md.
 #   # DEMO_OPENROUTER_API_KEY=sk-or-...
+# Auth is required by default; set AUTH_DISABLED=1 only for trusted local dev.
 ```
 
 Sign up at [openrouter.ai](https://openrouter.ai) and load a few dollars of credit; that's enough for many weeks of personal use.
@@ -158,7 +158,7 @@ The app is now reachable at `https://<machine>.<tailnet>.ts.net` from any tailne
 
 `data/app.db` is the single source of truth (everything else is config + code).
 
-Macrotide's runtime calls `backupIfStale()` on boot, snapshotting to `data/backups/app-YYYY-MM-DD.db` daily (keeps 30 days). For off-site backup, point restic / borg / rclone at `data/` once a day:
+Macrotide's runtime calls `backupIfStale()` on boot, snapshotting to `data/backups/app-YYYY-MM-DDTHH-MM-SS.db` daily (keeps 30 days). For off-site backup, point restic / borg / rclone at `data/` once a day:
 
 ```sh
 # /etc/cron.d/macrotide-backup
@@ -200,9 +200,9 @@ For a zero-downtime swap behind Caddy: blue/green with two systemd instances on 
 
 Before sharing the URL with anyone:
 
-- [ ] `AUTH_REQUIRED=1` set; passkey works end-to-end on at least two devices
+- [ ] `AUTH_DISABLED` is **not** set in `.env.local` (auth required is the default)
 - [ ] `AUTH_SECRET` is a random 32-byte value (never the default placeholder)
-- [ ] `DEMO_AI_KEY` is a **separate** key from your owner AI key (avoid quota burn)
+- [ ] `DEMO_OPENROUTER_API_KEY` is a **separate** key from your owner AI key (avoid quota burn)
 - [ ] Demo turn cap (10/session) still in place in `lib/db/demo.ts`
 - [ ] Rate limit (`/api/chat` 20 RPM) still in place
 - [ ] ufw deny-incoming + 22/80/443 only

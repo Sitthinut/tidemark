@@ -26,4 +26,8 @@ jobs:
         run: npm run lint
 
       - name: Build
+        env:
+          # Build-time only; never used to sign real sessions. lib/auth requires
+          # AUTH_SECRET in production (NODE_ENV=production during `next build`).
+          AUTH_SECRET: ci-build-placeholder-not-used-at-runtime-32chars
         run: npm run build

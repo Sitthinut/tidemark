@@ -5,13 +5,14 @@
 
 ## Status
 
-**Experimental.** The UI is functionally complete — 7 screens (Portfolio,
-Markets, Chat, Journal, Models, Connect, Settings), responsive across
-mobile / tablet / desktop, with light/dark/system themes — but all data is
-mock and there is no AI, persistence, or market integration yet.
+**Experimental.** The 7-screen UI (Portfolio, Markets, Chat, Journal, Models,
+Connect, Settings) is responsive across mobile / tablet / desktop with
+light/dark/system themes. Persistence (SQLite + Drizzle), chat (Vercel AI SDK
+via OpenRouter), passkey auth, and live market indices are wired up. Thai
+mutual-fund NAVs, news, and ANALYSIS scores are still mocked. See
+[ROADMAP.md](./ROADMAP.md) for the full status board.
 
-Don't rely on it for real investment decisions. See [ROADMAP.md](./ROADMAP.md)
-for what's coming.
+Don't rely on it for real investment decisions.
 
 ## What it will do
 
@@ -30,9 +31,12 @@ for what's coming.
 - Hand-rolled SVG charts
 - [Biome](https://biomejs.dev/) for lint and format; [simple-git-hooks](https://github.com/toplenboren/simple-git-hooks)
   with [lint-staged](https://github.com/lint-staged/lint-staged) for pre-commit
-- Planned: SQLite + [Drizzle ORM](https://orm.drizzle.team/) (Phase 1) and the
-  [Vercel AI SDK](https://sdk.vercel.ai/) via [OpenRouter](https://openrouter.ai/)
-  (Phase 2) — see [ROADMAP.md](./ROADMAP.md)
+- SQLite + [Drizzle ORM](https://orm.drizzle.team/) for persistence; per-session
+  in-memory SQLite for the demo mode
+- [Vercel AI SDK](https://sdk.vercel.ai/) via [OpenRouter](https://openrouter.ai/)
+  for chat (one key, every major model)
+- [better-auth](https://www.better-auth.com/) + passkeys for sign-in — see
+  [AUTH.md](./AUTH.md), [SECURITY.md](./SECURITY.md), [DEPLOY.md](./DEPLOY.md), [ROADMAP.md](./ROADMAP.md)
 
 ## Quick start
 
@@ -43,8 +47,12 @@ npm install
 npm run dev
 ```
 
-Open <http://localhost:3000>. The app boots with static mock data — no API
-keys or external services required.
+Open <http://localhost:3000>. A fresh boot lands on `/login`; click
+**Try the demo** to spin up an isolated in-memory SQLite seeded with mock
+data (capped at 10 chat turns). For solo localhost dev, copy `.env.example`
+to `.env.local` and set `AUTH_DISABLED=1` to skip the login screen — see
+[AUTH.md](./AUTH.md). Chat returns a friendly stub until you set
+`OPENROUTER_API_KEY`.
 
 Scripts:
 
@@ -61,14 +69,30 @@ npm run typecheck  # tsc --noEmit
 
 ```
 macrotide/
-├── app/              Next.js App Router (currently a single-page client app)
-├── components/       Screens + UI primitives + chart components
+├── app/
+│   ├── (auth)/login/        Passkey sign-in screen
+│   ├── api/                 Route handlers: buckets, holdings, journal, plan,
+│   │                        models, quotes, settings, chat, market, demo,
+│   │                        auth/[...all], admin
+│   ├── layout.tsx, page.tsx, error.tsx, globals.css
+├── components/
+│   ├── screens/             Portfolio, Markets, Chat, Journal, Models,
+│   │                        Connect, Settings
+│   ├── App.tsx, ClientApp.tsx, AppPanels.tsx, charts.tsx, *Sheet.tsx, …
 ├── lib/
-│   ├── mock/        Mock data (will be replaced by a real DB in Phase 1)
-│   ├── format.ts    THB / percent / number formatters
-│   └── useViewport.ts
-├── ROADMAP.md       What's coming next
-└── README.md        You are here
+│   ├── ai/                  OpenRouter provider + chat plumbing
+│   ├── api/                 Rate-limit + with-db helpers for route handlers
+│   ├── auth/                better-auth singleton + session helpers
+│   ├── db/                  Drizzle client, schema, migrations, queries,
+│   │                        per-session demo SQLite, daily backup
+│   ├── fetchers/            SWR fetchers (client-side data layer)
+│   ├── market/              Yahoo client + cache + indices
+│   ├── mock/                Seed data + demo seed (used by db:seed)
+│   ├── portfolio/           Allocation/concentration analytics
+│   ├── format.ts, useViewport.ts, useScrollHide.ts
+├── data/                    SQLite + daily backups (gitignored)
+├── tests/                   Vitest
+├── AUTH.md, DEPLOY.md, SECURITY.md, ROADMAP.md, README.md
 ```
 
 ## Contributing

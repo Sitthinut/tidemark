@@ -27,7 +27,6 @@ Macrotide follows the **secure-by-default** principle, one of [Saltzer & Schroed
 - **Anonymous network visitors reading the owner's portfolio.** Passkey auth blocks the dashboard. Unauthenticated requests get bounced to `/login`.
 - **Cross-session leakage in demo mode.** Each demo session is its own in-memory SQLite, keyed by cookie, swept after 1h idle.
 - **Brute-force on `/api/chat`.** IP-based rate limit, 20 req/min (per-IP, in-memory).
-- **Brute-force on `/api/auth/*`.** IP-based rate limit, 10 req/min.
 - **Demo abuse.** 10 chat turns per session cap, separate AI provider key supported so demo can't burn owner quota.
 - **Common web vulns at framework level.** Next.js handles CSRF for App Router server actions, React escapes output by default, biome-lint flags `dangerouslySetInnerHTML` usage.
 
@@ -39,6 +38,7 @@ Macrotide follows the **secure-by-default** principle, one of [Saltzer & Schroed
 - **Multi-tenant isolation at the DB level.** There is no row-level security — multi-user mode trusts the auth layer to attribute writes correctly. Audit before deploying to >10 users; consider a dedicated DB per user instead.
 - **Side-channel attacks on auth.** No timing-attack hardening on top of better-auth's internals. We don't add a custom layer.
 - **Supply-chain attacks on dependencies.** No SBOM, no signed releases yet. `npm audit` is your friend; Dependabot is on the roadmap.
+- **Brute-force on `/api/auth/*`.** Not yet rate-limited at the app layer — `AUTH_RATE_LIMIT` is defined in `lib/api/rate-limit.ts` but not wired up. Front the app with Caddy/Cloudflare/fail2ban for now; planned cleanup in Phase 2.6.
 
 ## Reporting near-misses
 
