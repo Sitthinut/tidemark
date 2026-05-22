@@ -1,14 +1,14 @@
 # Roadmap
 
 > **Status:** Active. The working plan for turning the static-data prototype
-> into real software. Last updated 2026-05-21 (Phase 2 scaffold + multi-user
-> + per-session demo landed).
+> into real software. Last updated 2026-05-22 (audit + reconciliation pass:
+> docs aligned with shipped state; multi-user redesigned as Phase 6).
 
 ---
 
 ## State of the world
 
-**Phase 1 is shipped.** As of 2026-05-21:
+**Phase 1 is shipped.** As of 2026-05-22:
 
 - SQLite + Drizzle persistence layer; 15 tables (10 app + 5 auth), daily backups.
 - `/api/buckets`, `/api/holdings`, `/api/journal`, `/api/plan`, `/api/models`,
@@ -33,7 +33,7 @@
   in `next.config.ts`.
 - 23 vitest tests including AsyncLocalStorage isolation + provider routing.
 
-**Phase 2.5 scaffold shipped** (multi-user mode + demo button):
+**Phase 2.5 shipped** (passkey + demo button — single-owner, not multi-user):
 
 - better-auth + `@better-auth/passkey` with drizzle-adapter against the same
   SQLite. Endpoints at `/api/auth/[...all]`.
@@ -94,13 +94,18 @@ exposes the gaps that need polish; polishing on mock data risks rework.
 
 ## Phases at a glance
 
-| # | Phase | Status | Unlocks |
+| # | Phase | Status | Notes |
 | - | --- | --- | --- |
-| 1 | Persistence | ✅ Shipped 2026-05-21 | State survives reloads. Real schema forces honest data shapes. |
-| 2 | AI chat | Pending (needs OpenRouter key) | The "wow" moment. App becomes useful. |
-| 2.5 | Multi-user mode (opt.) | Pending (needs deploy decision) | Self-host to a remote VM for shared use. Skip on localhost. |
-| 3 | Market data | 🟡 Partial — indices live; funds + news deferred | Charts show real prices. Chat can reason about live market. |
-| 4 | Portfolio import | 🟡 Partial — CSV / paste / manual live; OCR pending AI key | App holds **your** money, not demo money. |
+| 1 | Persistence | ✅ Shipped 2026-05-21 | SQLite + Drizzle; mock-import cleanup deferred to 2.6 |
+| 2 | AI chat | 🟡 Partial | Scaffold + streaming live; persistence + plan-edit cards land in 2.6 |
+| 2.5 | Passkey + demo | ✅ Shipped 2026-05-21 | Single-owner auth + per-session in-memory demo DB |
+| 2.6 | Cleanup & chat persistence | 🔜 Next | Persist chat history, wire plan-edit Apply, finish mock-import migration |
+| 3 | Market data | 🟡 Partial | SET/global indices live; funds + news in 3b |
+| 3b | Fund NAVs + news + NAV history | Pending | AIMC scrape; news source TBD |
+| 4 | Portfolio import | 🟡 Partial | CSV done; OCR pending Phase 2 maturity |
+| 4b | Broker scraping / API integration | Out of scope | Revisit only if a clear personal need emerges |
+| 5 | Scheduled jobs / digests / notifications | Pending | Depends on 3b and 6 |
+| 6 | Multi-user (Google + GitHub SSO + passkey, public-discoverable) | Pending | Data-layer migration to per-user, OAuth, Turnstile, quotas, account page |
 
 ## Phase 1 — Persistence
 
@@ -327,11 +332,17 @@ machinery; we'll wire mutations as plain `fetch` + `mutate()` calls.
 - `npm run dev` boots; DB file auto-created at `data/app.db`.
 - Reload survives all user-created state: journal entries, plan edits,
   custom model portfolios, theme.
-- `lib/mock/data.ts` no longer imported by any screen (only by `seed.ts`).
 - `data/app.db` and `data/backups/` are in `.gitignore`.
 - App boot creates a backup in `data/backups/` if the last one is >24h old;
   backups older than 30 days are pruned.
 - Typecheck + build pass.
+
+> **Deferred to Phase 2.6:** the original criterion "`lib/mock/data.ts` no
+> longer imported by any screen" did not fully ship — five components still
+> reach into mock constants for editorial content (`MARKETS`,
+> `LEARN_CONTENT`, `AI_PERSONALITIES`) and stand-ins (`ANALYSIS`, plus a
+> direct-mutation flow for `USER_PLAN` in `ChatScreen`). Finishing that
+> migration is the headline of Phase 2.6 below.
 
 ### Risk
 
@@ -469,161 +480,172 @@ CREATE TABLE plan_proposals (
 
 ---
 
-## Phase 2.5 — Multi-user mode (optional)
+## Phase 2.5 — Passkey + demo (shipped)
 
-**Goal:** the app can run in either **single-user mode** (default — no auth,
-localhost) or **shared-deployment mode** (auth enabled, multiple sessioned
-users sharing a server-side AI key). Localhost users skip this phase. Required
-before deploying to a remote VM.
+> **Status:** ✅ Shipped 2026-05-21. Documents what landed. The unshipped
+> multi-user / per-user / magic-link / Resend / allowlist design has moved
+> to [Phase 6](#phase-6--multi-user) with a simpler shape.
 
-### Stack pick
+**What this phase actually delivered:** a single-owner deployment can sit
+behind a passkey-gated `/login` screen, and any visitor can spin up an
+isolated demo without creating an account.
 
-- **[better-auth](https://www.better-auth.com/)** — TypeScript-first, modern,
-  actively maintained, Drizzle-native. Replaces the deprecated Lucia.
-- **Sign-in methods (both, user picks at sign-in):**
-  - **Passkey** (`@better-auth/passkey` plugin) — WebAuthn, primary method
-    after first sign-in. Phishing-resistant, no shared secret, works on
-    iOS / Android / desktop via platform authenticators.
-  - **Email magic link** (`@better-auth/magic-link` plugin) — bootstrap for
-    first sign-in and fallback when a user is on a device without their
-    passkey. Email via Resend free tier (3K/month, no SMTP setup).
-- **Why not NextAuth/Auth.js v5:** heavier, more opinionated, perpetual beta.
-- **Why not Clerk:** vendor lock-in for an OSS project; free-tier MAU limit.
+### What shipped
 
-### The "server-side AI key" pattern
+- **better-auth** + **`@better-auth/passkey`** plugged into the same SQLite
+  as app data via the adapter bundled in better-auth core
+  (`better-auth/adapters/drizzle`). Catch-all handler at
+  `/api/auth/[...all]`.
+- **`/login` screen** with three buttons:
+  - **Sign in with passkey** — returning user with a passkey registered on
+    this device.
+  - **Create account** — collects name + email + registers a passkey on
+    the device's platform authenticator.
+  - **Try the demo** — sets the demo cookie and spins a per-session
+    in-memory SQLite seeded with mock data.
+- **Secure-by-default gate** — the dashboard refuses to render without a
+  session. Opt out with `AUTH_DISABLED=1` in `.env.local` for trusted
+  loopback dev only. See [AUTH.md](./AUTH.md), [SECURITY.md](./SECURITY.md).
+- **Per-session demo DBs** — each demo session keys an isolated in-memory
+  SQLite seeded fresh from `lib/mock/demo-seed.ts`. `AsyncLocalStorage`
+  routes every query (owner vs demo) to the correct DB. Idle TTL 1h, hard
+  cap 200 concurrent demos. Demo chat capped at 10 turns server-side.
+- **Production guard** — `AUTH_SECRET` is required when `NODE_ENV=production`
+  (throws on boot if unset). A dev fallback secret keeps `npm run dev`
+  frictionless on localhost.
 
-```
-[user browser] → [API route on this server] → [OpenRouter]
-                    ↑ has OPENROUTER_API_KEY in env
-                    ↑ verifies session before forwarding
-                    ↑ enforces per-user token quota
-```
-
-The OpenRouter key never leaves the server. Users never see it. All chat
-turns go through the API route, which:
-
-1. Verifies the better-auth session cookie.
-2. Loads the user's daily token usage (`usage` table).
-3. Refuses the turn if over quota; otherwise forwards to OpenRouter.
-4. After the stream completes, updates `usage` with input/output tokens
-   (the AI SDK exposes `usage` in the final chunk).
-
-### Schema additions
-
-```sql
--- better-auth handles its own tables (user, session, account, verification,
--- passkey). Run `npx @better-auth/cli generate` to emit Drizzle schema for
--- these — keep them in lib/db/schema/auth.ts, separate from app tables.
-
--- Per-user daily usage cap (your tables)
-CREATE TABLE usage (
-  user_id TEXT NOT NULL REFERENCES user(id),
-  date TEXT NOT NULL,                 -- YYYY-MM-DD
-  input_tokens INTEGER DEFAULT 0,
-  output_tokens INTEGER DEFAULT 0,
-  PRIMARY KEY (user_id, date)
-);
-
--- App tables that were single-user become per-user
-ALTER TABLE buckets ADD COLUMN user_id TEXT REFERENCES user(id);
-ALTER TABLE journal_entries ADD COLUMN user_id TEXT REFERENCES user(id);
-ALTER TABLE plans ADD COLUMN user_id TEXT REFERENCES user(id);
-ALTER TABLE chat_threads ADD COLUMN user_id TEXT REFERENCES user(id);
--- model_portfolios: keep built-ins user-less; user-defined get user_id.
-```
-
-In single-user mode, `user_id` columns are NULL — all queries filter
-`WHERE user_id IS NULL OR user_id = $session_user`.
-
-### Configuration
-
-Env vars (documented in `.env.example`, neutral framing — no mention of
-who the users are):
+### Env vars added
 
 ```
-AUTH_ENABLED=false                  # default; flip to true for shared deploy
-AUTH_ALLOWED_EMAILS=a@b.com,c@d.com # comma-separated allowlist; only these emails can sign up
-AUTH_SECRET=...                     # better-auth signing key
-RESEND_API_KEY=...                  # only required if magic-link enabled
-PUBLIC_APP_URL=https://...          # canonical URL for magic-link callbacks + passkey rpID
-DAILY_TOKEN_BUDGET_PER_USER=200000  # input+output tokens/user/day; 0 = unlimited
+AUTH_SECRET=...        # better-auth signing key; required in production
+AUTH_DISABLED=1        # opt-out for trusted local dev only (default: auth required)
+PUBLIC_APP_URL=https://... # canonical URL for passkey rpID; passkeys break if this changes
 ```
 
-The allowlist is the simplest way to keep the deployment closed without
-building an admin UI. To add someone, edit the env var and restart.
+### What this phase intentionally did NOT do
 
-### File layout
+- **No multi-user.** App tables (`buckets`, `journal_entries`, `plans`,
+  `chat_threads`, `model_portfolios`) have no `user_id` column. Every
+  authenticated request operates on the single owner dataset.
+- **No magic link.** Skipped to avoid a transactional-email dependency
+  (Resend / SMTP / DNS records).
+- **No social SSO.**
+- **No `/api/auth/*` rate limit.** `AUTH_RATE_LIMIT` is defined in
+  `lib/api/rate-limit.ts` but not wired; documented as a Phase 6 task in
+  [SECURITY.md](./SECURITY.md). Front with Caddy/Cloudflare for now.
+
+These all move to [Phase 6](#phase-6--multi-user).
+
+### Files of record
+
+- [lib/auth/index.ts](./lib/auth/index.ts) — better-auth singleton, passkey plugin.
+- [lib/auth/session.ts](./lib/auth/session.ts) — session reader helper for API routes.
+- [lib/db/context.ts](./lib/db/context.ts) — AsyncLocalStorage routing owner vs demo DB.
+- [lib/db/demo.ts](./lib/db/demo.ts) — per-session in-memory SQLite with idle sweep.
+- [app/(auth)/login/](./app/\(auth\)/login/) — sign-in / create-account / demo UI.
+
+---
+
+## Phase 2.6 — Cleanup & chat persistence
+
+**Goal:** make the existing UI honest end-to-end. Chat history survives a
+reload, plan-edit "Apply" actually writes through, and no screen reaches
+into `lib/mock/data.ts` for live state. This is the cheapest path to
+"chat actually feels real" without expanding scope.
+
+### Why this is next, not Phase 6
+
+Multi-user is a one-way door for the schema (`user_id` everywhere, backfill
+existing data). Better to lock the single-owner feature set first, then
+migrate once. A friend trying the app via the demo path today gets a
+broken-looking experience: streaming chat without persisted history,
+plan-edit Apply that quietly does nothing, mock content bleeding through.
+Fixing that pays off whether or not Phase 6 ever happens.
+
+### Three deliverables
+
+1. **Persist chat history** — wire the existing `chat_threads` /
+   `chat_messages` tables (currently dead schema). Owner and demo paths
+   share the code; demo writes land in the per-session in-memory SQLite
+   and disappear on idle-sweep.
+2. **Wire plan-edit Apply** — replace the `setTimeout(700)` direct
+   mutation of `USER_PLAN` in
+   [components/screens/ChatScreen.tsx](./components/screens/ChatScreen.tsx)
+   with a real `PUT /api/plan`. SWR `mutate()` for instant UI; rollback
+   on error.
+3. **Migrate mock imports** — five components still reach into
+   `lib/mock/data.ts`:
+
+   | Constant | Used by | New home |
+   | --- | --- | --- |
+   | `ANALYSIS` | PortfolioScreen, AppPanels | `/api/analysis` returning a placeholder `{ score: null }` until AI tool calls land in Phase 6; screens render "—" |
+   | `MARKETS`, `LEARN_CONTENT` | MarketsScreen | `lib/static/markets.ts`, `lib/static/learn.ts` — editorial content, code-resident, not DB |
+   | `AI_PERSONALITIES` | ChatScreen | `lib/static/personalities.ts` |
+   | `MODEL_PORTFOLIOS`, `USER_GOALS`, `USER_PLAN` | ChatScreen | switch to existing `/api/models` + `/api/plan` (`USER_PLAN` ships from plan now; `USER_GOALS` reads from the plan's parsed goals section) |
+
+### File additions
 
 ```
 lib/
-  auth/
-    server.ts             # betterAuth() instance + plugins (passkey, magicLink)
-    middleware.ts         # session check helper for API routes
-    config.ts             # reads AUTH_ENABLED + allowlist; exposes isAuthEnabled()
   db/
-    schema/
-      auth.ts             # generated by @better-auth/cli
-      app.ts              # existing tables, with user_id added
-  usage/
-    quota.ts              # readUsage(userId), recordUsage(userId, in, out), isOverQuota()
-
+    queries/
+      chat.ts            # createThread, listThreads, listMessages, appendMessage
+  static/
+    markets.ts           # MARKETS editorial content (was in mock/data.ts)
+    learn.ts             # LEARN_CONTENT
+    personalities.ts     # AI_PERSONALITIES
 app/
   api/
-    auth/[...all]/route.ts  # better-auth catch-all handler
-  (auth)/
-    sign-in/page.tsx      # passkey button + "email me a link" fallback
-    callback/page.tsx     # magic-link landing
+    chat/
+      threads/route.ts   # GET (list user's threads), POST (create)
+      threads/[id]/route.ts # GET (messages), DELETE
+    analysis/route.ts    # placeholder; returns nulls until Phase 6
 ```
 
 ### Implementation order
 
-1. `npm install better-auth @better-auth/passkey @better-auth/magic-link resend`.
-2. `lib/auth/server.ts` — `betterAuth({...})` with Drizzle adapter, passkey
-   plugin (`rpName: "Macrotide"`, `rpID: PUBLIC_APP_URL host`), magic-link
-   plugin (Resend sender).
-3. `npx @better-auth/cli generate` → emits `lib/db/schema/auth.ts`. Commit it.
-4. `drizzle-kit generate` → migration for auth tables + `user_id` columns +
-   `usage` table.
-5. `app/api/auth/[...all]/route.ts` — wire the catch-all.
-6. Sign-in page: passkey button (primary) + "email me a link" link (fallback).
-   First-time users hit magic link → land authenticated → prompted to
-   register a passkey for next time.
-7. `lib/auth/middleware.ts` — `requireUser(req)` helper. If `AUTH_ENABLED`,
-   verify session; else return a synthetic single-user. Use in every API
-   route.
-8. Update every Drizzle query in `lib/db/queries/*` to take `userId` (or
-   `null` for single-user). Add `WHERE user_id = ?` filters.
-9. `lib/usage/quota.ts` + wire into `app/api/chat/route.ts`. Refuse turns
-   when over quota; show clear error in chat UI.
-10. `.env.example` updated. README's "Modes" section added.
+1. `lib/db/queries/chat.ts` — typed wrappers. The DB tables already exist
+   from Phase 1 (`chat_threads` + `chat_messages` in `lib/db/schema.ts`).
+2. `/api/chat/route.ts` — after the streamed response finalizes, write
+   user message + assistant message in one transaction. Use AI SDK's
+   `onFinish` callback. Persist tool calls as `role=tool` rows.
+3. `/api/chat/threads/route.ts` + `/api/chat/threads/[id]/route.ts`.
+4. ChatScreen: thread list in the sidebar (load via SWR), thread switcher,
+   "new thread" button, delete thread.
+5. Wire plan-edit Apply → `PUT /api/plan` with the proposed markdown.
+6. Extract editorial constants to `lib/static/*`; update screen imports.
+7. Replace `ANALYSIS` reads with `/api/analysis` fetcher returning nulls;
+   render "—" placeholders. Real numbers land in Phase 6 via AI tool
+   calls (`read_portfolio` + the model computing concentration, drift,
+   weighted TER).
+8. `MODEL_PORTFOLIOS` + `USER_GOALS` + `USER_PLAN` switch to existing
+   `/api/models` and `/api/plan` fetchers.
 
 ### Acceptance criteria
 
-- With `AUTH_ENABLED=false`, app behaves exactly as Phase 2 (no login screen,
-  no friction).
-- With `AUTH_ENABLED=true`:
-  - First sign-in via magic link works end-to-end (request → email → click →
-    authenticated session).
-  - Authenticated user can register a passkey; subsequent sign-ins use it
-    with no email step.
-  - Two browser sessions for two different allowed emails see fully isolated
-    portfolios, journals, and chat history.
-  - Hitting daily token quota returns a clear error in the chat UI; usage
-    resets at UTC midnight.
-- `OPENROUTER_API_KEY` is never exposed to the browser (verify via DevTools
-  → Network → response headers).
-- Repo docs frame this as "single-user / shared deployment" — no mention of
-  specific user groups.
+- New chat thread persists user + assistant + tool messages; reload shows
+  the same conversation.
+- Two threads in the sidebar can be switched without state leak.
+- Plan-edit proposal `Apply` writes through `/api/plan`; reload of
+  JournalScreen → Plan tab shows the change.
+- `grep -rn "from \"@/lib/mock/data\"" components/` returns zero hits
+  outside of `lib/mock/seed.ts` and `lib/mock/demo-seed.ts`.
+- Demo session: chat history persists for the session lifetime, swept on
+  idle-TTL like the rest of demo state.
+- Typecheck + lint + build + tests all green.
 
 ### Risk
 
-- **Email deliverability:** Resend's free tier requires domain verification
-  for production. Until that's done, sign-in emails may hit spam. Document
-  the verification step in deployment instructions.
-- **Passkey `rpID` mismatch:** if `PUBLIC_APP_URL` changes (e.g., temporary
-  staging domain), existing passkeys break. Pin the production URL early.
-- **Allowlist drift:** restarting to add a user is awkward. Acceptable at
-  small scale; revisit if it ever becomes friction.
+- **Streaming + persistence timing** — writing only after `onFinish`
+  means a mid-stream client disconnect drops the assistant message.
+  Acceptable for v1; revisit if it bites.
+- **Plan-edit format** — for now, "Apply" sends the full proposed
+  markdown. Structured diffs (`section`, `before`, `after`) wait until
+  Phase 6's AI tool-call surface is real.
+- **Mock-import migration ripples** — the editorial constants
+  (`MARKETS`, `LEARN_CONTENT`, `AI_PERSONALITIES`) ship with mock-style
+  helpers and types currently in `lib/mock/types.ts`. Move the types to
+  `lib/static/types.ts` to keep `lib/mock/` purely seed-data.
 
 ---
 
@@ -755,6 +777,169 @@ once you have a clear personal need.
 
 ---
 
+## Phase 6 — Multi-user
+
+**Goal:** open the app to family and friends via a public-discoverable URL
+(linked from a personal site / subdomain already behind Cloudflare). Each
+account is isolated; the owner's OpenRouter budget is protected by per-user
+token caps and free-tier-only access for new accounts. No transactional
+email infrastructure required.
+
+### Stack pick
+
+- **Auth library:** stay on **better-auth** — already wired in Phase 2.5.
+  No Auth0 / Clerk; the project is single-VM personal scale and the
+  vendor cost + lock-in solve problems we don't have.
+- **Sign-in methods:**
+  - **Google OAuth** + **GitHub OAuth** (better-auth `socialProviders`
+    config — built-in, no extra plugin).
+  - **Passkey** (existing) — promoted to "second device convenience" once
+    you've signed in via OAuth once.
+  - **No magic link, no email/password.** Skipping email transport
+    eliminates Resend / SPF / DKIM / DMARC / spam-folder pain on the
+    critical onboarding path. Add Apple OAuth or magic link later if a
+    real user needs it.
+- **Bot protection:** **Cloudflare Turnstile** on the sign-up + OAuth
+  callback. Free, already in the Cloudflare zone.
+- **Admin:** **SQL first.** `sqlite3 data/app.db` + a small set of
+  canned queries (list users, see usage, promote tier, ban). Build a
+  minimal `/admin` page only if SQL friction shows up; better-auth's
+  `admin` plugin exposes the API methods when that day comes.
+
+### Schema changes
+
+```sql
+-- All app tables get a user_id. Built-in model_portfolios stay NULL
+-- and are visible to everyone.
+ALTER TABLE buckets             ADD COLUMN user_id TEXT REFERENCES user(id);
+ALTER TABLE journal_entries     ADD COLUMN user_id TEXT REFERENCES user(id);
+ALTER TABLE plans               ADD COLUMN user_id TEXT REFERENCES user(id);
+ALTER TABLE chat_threads        ADD COLUMN user_id TEXT REFERENCES user(id);
+ALTER TABLE model_portfolios    ADD COLUMN user_id TEXT REFERENCES user(id); -- user_id IS NULL for built-ins
+-- holdings inherits via bucket_id; no column needed.
+
+-- Per-user daily token cap.
+CREATE TABLE usage (
+  user_id      TEXT NOT NULL REFERENCES user(id),
+  date         TEXT NOT NULL,                 -- YYYY-MM-DD UTC
+  input_tokens INTEGER DEFAULT 0,
+  output_tokens INTEGER DEFAULT 0,
+  PRIMARY KEY (user_id, date)
+);
+
+-- Tier gating: which OpenRouter models a user can hit.
+-- "free"     = openrouter/free router only (zero cost to owner)
+-- "trusted"  = full owner model chain (AI_MODELS env)
+-- Owner promotes via SQL: UPDATE account_tier SET tier='trusted' WHERE user_id=?
+CREATE TABLE account_tier (
+  user_id    TEXT PRIMARY KEY REFERENCES user(id),
+  tier       TEXT NOT NULL DEFAULT 'free',
+  granted_at TEXT NOT NULL
+);
+```
+
+**Backfill:** existing rows in `data/app.db` are assigned to a seed
+"owner" account derived from `OWNER_EMAIL` env var. Migration script
+inserts a `user` row first, then updates app tables. Document this
+loudly so a fresh clone doesn't lose data.
+
+### Env vars added
+
+```bash
+OWNER_EMAIL=...                     # account that inherits all pre-Phase-6 data
+GOOGLE_CLIENT_ID=...
+GOOGLE_CLIENT_SECRET=...
+GITHUB_CLIENT_ID=...
+GITHUB_CLIENT_SECRET=...
+TURNSTILE_SITE_KEY=...              # public, shipped to the browser
+TURNSTILE_SECRET_KEY=...            # server verifies token here
+DAILY_TOKEN_BUDGET_FREE=20000       # input+output tokens/day/user for "free" tier
+DAILY_TOKEN_BUDGET_TRUSTED=200000   # input+output tokens/day/user for "trusted" tier
+TOS_URL=/legal/terms                # static page slug
+PRIVACY_URL=/legal/privacy
+```
+
+### Sub-phases
+
+- **6a — Data layer.** Schema migration, backfill to owner, every query
+  in `lib/db/queries/*.ts` takes `userId` and filters
+  `WHERE user_id = ? OR user_id IS NULL`. `AsyncLocalStorage` context
+  extended to carry `userId`. `requireUser(req)` helper at the top of
+  every API route. No user-visible change yet.
+- **6b — Identity providers.** better-auth config: `socialProviders:
+  { google, github }`, `account.accountLinking.enabled: true`. OAuth
+  apps registered in Google Cloud Console + GitHub Developer Settings.
+  `/login` UI: Google button, GitHub button, "use a passkey" for
+  returning users. Account-page passkey registration prompt on first
+  OAuth sign-in.
+- **6c — Sign-up gate + abuse defenses.** Turnstile widget on `/login`,
+  with server-side token verify on the OAuth callback. Wire
+  `AUTH_RATE_LIMIT` on `/api/auth/*` (already defined, just plug it in).
+  New accounts default to `tier='free'`. First-time user flow seeds one
+  empty bucket so the dashboard isn't blank. Static `/legal/terms` and
+  `/legal/privacy` pages; sign-up requires checkbox acceptance.
+- **6d — Per-user quotas + tier gating.** `/api/chat` reads
+  `account_tier`, picks model chain accordingly (free chain for free
+  tier, owner chain for trusted), checks daily cap before forwarding to
+  OpenRouter, logs usage after stream finishes. Clear "you've hit
+  today's limit" UI.
+- **6e — Account UX.** `/account` page: name, email (read-only),
+  registered passkeys (with revoke), linked OAuth providers, today's
+  token usage, sign out everywhere. Multi-device passkey: prompt to
+  register on each new device.
+
+### Acceptance criteria
+
+- A family member with a Google account opens `https://macrotide.<your
+  domain>`, clicks **Sign in with Google**, lands authenticated, sees
+  an empty dashboard with one seeded bucket. Their data is isolated
+  from yours.
+- A second account signing in with GitHub sees independent state.
+- Without Turnstile, the sign-up flow refuses with a clear error.
+- Without a session, `/api/buckets` (and every other app route) returns
+  401. With a session, returns only that user's rows.
+- A new user is on `tier='free'`: chat resolves to `openrouter/free`
+  models regardless of `AI_MODELS`. SQL update to `tier='trusted'`
+  promotes them; their next chat uses the owner's model chain.
+- Hitting the daily cap returns a clear UI message; usage resets at
+  UTC midnight.
+- Owner can pull a usage report via SQL: per-user tokens in / out / day.
+- Existing demo path still works (anonymous → `/login` → "Try the
+  demo" → isolated per-session DB, untouched by 6).
+- `OPENROUTER_API_KEY` never appears in browser-visible payloads
+  (verify via DevTools).
+
+### What stays out of scope
+
+- **SAML / enterprise OIDC.** Not needed for family/friends. Trivial to
+  add later via `@better-auth/sso` if one B2B user materializes.
+- **Org / team accounts.** No shared portfolios; the model is one
+  human, one account.
+- **Billing / paywall.** Tier promotion is manual via SQL. If usage
+  outgrows that, build a self-serve upgrade flow then.
+- **Magic-link email.** Skipped on purpose. Re-evaluate only if a real
+  user shows up without Google or GitHub.
+- **Apple OAuth.** Add when needed.
+
+### Risk
+
+- **Backfill surprise.** Migration assigns all existing data to
+  `OWNER_EMAIL`. If `OWNER_EMAIL` is wrong on first run after the
+  migration, the data is attached to the wrong account. Document
+  loudly; provide a re-attach SQL snippet.
+- **Per-tier model gating** is the most testable invariant: write
+  vitest cases that the free tier can never resolve to a non-free model
+  regardless of `AI_MODELS` env. Without this, a config slip burns the
+  budget.
+- **Turnstile bypass.** Cloudflare-fronted requests trust the
+  CF-Connecting-IP header; without that path, IP-based rate limits can
+  be spoofed. Verify the trusted-proxy config.
+- **OAuth redirect URI drift.** Once `PUBLIC_APP_URL` is locked, never
+  change it casually — passkey `rpID` and OAuth callback URIs both
+  break. Pin it in production and document loudly.
+
+---
+
 ## Deployment
 
 Two supported modes; both are first-class.
@@ -770,9 +955,12 @@ That's it. `data/app.db` lives in the repo's `data/`, backups in
 `data/backups/`. No auth, no env beyond `OPENROUTER_API_KEY`. Reach the app
 at `http://localhost:3000`.
 
-### Mode B — shared self-host (multi-user, single VM)
+### Mode B — single-owner self-host (single VM, passkey-gated)
 
-Targets a single Linux VM (any cloud VPS or home server). Requires Phase 2.5.
+Targets a single Linux VM (any cloud VPS or home server). The owner signs
+in with a passkey; visitors can spin up the demo without creating an
+account. **Available today** — Phase 2.5 shipped. For inviting family/friends
+to sign up with their own accounts, see Phase 6.
 
 **Stack on the VM:**
 
@@ -820,11 +1008,14 @@ WantedBy=multi-user.target
    iptables rules already in place.
 3. Point your DNS A record at the VM.
 4. Install Node, Caddy, clone the repo, `npm ci`, `npm run build`.
-5. Create `/opt/macrotide/.env` with `AUTH_ENABLED=true`,
-   `AUTH_ALLOWED_EMAILS`, `AUTH_SECRET`, `PUBLIC_APP_URL`,
-   `OPENROUTER_API_KEY`, `RESEND_API_KEY`, `DAILY_TOKEN_BUDGET_PER_USER`.
+5. Create `/opt/macrotide/.env.local` (chmod 600) with `AUTH_SECRET`,
+   `PUBLIC_APP_URL`, `OPENROUTER_API_KEY`, `AI_MODELS`. Add Phase 6
+   vars (`OWNER_EMAIL`, `GOOGLE_CLIENT_ID` / `SECRET`, `GITHUB_CLIENT_ID`
+   / `SECRET`, `TURNSTILE_SITE_KEY` / `SECRET_KEY`,
+   `DAILY_TOKEN_BUDGET_FREE` / `_TRUSTED`) once multi-user lands.
 6. `systemctl enable --now macrotide`, `systemctl reload caddy`.
-7. Visit the URL — sign in via magic link, register a passkey, done.
+7. Visit the URL — create an account, register a passkey, done. (Or sign
+   in with Google/GitHub once Phase 6 ships.)
 
 **Optional hardening:**
 
@@ -844,22 +1035,27 @@ WantedBy=multi-user.target
 
 ---
 
-## Decisions you need to make before Phase 1
+## Decisions made (was: "before Phase 1")
 
-| Decision | Default | Alternative |
+Locked decisions, kept here so re-cloners and future-you don't re-litigate.
+
+| Decision | Picked | Why not |
 | --- | --- | --- |
-| ORM | Drizzle | Prisma (heavier), raw SQL (no types) |
-| Client data layer | SWR | React Query, plain fetch + setState |
-| AI provider | Vercel AI SDK + OpenRouter | Anthropic SDK direct (locks to one provider) |
-| Chat model | TBD — decide after first real calls | Sonnet 4.6, GPT-5, etc. via OpenRouter (one-string change) |
-| Auth (Phase 2.5) | better-auth + passkey (primary) + magic link (fallback) | NextAuth v5 (heavier), Clerk (vendor lock-in), hand-rolled (more code) |
-| Email transport | Resend free tier (3K/month) | SMTP via Postmark / SES if Resend caps bite |
-| Market data: Thai funds | Playwright scrape of fund-supermarket pages | AIMC public data feed |
+| ORM | Drizzle | Prisma heavier; raw SQL loses types |
+| Client data layer | SWR | React Query overkill for this scale |
+| AI provider | Vercel AI SDK + OpenRouter | Direct Anthropic SDK locks to one provider |
+| Chat model | `AI_MODELS` env (comma-separated fallback chain), `openrouter/auto` default | Hardcoding one model means a one-string change every model bump |
+| Auth library (Phase 2.5 + 6) | better-auth + passkey + Google/GitHub social (Phase 6) | NextAuth v5 heavier, Clerk vendor lock-in, Auth0 vendor cost |
+| Email transport | **Skip entirely** — Phase 6 uses Google/GitHub SSO only, no magic link | Resend free-tier is fine but DNS + spam-folder UX is friction for a soft-public launch |
+| Market data: Thai funds | Playwright scrape of fund-supermarket pages (Phase 3b) | AIMC feed is the alternative if scraping breaks |
+| Public sign-up bot defense (Phase 6) | Cloudflare Turnstile | hCaptcha works too; Turnstile is already in the zone |
+| Admin tooling (Phase 6) | SQL first; build `/admin` UI only if SQL friction shows up | better-auth's `admin` plugin is there when needed |
 
 ## Explicitly out of scope (until you decide otherwise)
 
-- **Public sign-ups** — multi-user mode (Phase 2.5) is allowlist-gated, not
-  open. No SaaS, no billing, no admin UI.
+- **Open SaaS / billing / admin UI** — Phase 6 opens public sign-up but new
+  accounts default to free-tier-only and admin happens via SQL. No paid
+  tiers, no self-serve upgrade flow, no admin web UI.
 - **Horizontal scaling / multi-region** — single VM, single SQLite writer. If
   that ever changes, the trigger is migrating to Turso or Postgres, not
   layering on top of SQLite.
@@ -871,6 +1067,8 @@ WantedBy=multi-user.target
   that you'd actually use them.
 - **Mobile-native app / PWA** — desktop / mobile web only.
 - **Notifications / digests / scheduled runs** — Phase 5 if ever.
+- **Enterprise SSO (SAML/OIDC), org accounts, magic-link email** — see
+  Phase 6's "What stays out of scope" for why.
 
 ## When to revisit aesthetics
 
@@ -880,9 +1078,13 @@ After each phase, look for:
   be empty (Journal with 0 entries, Buckets with 0 holdings).
 - **Phase 2 done**: streaming UI density, citation/tool-call card design,
   proposal card design.
-- **Phase 2.5 done**: sign-in screen polish, passkey-registration prompt,
-  quota-exceeded message in chat, account/profile UI (minimal — name + sign
-  out + revoke passkeys).
+- **Phase 2.5 done**: sign-in screen polish, passkey-registration prompt
+  after first OAuth sign-in.
+- **Phase 2.6 done**: thread-list density, plan-edit Apply micro-animation,
+  empty-state for "no chats yet".
+- **Phase 6 done**: quota-exceeded message in chat, account/profile UI
+  (name + sign out + revoke passkeys + linked OAuth providers), Turnstile
+  widget placement, ToS/privacy footer.
 - **Phase 3 done**: chart tooltips, time-range chips, missing-data graceful
   degradation.
 - **Phase 4 done**: import flow polish (drag-and-drop affordance, OCR
@@ -891,9 +1093,11 @@ After each phase, look for:
 ## Next session pickup
 
 1. `cd macrotide` and re-read this file.
-2. Confirm the **Decisions you need to make** table above (Drizzle / SWR /
-   Anthropic SDK / Sonnet 4.5).
-3. Start Phase 1, step 1: `npm install better-sqlite3 drizzle-orm` etc.
-4. The smallest useful loop in Phase 1 is: **schema → migrations → seed →
-   replace one screen's mock import with a real fetcher**. Pick
-   `PortfolioScreen` for that one screen.
+2. **Phase 2.6 is next.** Smallest useful loop: add `lib/db/queries/chat.ts`,
+   persist messages from `/api/chat`, surface a reload-survives thread
+   list in `ChatScreen`. That single change moves the app from "demo of
+   streaming" to "actual chat".
+3. Then plan-edit Apply (`PUT /api/plan`), then mock-import migration.
+4. After 2.6: Phase 3b (fund NAVs) if you want PortfolioScreen to be
+   useful to a friend's real holdings before sharing; otherwise jump to
+   Phase 6 (multi-user).
