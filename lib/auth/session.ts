@@ -29,9 +29,13 @@ export async function getSessionUser(): Promise<SessionUser | null> {
 }
 
 /**
- * True when `AUTH_REQUIRED=1` — the app refuses to render the dashboard until
- * a passkey login has happened. Demo cookie bypasses this.
+ * Auth is required by default (Saltzer-Schroeder: secure defaults). The
+ * dashboard refuses to render until a passkey login has happened. Demo cookie
+ * bypasses this.
+ *
+ * Set `AUTH_DISABLED=1` to opt out — intended only for local dev when you're
+ * the sole user and bound to loopback. Never use in a shared deployment.
  */
 export function isAuthRequired(): boolean {
-  return process.env.AUTH_REQUIRED === "1";
+  return process.env.AUTH_DISABLED !== "1";
 }
