@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FeedbackRow } from "@/components/FeedbackRow";
 import { Icon } from "@/components/Icon";
 import {
@@ -10,6 +10,8 @@ import {
   USER_GOALS,
   USER_PLAN,
 } from "@/lib/mock/data";
+
+const ACTIVE_THREAD_KEY = "macrotide_chat_active_thread";
 
 interface PlanProposal {
   section: string;
@@ -154,8 +156,56 @@ export function ChatScreen({ persona = "advisor", seedPrompt, onPromptConsumed }
   const [messages, setMessages] = useState<Message[]>(initial);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
+  const [threadId, setThreadId] = useState<string | null>(null);
   const [msgFeedback, setMsgFeedback] = useState<Record<number, MsgFeedback>>({});
   const streamRef = useRef<HTMLDivElement>(null);
+
+  // Hydrate the most recently active thread on mount. If the server doesn't
+  // know about the stored id (e.g. demo session restarted, DB wiped), we silently
+  // discard the stale id and start fresh.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const stored = window.localStorage.getItem(ACTIVE_THREAD_KEY);
+    if (!stored) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`/api/chat/threads/${encodeURIComponent(stored)}`);
+        if (cancelled) return;
+        if (!res.ok) {
+          window.localStorage.removeItem(ACTIVE_THREAD_KEY);
+          return;
+        }
+        const { messages: rows } = (await res.json()) as {
+          messages: Array<{ id: number; role: string; content: string; createdAt: string }>;
+        };
+        if (cancelled || rows.length === 0) return;
+        setThreadId(stored);
+        setMessages(
+          rows.map((r) => ({
+            role: r.role === "assistant" ? "ai" : "user",
+            text: r.content,
+            ts: Date.parse(r.createdAt) || Date.now(),
+            id: `db-${r.id}`,
+          })),
+        );
+      } catch {
+        // Network blip; leave the stored id alone and let the next turn retry.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const newChat = useCallback(() => {
+    if (typeof window !== "undefined") {
+      window.localStorage.removeItem(ACTIVE_THREAD_KEY);
+    }
+    setThreadId(null);
+    setMessages(initial);
+    setMsgFeedback({});
+  }, [initial]);
 
   // Auto-scroll to the bottom whenever messages grow or the streaming text
   // changes. We track the last message's text length so streamed deltas tick
@@ -188,10 +238,17 @@ export function ChatScreen({ persona = "advisor", seedPrompt, onPromptConsumed }
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: model }),
+        body: JSON.stringify({ messages: model, threadId: threadId ?? undefined }),
       });
       if (!res.ok || !res.body) {
         throw new Error(`chat failed (${res.status})`);
+      }
+      const returnedThread = res.headers.get("x-thread-id");
+      if (returnedThread && returnedThread !== threadId) {
+        setThreadId(returnedThread);
+        if (typeof window !== "undefined") {
+          window.localStorage.setItem(ACTIVE_THREAD_KEY, returnedThread);
+        }
       }
 
       // The route returns a UI message stream — each line is `data: <json>`.
@@ -369,6 +426,16 @@ export function ChatScreen({ persona = "advisor", seedPrompt, onPromptConsumed }
             ● INDEX TEACHER
           </span>
         </div>
+        <button
+          type="button"
+          className="btn ghost sm"
+          onClick={newChat}
+          disabled={loading}
+          title="Start a new conversation"
+          style={{ gap: 4 }}
+        >
+          <Icon name="sparkle" size={12} /> New chat
+        </button>
         <div className="avatar">DU</div>
       </div>
 
