@@ -109,31 +109,39 @@ that takes a write.
 **Components MUST NOT import from `@/lib/mock/data`.** Verify with
 `grep -rn 'from "@/lib/mock/data"' components/` — should return zero hits.
 
-## Holding ticker convention (provider routing)
+## Provider routing via holdings.quote_source
 
-A holding's `ticker` field drives provider routing in
-[lib/market/registry.ts](./lib/market/registry.ts):
+Every holding has a `quote_source` column (NOT NULL, default `"yahoo"`)
+that the market registry uses to dispatch NAV / price fetches:
 
-| Pattern | Provider (today) | Examples |
+| `quote_source` | Provider | Ticker shape |
 | --- | --- | --- |
-| `thfund:<fund-code>` | Thai SEC Open API | `thfund:EXAMPLE-FUND-A` |
-| anything else (no colon) | Yahoo Finance | `^SET.BK`, `AAPL`, `PTT.BK`, `THB=X` |
+| `"thai_mutual_fund"` | Thai SEC Open API | bare proj_abbr_name or share-class (`K-FIXED-A`, `HIDIV-D`) |
+| `"yahoo"` | Yahoo Finance | bare/dotted/caret symbols (`^SET.BK`, `AAPL`, `PTT.BK`, `THB=X`) |
 
-**The prefix names the asset class, not the provider.** `thfund:` means "Thai
-mutual fund" regardless of which API serves it. If we ever switch the
-underlying provider, the holdings keep working — only the registry's routing
-map changes. This is the chosen alternative to a `holdings.source` schema
-column; revisit (Option B in past discussion) only when one of these triggers:
+**The value names the asset class, not the provider.** `"thai_mutual_fund"`
+means "Thai mutual fund regardless of which API serves it." If we ever swap
+the underlying provider, only the registry's routing map changes — holdings
+stay valid.
 
-- A fund needs finer routing than asset class (same asset class, different
-  source).
-- Multi-user accounts want per-user provider preferences.
-- The prefix grows past ~5 providers with complex routing rules.
+The user-visible ticker stays bare (`K-FIXED-A`, not `thfund:K-FIXED-A`).
+Routing lives in a separate column so it doesn't leak into UI labels,
+search input, or imported CSV rows. See `lib/market/sources.ts` for the
+constants + UI label map.
 
-When adding a new provider, claim an asset-class-named prefix
-(`crypto:`, `bond:`, `fx:` — not `coingecko:` or `fred:`) and register it
-ahead of Yahoo in the registry list. The Yahoo provider is the broad
-fallback for bare/dotted/caret-prefixed symbols.
+When adding a new provider:
+
+1. Add the new source value to `QUOTE_SOURCES` in `lib/market/sources.ts`
+   (use the asset class name — `"crypto"`, `"bond"`, `"fx"`, never the
+   provider's name).
+2. Implement a Provider with `matches(source, ticker)` returning true for
+   that source.
+3. Register it ahead of Yahoo in `lib/market/registry.ts`.
+4. Add a UI label for the type selector in HoldingSheet.
+
+Internal cache keys in `fund_quotes.ticker` and `nav_history.ticker` are
+the combined `${source}:${ticker}` so the same table can hold quotes for
+different sources without a schema change.
 
 ## Auth conventions
 
@@ -155,7 +163,7 @@ fallback for bare/dotted/caret-prefixed symbols.
 | `AUTH_SECRET` | production | Required when `NODE_ENV=production`. |
 | `AUTH_DISABLED` | dev convenience | Set to `1` to skip the login gate on localhost. |
 | `PUBLIC_APP_URL` | production | Canonical URL; passkeys break if this changes. |
-| `SEC_API_KEY` | for `thfund:` | Thai SEC Open API subscription key (Primary or Secondary — both valid). One subscription covers all 6 product groups. Header: `Ocp-Apim-Subscription-Key`. |
+| `SEC_API_KEY` | quote_source=thai_mutual_fund | Thai SEC Open API subscription key (Primary or Secondary — both valid). One subscription covers all 6 product groups. Header: `Ocp-Apim-Subscription-Key`. |
 
 Keep [.env.example](./.env.example), [AUTH.md](./AUTH.md), and
 [DEPLOY.md](./DEPLOY.md) in sync when you add/rename variables.
@@ -169,7 +177,7 @@ npm run lint       # Biome check
 npm run format     # Biome --write
 npm run typecheck  # tsc --noEmit
 npm test           # vitest
-npm run smoke:sec -- thfund:<FUND-CODE>   # smoke-test Thai SEC provider (needs SEC_API_KEY)
+npm run smoke:sec -- <FUND-CODE>          # smoke-test Thai SEC provider (needs SEC_API_KEY)
 ```
 
 Pre-commit hook (simple-git-hooks + lint-staged) runs Biome on staged files.

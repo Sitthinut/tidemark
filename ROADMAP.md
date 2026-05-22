@@ -136,7 +136,7 @@ exposes the gaps that need polish; polishing on mock data risks rework.
 | 2.5 | Passkey + demo | ✅ Shipped 2026-05-21 | Single-owner auth + per-session in-memory demo DB |
 | 2.6 | Cleanup & chat persistence | ✅ Shipped 2026-05-22 | Chat history persists; plan-edit Apply wired; mock-import migration done. Thread-list sidebar deferred to a polish pass |
 | 3 | Market data | 🟡 Partial | SET/global indices live; funds + news in 3b |
-| 3b | Fund NAVs + news + NAV history | 🟡 Mostly shipped | Provider + v2 SEC Open API endpoints live; PortfolioScreen wiring + RSS news still pending |
+| 3b | Fund NAVs + news + NAV history | 🟡 Mostly shipped | Provider + v2 endpoints + holdings.quote_source + PortfolioScreen wiring all live; RSS news still pending |
 | 4 | Portfolio import | 🟡 Partial | CSV done; OCR pending Phase 2 maturity |
 | 4b | Broker scraping / API integration | Out of scope | Revisit only if a clear personal need emerges |
 | 5 | Long-term memory + history compression | Pending | Per-user explicit-save preferences; chat compression to control OpenRouter cost. Research libraries first |
@@ -796,34 +796,44 @@ lib/market/
 └── indices.ts          # uses cache
 ```
 
-**Symbol routing** (prefix-based):
+**Source routing** (via `holdings.quote_source` column):
 
-| Symbol pattern | Provider | Example |
+| `quote_source` | Provider | Ticker examples |
 | --- | --- | --- |
-| `^XXX`, `XXX=X`, `XXX.BK`, bare tickers | yahoo | `^SET.BK`, `THB=X`, `AAPL` |
-| `thfund:<fund-code>` | sec-thailand | `thfund:EXAMPLE-FUND-A` |
+| `"yahoo"` | yahoo | `^SET.BK`, `THB=X`, `AAPL`, `PTT.BK` |
+| `"thai_mutual_fund"` | sec-thailand | `K-FIXED-A`, `HIDIV-D` |
 
-The prefix names the asset class, not the provider — so a Thai mutual
-fund holding keeps the same ticker even if we swap the underlying data
-source later. New providers should claim asset-class names (`crypto:`,
-`bond:`, `fx:`), not provider names.
+The source value names the asset class, not the provider — holdings stay
+valid if the registry's routing map is later changed. New providers should
+claim asset-class names (`crypto`, `bond`, `fx`), not provider names. See
+`lib/market/sources.ts` for the constants and UI labels.
 
-`Quote` and `Series` types are provider-agnostic — `{ price, asOf, currency }`
-and `[{ date, close }]`. Existing `fund_quotes` / `nav_history` schema is
-already provider-agnostic; no migration needed.
+User-visible tickers are bare (no `thfund:` prefix or other namespace).
+Internal cache keys in `fund_quotes.ticker` + `nav_history.ticker` use the
+combined `${source}:${ticker}` so one table can hold quotes for different
+sources. `Quote` and `Series` types are provider-agnostic
+(`{ price, asOf, currency }` and `[{ date, close }]`).
 
 ### Status
 
 - ✅ **Refactor `lib/market/` to provider shape** — shipped.
 - ✅ **`lib/market/providers/sec-thailand.ts`** — v2 endpoints, cursor
-  pagination, 421 handling. 8 vitest cases (100% synthetic data).
-- ✅ **`app/api/quotes/route.ts`** — `?refresh=1` dispatches through the
-  registry and populates `fund_quotes` + `nav_history`.
-- ✅ **`useRefreshedQuotes()` fetcher hook.**
-- ✅ **`npm run smoke:sec -- thfund:<code>`** for live verification.
-- ⏳ **Wire into Portfolio holdings** — pending. Add holdings with a
-  `thfund:` ticker (manually or via the AddHoldingsSheet); the API
-  enriches automatically. UI work needed to render "—" for missing NAVs.
+  pagination, 421 handling, on-demand share-class lookup. 11 vitest
+  cases (100% synthetic data).
+- ✅ **`holdings.quote_source` schema column** + `lib/market/sources.ts`
+  taxonomy. Decouples routing from the symbol, scales cleanly to new
+  asset classes (crypto, bonds, FX, …) without re-tagging holdings.
+- ✅ **`app/api/quotes/route.ts`** — `?refresh=1&refs=source:ticker,…`
+  dispatches through the registry and populates `fund_quotes` /
+  `nav_history`.
+- ✅ **`useRefreshedQuotes()` fetcher hook** (paired
+  `{source, ticker}` refs).
+- ✅ **`HoldingSheet` type selector** — user picks "Thai mutual fund"
+  or "Stock / ETF / Index" per holding; sets `quote_source` on save.
+- ✅ **`usePortfolioView` overlays live quotes** onto the cached map
+  so PortfolioScreen shows real value-vs-cost as soon as the refresh
+  returns (cached/avg-cost fallback renders first).
+- ✅ **`npm run smoke:sec -- <FUND-CODE>`** for live verification.
 - ⏳ **News (RSS) — optional** — `lib/market/news.ts` aggregates Bangkok
   Post and SET news RSS. May ship as Phase 3c instead.
 
@@ -838,7 +848,7 @@ SEC_API_KEY=...   # Thai SEC Open API subscription key (Ocp-Apim-Subscription-Ke
 - `npm run typecheck` + `npm test` + `npm run build` all green after the
   provider refactor with no behavior change.
 - Fresh `SEC_API_KEY` resolves a Thai fund symbol end-to-end:
-  `curl 'http://localhost:3000/api/quotes?tickers=thfund:<code>&refresh=1'` returns
+  `curl 'http://localhost:3000/api/quotes?refresh=1&refs=thai_mutual_fund:<code>'` returns
   `{ symbol, price, asOf, currency }` with a real NAV.
 - Subsequent requests within TTL hit cache (no outbound network call).
 - PortfolioScreen renders real NAVs for Thai-fund holdings and "—" for
