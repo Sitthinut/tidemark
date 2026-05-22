@@ -1,7 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { type BucketFormValues, BucketSheet } from "@/components/BucketSheet";
+import { useEffect, useMemo, useState } from "react";
 import { MiniBars, MiniLine, ModelDonut, PerfChart } from "@/components/charts";
 import { FeedbackRow } from "@/components/FeedbackRow";
 import { type HoldingFormValues, HoldingSheet } from "@/components/HoldingSheet";
@@ -37,18 +36,6 @@ function holdingToFormValues(h: Holding, fallbackBucketId: string): HoldingFormV
     ter: h.ter,
     source: h.source,
     color: h.color,
-  };
-}
-
-function portfolioToFormValues(p: Portfolio): BucketFormValues {
-  return {
-    id: p.id,
-    name: p.name,
-    typeLabel: p.typeLabel || "Free",
-    icon: p.icon || "○",
-    color: p.color || "var(--accent)",
-    brokerage: p.brokerage,
-    notes: p.notes || "",
   };
 }
 
@@ -113,10 +100,32 @@ export function PortfolioScreen({
   const [filter, setFilter] = useState<AssetClass | "all">("all");
   const [benchmark, setBenchmark] = useState<"none" | BenchmarkKey>("none");
   const [feedback, setFeedback] = useState<Record<string, "up" | "down" | null>>({});
-  const [bucketSheet, setBucketSheet] = useState<
-    { mode: "create" } | { mode: "edit"; bucket: Portfolio } | null
-  >(null);
   const [holdingSheet, setHoldingSheet] = useState<Holding | null>(null);
+
+  // Broadcast active portfolio id so the right-rail PortfoliosPanel can
+  // highlight the matching row without lifting state up to App.
+  useEffect(() => {
+    window.dispatchEvent(new CustomEvent("portfolio-active-changed", { detail: activePfId }));
+  }, [activePfId]);
+
+  // Listen for cross-component navigation events.
+  useEffect(() => {
+    const onActivate = (e: Event) => setActivePfId((e as CustomEvent<string>).detail);
+    const onSyncRequest = () => {
+      window.dispatchEvent(new CustomEvent("portfolio-active-changed", { detail: activePfId }));
+    };
+    window.addEventListener("activate-portfolio", onActivate);
+    window.addEventListener("portfolio-active-request", onSyncRequest);
+    return () => {
+      window.removeEventListener("activate-portfolio", onActivate);
+      window.removeEventListener("portfolio-active-request", onSyncRequest);
+    };
+  }, [activePfId]);
+
+  // Helpers for emitting modal events to App.
+  const openNewPortfolio = () => window.dispatchEvent(new CustomEvent("new-portfolio"));
+  const openEditPortfolio = (id: string) =>
+    window.dispatchEvent(new CustomEvent("edit-portfolio", { detail: id }));
 
   async function saveHolding(values: HoldingFormValues) {
     const id = holdingSheet?.id;
@@ -148,41 +157,6 @@ export function PortfolioScreen({
     const res = await fetch(`/api/holdings/${id}`, { method: "DELETE" });
     if (!res.ok) throw new Error(`Delete failed (${res.status})`);
     invalidate(/^\/api\/holdings/);
-  }
-
-  async function saveBucket(values: BucketFormValues) {
-    const isEdit = bucketSheet?.mode === "edit";
-    if (isEdit) {
-      const res = await fetch(`/api/buckets/${encodeURIComponent(values.id)}`, {
-        method: "PATCH",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          name: values.name,
-          typeLabel: values.typeLabel,
-          icon: values.icon,
-          color: values.color,
-          brokerage: values.brokerage,
-          notes: values.notes,
-        }),
-      });
-      if (!res.ok) throw new Error(`Update failed (${res.status})`);
-    } else {
-      const res = await fetch("/api/buckets", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(values),
-      });
-      if (!res.ok) throw new Error(`Create failed (${res.status})`);
-    }
-    invalidate("/api/buckets");
-  }
-
-  async function deleteBucket(id: string) {
-    const res = await fetch(`/api/buckets/${encodeURIComponent(id)}`, { method: "DELETE" });
-    if (!res.ok) throw new Error(`Delete failed (${res.status})`);
-    invalidate("/api/buckets");
-    invalidate(/^\/api\/holdings/);
-    if (activePfId === id) setActivePfId("all");
   }
 
   const { portfolios, aggregate, isLoading } = usePortfolioView();
@@ -282,7 +256,7 @@ export function PortfolioScreen({
                 marginBottom: 8,
               }}
             >
-              No buckets yet
+              No portfolios yet
             </div>
             <div
               style={{
@@ -294,27 +268,22 @@ export function PortfolioScreen({
                 margin: "0 auto 22px",
               }}
             >
-              A bucket holds a set of fund positions. Most people start with one "Core" bucket for
-              long-term holdings, plus optional buckets for tax-advantaged accounts.
+              A portfolio holds a set of fund positions. Most people start with one "Core" portfolio
+              for long-term holdings, plus optional ones for tax-advantaged accounts.
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-              <button className="btn primary" onClick={() => setBucketSheet({ mode: "create" })}>
-                <Icon name="plus" size={13} /> Create your first bucket
+              <button className="btn primary" onClick={openNewPortfolio}>
+                <Icon name="plus" size={13} /> Create your first portfolio
               </button>
               <button className="btn ghost" onClick={onOpenImport}>
                 Import existing holdings
               </button>
               <button className="btn ghost" onClick={onOpenModels}>
-                Browse model portfolios
+                Browse templates
               </button>
             </div>
           </div>
         </div>
-        <BucketSheet
-          open={bucketSheet?.mode === "create"}
-          onClose={() => setBucketSheet(null)}
-          onSave={saveBucket}
-        />
       </div>
     );
   }
@@ -357,12 +326,14 @@ export function PortfolioScreen({
       <div className="portfolio-switch">
         <button data-active={activePfId === "all"} onClick={() => setActivePfId("all")}>
           ☰ All
-          <span className="pf-sub">{portfolios.length} BUCKETS</span>
+          <span className="pf-sub">{portfolios.length} PORTFOLIOS</span>
         </button>
         {portfolios.map((p) => (
           <button key={p.id} data-active={activePfId === p.id} onClick={() => setActivePfId(p.id)}>
-            <span className="pf-icon">{p.icon}</span> {p.name}
-            <span className="pf-sub">{p.typeLabel.toUpperCase()}</span>
+            <span className="pf-icon">
+              <Icon name={p.icon || "wallet"} size={12} />
+            </span>{" "}
+            {p.name}
           </button>
         ))}
         <button
@@ -371,30 +342,30 @@ export function PortfolioScreen({
             border: "1px dashed var(--line)",
             color: "var(--muted)",
           }}
-          onClick={() => setBucketSheet({ mode: "create" })}
+          onClick={openNewPortfolio}
         >
           <Icon name="plus" size={12} /> New
         </button>
-        {activePf && (
-          <button
-            style={{
-              background: "transparent",
-              border: "1px solid var(--line-soft)",
-              color: "var(--muted)",
-            }}
-            onClick={() => setBucketSheet({ mode: "edit", bucket: activePf })}
-            aria-label={`Edit ${activePf.name}`}
-          >
-            <Icon name="settings" size={12} /> Edit
-          </button>
-        )}
       </div>
 
       {activePf?.notes && <div className="pf-notes">{activePf.notes}</div>}
 
       <div className="hero-block">
-        <div className="hero-label">
-          {activePfId === "all" ? "Combined balance" : view.name} · {view.asOf.split(",")[0]}
+        <div className="hero-label" style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          <span>
+            {activePfId === "all" ? "Combined balance" : view.name} · {view.asOf.split(",")[0]}
+          </span>
+          {activePf && (
+            <button
+              type="button"
+              className="hero-edit-btn"
+              onClick={() => openEditPortfolio(activePf.id)}
+              aria-label={`Edit ${activePf.name}`}
+              title={`Edit ${activePf.name}`}
+            >
+              <Icon name="pencil" size={11} />
+            </button>
+          )}
         </div>
         <div className="hero-value">
           ฿{Math.floor(view.totalValue).toLocaleString("en-US")}
@@ -932,16 +903,6 @@ export function PortfolioScreen({
           ⓘ Educational analysis only. Not personalised financial advice.
         </div>
       </div>
-
-      <BucketSheet
-        open={!!bucketSheet}
-        initial={bucketSheet?.mode === "edit" ? portfolioToFormValues(bucketSheet.bucket) : null}
-        onClose={() => setBucketSheet(null)}
-        onSave={saveBucket}
-        onDelete={
-          bucketSheet?.mode === "edit" ? () => deleteBucket(bucketSheet.bucket.id) : undefined
-        }
-      />
 
       <HoldingSheet
         open={!!holdingSheet}

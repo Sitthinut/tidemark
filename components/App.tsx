@@ -2,8 +2,15 @@
 
 import { useEffect, useState } from "react";
 import { type AddedHolding, AddHoldingsSheet } from "@/components/AddHoldingsSheet";
-import { type AppId, BucketsPanel, ChatPanel, NotesPanel, PlanPanel } from "@/components/AppPanels";
+import {
+  type AppId,
+  ChatPanel,
+  NotesPanel,
+  PlanPanel,
+  PortfoliosPanel,
+} from "@/components/AppPanels";
 import { Icon } from "@/components/Icon";
+import { type PortfolioFormValues, PortfolioSheet } from "@/components/PortfolioSheet";
 import { ChatScreen } from "@/components/screens/ChatScreen";
 import { ConnectScreen } from "@/components/screens/ConnectScreen";
 import { JournalScreen } from "@/components/screens/JournalScreen";
@@ -11,11 +18,22 @@ import { MarketsScreen } from "@/components/screens/MarketsScreen";
 import { ModelPortfoliosScreen } from "@/components/screens/ModelPortfoliosScreen";
 import { PortfolioScreen } from "@/components/screens/PortfolioScreen";
 import { SettingsScreen, type Theme } from "@/components/screens/SettingsScreen";
-import { useSelectedModelId } from "@/lib/fetchers/legacy";
+import { usePortfolioView, useSelectedModelId } from "@/lib/fetchers/legacy";
 import { usePlan } from "@/lib/fetchers/portfolio";
 import { invalidate } from "@/lib/fetchers/swr";
+import type { Portfolio } from "@/lib/mock/types";
 import { useScrollHide } from "@/lib/useScrollHide";
 import { useViewport } from "@/lib/useViewport";
+
+function portfolioToFormValues(p: Portfolio): PortfolioFormValues {
+  return {
+    id: p.id,
+    name: p.name,
+    icon: p.icon || "wallet",
+    color: p.color || "var(--accent)",
+    notes: p.notes || "",
+  };
+}
 
 type Screen = "connect" | "portfolio" | "markets" | "chat" | "journal" | "models" | "settings";
 
@@ -35,7 +53,7 @@ const WIDE_NAV: { id: Screen; icon: string; label: string }[] = [
 
 const APPS_RAIL: { id: AppId; icon: string; label: string }[] = [
   { id: "chat", icon: "chat", label: "Chat" },
-  { id: "buckets", icon: "chart", label: "Buckets" },
+  { id: "portfolios", icon: "chart", label: "Portfolios" },
   { id: "plan", icon: "insight", label: "Plan" },
   { id: "notes", icon: "book", label: "Notes" },
 ];
@@ -69,6 +87,14 @@ export function App() {
   const [activeApp, setActiveApp] = useState<AppId | null>("chat");
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
 
+  // PortfolioSheet lives at the App level so it survives the mobile↔wide
+  // layout swap (which remounts everything below App). Without this lift,
+  // an open edit dialog disappears the moment the viewport crosses 700px.
+  const [portfolioSheet, setPortfolioSheet] = useState<
+    { mode: "create" } | { mode: "edit"; portfolio: Portfolio } | null
+  >(null);
+  const { portfolios } = usePortfolioView();
+
   useEffect(() => {
     document.documentElement.setAttribute("data-theme", theme);
     try {
@@ -86,6 +112,58 @@ export function App() {
       setActiveApp("chat");
     }
   }, [isWide, screen]);
+
+  // Portfolio sheet event wiring: PortfolioScreen and PortfoliosPanel both
+  // dispatch these. App owns the sheet so it persists across viewport swaps.
+  useEffect(() => {
+    const onNew = () => setPortfolioSheet({ mode: "create" });
+    const onEdit = (e: Event) => {
+      const id = (e as CustomEvent<string>).detail;
+      const found = portfolios?.find((p) => p.id === id);
+      if (found) setPortfolioSheet({ mode: "edit", portfolio: found });
+    };
+    window.addEventListener("new-portfolio", onNew);
+    window.addEventListener("edit-portfolio", onEdit);
+    return () => {
+      window.removeEventListener("new-portfolio", onNew);
+      window.removeEventListener("edit-portfolio", onEdit);
+    };
+  }, [portfolios]);
+
+  async function savePortfolio(values: PortfolioFormValues) {
+    const isEdit = portfolioSheet?.mode === "edit";
+    if (isEdit) {
+      const res = await fetch(`/api/buckets/${encodeURIComponent(values.id)}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          name: values.name,
+          icon: values.icon,
+          color: values.color,
+          notes: values.notes,
+        }),
+      });
+      if (!res.ok) throw new Error(`Update failed (${res.status})`);
+    } else {
+      const res = await fetch("/api/buckets", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(values),
+      });
+      if (!res.ok) throw new Error(`Create failed (${res.status})`);
+    }
+    invalidate("/api/buckets");
+  }
+
+  async function deletePortfolio(id: string) {
+    const res = await fetch(`/api/buckets/${encodeURIComponent(id)}`, { method: "DELETE" });
+    if (!res.ok) throw new Error(`Delete failed (${res.status})`);
+    invalidate("/api/buckets");
+    invalidate(/^\/api\/holdings/);
+    // Tell PortfolioScreen to reset its active selection if it was viewing
+    // the deleted portfolio.
+    window.dispatchEvent(new CustomEvent("activate-portfolio", { detail: "all" }));
+  }
 
   // Cross-screen events
   useEffect(() => {
@@ -190,34 +268,56 @@ export function App() {
     return null;
   };
 
+  // Modals rendered outside the layout swap so they survive mobile↔wide.
+  const sharedModals = (
+    <>
+      <PortfolioSheet
+        open={!!portfolioSheet}
+        initial={
+          portfolioSheet?.mode === "edit" ? portfolioToFormValues(portfolioSheet.portfolio) : null
+        }
+        onClose={() => setPortfolioSheet(null)}
+        onSave={savePortfolio}
+        onDelete={
+          portfolioSheet?.mode === "edit"
+            ? () => deletePortfolio(portfolioSheet.portfolio.id)
+            : undefined
+        }
+      />
+      <AddHoldingsSheet
+        open={importOpen}
+        onClose={() => setImportOpen(false)}
+        onAdd={(rows) => setExtraHoldings((prev) => [...prev, ...rows])}
+      />
+    </>
+  );
+
   // ===== MOBILE SHELL (unchanged behaviour from original) =====
   if (!isWide) {
     const hideNav = screen === "connect" || screen === "settings" || screen === "models";
     return (
-      <div className="app-root">
-        <div className="app-frame" data-screen-label={screen}>
-          {renderScreen()}
-          {!hideNav && (
-            <nav className="bottom-nav">
-              {MOBILE_NAV.map((item) => (
-                <button
-                  key={item.id}
-                  data-active={screen === item.id}
-                  onClick={() => setScreen(item.id)}
-                >
-                  <Icon name={item.icon} size={17} />
-                  <span>{item.label}</span>
-                </button>
-              ))}
-            </nav>
-          )}
+      <>
+        <div className="app-root">
+          <div className="app-frame" data-screen-label={screen}>
+            {renderScreen()}
+            {!hideNav && (
+              <nav className="bottom-nav">
+                {MOBILE_NAV.map((item) => (
+                  <button
+                    key={item.id}
+                    data-active={screen === item.id}
+                    onClick={() => setScreen(item.id)}
+                  >
+                    <Icon name={item.icon} size={17} />
+                    <span>{item.label}</span>
+                  </button>
+                ))}
+              </nav>
+            )}
+          </div>
         </div>
-        <AddHoldingsSheet
-          open={importOpen}
-          onClose={() => setImportOpen(false)}
-          onAdd={(rows) => setExtraHoldings((prev) => [...prev, ...rows])}
-        />
-      </div>
+        {sharedModals}
+      </>
     );
   }
 
@@ -225,128 +325,128 @@ export function App() {
   // Onboarding and full-screen modal-ish routes still render solo.
   if (screen === "connect") {
     return (
-      <div className="app-root">
-        <div className="app-frame" data-screen-label={screen} style={{ maxWidth: 520 }}>
-          {renderScreen()}
+      <>
+        <div className="app-root">
+          <div className="app-frame" data-screen-label={screen} style={{ maxWidth: 520 }}>
+            {renderScreen()}
+          </div>
         </div>
-      </div>
+        {sharedModals}
+      </>
     );
   }
 
   return (
-    <div
-      className={`ra-shell ${viewport} ${activeApp ? "panel-open" : "panel-closed"}`}
-      data-screen-label={screen}
-    >
-      {/* ===== Left nav rail ===== */}
-      <aside className="ra-rail">
-        <nav className="ra-rail-nav">
-          {WIDE_NAV.map((item) => (
+    <>
+      <div
+        className={`ra-shell ${viewport} ${activeApp ? "panel-open" : "panel-closed"}`}
+        data-screen-label={screen}
+      >
+        {/* ===== Left nav rail ===== */}
+        <aside className="ra-rail">
+          <nav className="ra-rail-nav">
+            {WIDE_NAV.map((item) => (
+              <button
+                key={item.id}
+                className="ra-rail-item"
+                data-active={screen === item.id}
+                onClick={() => setScreen(item.id)}
+                aria-label={item.label}
+              >
+                <Icon name={item.icon} size={18} />
+                <span className="ra-rail-item-label">{item.label}</span>
+              </button>
+            ))}
+          </nav>
+          <div className="ra-rail-foot">
             <button
-              key={item.id}
-              className="ra-rail-item"
-              data-active={screen === item.id}
-              onClick={() => setScreen(item.id)}
-              aria-label={item.label}
+              className="ra-rail-avatar-btn"
+              onClick={() => setAccountMenuOpen((o) => !o)}
+              aria-label="Account"
             >
-              <Icon name={item.icon} size={18} />
-              <span className="ra-rail-item-label">{item.label}</span>
+              <span className="ra-rail-avatar">DU</span>
+              {isDesktop && (
+                <div className="ra-rail-acct-text">
+                  <div className="ra-rail-acct-name">Demo user</div>
+                  <div className="ra-rail-acct-sub">Live · Demo Broker</div>
+                </div>
+              )}
             </button>
-          ))}
-        </nav>
-        <div className="ra-rail-foot">
-          <button
-            className="ra-rail-avatar-btn"
-            onClick={() => setAccountMenuOpen((o) => !o)}
-            aria-label="Account"
-          >
-            <span className="ra-rail-avatar">PN</span>
-            {isDesktop && (
-              <div className="ra-rail-acct-text">
-                <div className="ra-rail-acct-name">Pim N.</div>
-                <div className="ra-rail-acct-sub">Live · Demo Broker</div>
+            {accountMenuOpen && (
+              <div className="ra-account-menu" onMouseLeave={() => setAccountMenuOpen(false)}>
+                <button
+                  onClick={() => {
+                    setAccountMenuOpen(false);
+                    setScreen("settings");
+                  }}
+                >
+                  <Icon name="settings" size={14} /> Settings
+                </button>
+                <button
+                  onClick={() => {
+                    setAccountMenuOpen(false);
+                    setScreen("models");
+                  }}
+                >
+                  <Icon name="insight" size={14} /> Templates
+                </button>
+                <button onClick={() => setAccountMenuOpen(false)}>
+                  <Icon name="user" size={14} /> Account
+                </button>
+                <hr />
+                <button
+                  onClick={() => {
+                    setAccountMenuOpen(false);
+                    setScreen("connect");
+                  }}
+                >
+                  <Icon name="refresh" size={14} /> Sign out
+                </button>
               </div>
             )}
-          </button>
-          {accountMenuOpen && (
-            <div className="ra-account-menu" onMouseLeave={() => setAccountMenuOpen(false)}>
-              <button
-                onClick={() => {
-                  setAccountMenuOpen(false);
-                  setScreen("settings");
-                }}
-              >
-                <Icon name="settings" size={14} /> Settings
-              </button>
-              <button
-                onClick={() => {
-                  setAccountMenuOpen(false);
-                  setScreen("models");
-                }}
-              >
-                <Icon name="insight" size={14} /> Model portfolios
-              </button>
-              <button onClick={() => setAccountMenuOpen(false)}>
-                <Icon name="user" size={14} /> Account
-              </button>
-              <hr />
-              <button
-                onClick={() => {
-                  setAccountMenuOpen(false);
-                  setScreen("connect");
-                }}
-              >
-                <Icon name="refresh" size={14} /> Sign out
-              </button>
-            </div>
-          )}
-        </div>
-      </aside>
+          </div>
+        </aside>
 
-      {/* ===== Main content ===== */}
-      <main className="ra-main">
-        <div className="ra-main-inner" data-screen-label={screen}>
-          {renderScreen()}
-        </div>
-      </main>
+        {/* ===== Main content ===== */}
+        <main className="ra-main">
+          <div className="ra-main-inner" data-screen-label={screen}>
+            {renderScreen()}
+          </div>
+        </main>
 
-      {/* ===== Apps panel ===== */}
-      {activeApp && (
-        <section className="ra-panel">
-          {activeApp === "chat" && (
-            <ChatPanel
-              seedPrompt={pendingPrompt}
-              onPromptConsumed={() => setPendingPrompt(null)}
-              onClose={() => setActiveApp(null)}
-            />
-          )}
-          {activeApp === "buckets" && <BucketsPanel onClose={() => setActiveApp(null)} />}
-          {activeApp === "plan" && <PlanPanel onClose={() => setActiveApp(null)} />}
-          {activeApp === "notes" && <NotesPanel onClose={() => setActiveApp(null)} />}
-        </section>
-      )}
+        {/* ===== Apps panel ===== */}
+        {activeApp && (
+          <section className="ra-panel">
+            {activeApp === "chat" && (
+              <ChatPanel
+                seedPrompt={pendingPrompt}
+                onPromptConsumed={() => setPendingPrompt(null)}
+                onClose={() => setActiveApp(null)}
+              />
+            )}
+            {activeApp === "portfolios" && <PortfoliosPanel onClose={() => setActiveApp(null)} />}
+            {activeApp === "plan" && <PlanPanel onClose={() => setActiveApp(null)} />}
+            {activeApp === "notes" && <NotesPanel onClose={() => setActiveApp(null)} />}
+          </section>
+        )}
 
-      {/* ===== Right apps icon rail ===== */}
-      <aside className="ra-apps-rail">
-        {APPS_RAIL.map((a) => (
-          <button
-            key={a.id}
-            className="ra-apps-rail-btn"
-            data-active={activeApp === a.id}
-            onClick={() => setActiveApp(activeApp === a.id ? null : a.id)}
-            aria-label={a.label}
-          >
-            <Icon name={a.icon} size={18} />
-            <span className="ra-apps-rail-label">{a.label}</span>
-          </button>
-        ))}
-      </aside>
-
-      <AddHoldingsSheet
-        open={importOpen}
-        onClose={() => setImportOpen(false)}
-        onAdd={(rows) => setExtraHoldings((prev) => [...prev, ...rows])}
-      />
-    </div>
+        {/* ===== Right apps icon rail ===== */}
+        <aside className="ra-apps-rail">
+          {APPS_RAIL.map((a) => (
+            <button
+              key={a.id}
+              className="ra-apps-rail-btn"
+              data-active={activeApp === a.id}
+              onClick={() => setActiveApp(activeApp === a.id ? null : a.id)}
+              aria-label={a.label}
+            >
+              <Icon name={a.icon} size={18} />
+              <span className="ra-apps-rail-label">{a.label}</span>
+            </button>
+          ))}
+        </aside>
+      </div>
+      {sharedModals}
+    </>
   );
 }

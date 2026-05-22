@@ -63,7 +63,7 @@ export function ModelPortfoliosScreen({
       <div className="screen">
         <div className="topbar">
           <div className="brand" style={{ flex: 1 }}>
-            <span>Model portfolios</span>
+            <span>Templates</span>
           </div>
         </div>
         <div style={{ padding: 24, color: "var(--muted)" }}>Loading…</div>
@@ -89,7 +89,7 @@ export function ModelPortfoliosScreen({
           </svg>
         </button>
         <div className="brand" style={{ flex: 1 }}>
-          <span>Model portfolios</span>
+          <span>Templates</span>
         </div>
         <button
           className="icon-btn"
@@ -287,7 +287,7 @@ export function ModelPortfoliosScreen({
                 letterSpacing: "-0.01em",
               }}
             >
-              Add custom model
+              Add custom template
             </div>
             <div style={{ fontSize: 12, color: "var(--muted)" }}>
               From URL, image, text, or chat
@@ -691,7 +691,7 @@ function AddCustomModelSheet({
     window.dispatchEvent(
       new CustomEvent("ai-prompt", {
         detail:
-          "Help me design a custom model portfolio. Ask me a few questions about what I want and propose an allocation.",
+          "Help me design a custom portfolio allocation. Ask me a few questions about what I want and propose an allocation.",
       }),
     );
     onClose();
@@ -817,7 +817,7 @@ function AddCustomModelSheet({
               Back
             </button>
             <button className="btn primary" style={{ flex: 2 }} onClick={confirm}>
-              Save model <Icon name="check" size={13} />
+              Save template <Icon name="check" size={13} />
             </button>
           </div>
         </div>
@@ -829,7 +829,7 @@ function AddCustomModelSheet({
     <div className="sheet-overlay" onClick={onClose}>
       <div className="sheet" onClick={(e) => e.stopPropagation()}>
         <div className="sheet-handle"></div>
-        <div className="sheet-title">Add a custom model</div>
+        <div className="sheet-title">Add a custom template</div>
         <div className="sheet-subtitle">
           Bring any allocation from outside Tidemark. The AI parses, you confirm, and it&apos;s
           saved to your Journal.

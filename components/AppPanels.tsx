@@ -1,11 +1,12 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { Icon } from "@/components/Icon";
 import { ChatScreen } from "@/components/screens/ChatScreen";
 import { useJournalView, usePortfolioView } from "@/lib/fetchers/legacy";
 import { ANALYSIS } from "@/lib/mock/data";
 
-export type AppId = "chat" | "buckets" | "plan" | "notes";
+export type AppId = "chat" | "portfolios" | "plan" | "notes";
 
 interface PanelHeaderProps {
   title: string;
@@ -45,35 +46,76 @@ export function ChatPanel({
   );
 }
 
-export function BucketsPanel({ onClose }: { onClose: () => void }) {
+export function PortfoliosPanel({ onClose }: { onClose: () => void }) {
   const { portfolios, isLoading } = usePortfolioView();
   const fmt = (n: number) => `฿${Math.round(n).toLocaleString("en-US")}`;
+  // Track active portfolio id locally; PortfolioScreen broadcasts state when
+  // user navigates, so the sidebar stays in sync with whichever portfolio is
+  // currently being viewed.
+  const [activeId, setActiveId] = useState<string>("all");
+  useEffect(() => {
+    const onSync = (e: Event) => setActiveId((e as CustomEvent<string>).detail);
+    window.addEventListener("portfolio-active-changed", onSync);
+    // Ask PortfolioScreen to broadcast its current state on mount.
+    window.dispatchEvent(new CustomEvent("portfolio-active-request"));
+    return () => window.removeEventListener("portfolio-active-changed", onSync);
+  }, []);
+  const activate = (id: string) =>
+    window.dispatchEvent(new CustomEvent("activate-portfolio", { detail: id }));
+  const editPortfolio = (id: string) =>
+    window.dispatchEvent(new CustomEvent("edit-portfolio", { detail: id }));
+
   return (
     <>
-      <PanelHeader title="Buckets" onClose={onClose} />
+      <PanelHeader title="Portfolios" onClose={onClose} />
       <div className="ra-panel-body" style={{ padding: "10px 14px 14px" }}>
         {isLoading || !portfolios ? (
           <div style={{ padding: 12, color: "var(--muted)", fontSize: 12.5 }}>Loading…</div>
         ) : portfolios.length === 0 ? (
-          <div style={{ padding: 12, color: "var(--muted)", fontSize: 12.5 }}>No buckets yet.</div>
+          <div style={{ padding: 12, color: "var(--muted)", fontSize: 12.5 }}>
+            No portfolios yet.
+          </div>
         ) : (
           portfolios.map((p) => (
-            <div className="ra-bucket-card" key={p.id}>
-              <span className="ra-bucket-icon">{p.icon}</span>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div className="ra-bucket-name">{p.name}</div>
-                <div className="ra-bucket-sub">{p.typeLabel}</div>
-              </div>
-              <div style={{ textAlign: "right" }}>
-                <div className="num" style={{ fontSize: 12.5 }}>
-                  {fmt(p.totalValue)}
+            <div className="ra-bucket-row" key={p.id} data-active={activeId === p.id}>
+              <button
+                type="button"
+                className="ra-bucket-card ra-bucket-card-btn"
+                onClick={() => activate(p.id)}
+                aria-label={`Open ${p.name}`}
+                aria-current={activeId === p.id ? "true" : undefined}
+              >
+                <span className="ra-bucket-icon">
+                  <Icon name={p.icon || "wallet"} size={14} />
+                </span>
+                <div style={{ flex: 1, minWidth: 0, textAlign: "left" }}>
+                  <div className="ra-bucket-name">{p.name}</div>
+                  <div className="ra-bucket-sub">{p.holdings.length} holdings</div>
                 </div>
-                <div className="delta up num">+{p.perfPct.ytd.toFixed(1)}% YTD</div>
-              </div>
+                <div style={{ textAlign: "right" }}>
+                  <div className="num" style={{ fontSize: 12.5 }}>
+                    {fmt(p.totalValue)}
+                  </div>
+                  <div className="delta up num">+{p.perfPct.ytd.toFixed(1)}% YTD</div>
+                </div>
+              </button>
+              <button
+                type="button"
+                className="ra-bucket-edit"
+                onClick={() => editPortfolio(p.id)}
+                aria-label={`Edit ${p.name}`}
+                title={`Edit ${p.name}`}
+              >
+                <Icon name="pencil" size={12} />
+              </button>
             </div>
           ))
         )}
-        <button className="btn ghost sm" style={{ width: "100%", marginTop: 10, display: "flex" }}>
+        <button
+          className="btn ghost sm"
+          style={{ width: "100%", marginTop: 10, display: "flex" }}
+          onClick={() => window.dispatchEvent(new CustomEvent("new-portfolio"))}
+        >
           <Icon name="plus" size={12} /> New portfolio
         </button>
       </div>

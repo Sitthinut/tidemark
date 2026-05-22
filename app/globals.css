@@ -263,7 +263,8 @@ body[data-topbar-hidden="true"] .ra-main .portfolio-switch {
   border: 1px solid var(--line-soft);
   flex-shrink: 0;
 }
-.topbar .icon-btn {
+/* Base icon-only button — used in topbars, panel headers, sheet titles, etc. */
+.icon-btn {
   width: 28px;
   height: 28px;
   border-radius: 8px;
@@ -274,9 +275,19 @@ body[data-topbar-hidden="true"] .ra-main .portfolio-switch {
   place-items: center;
   cursor: pointer;
   padding: 0;
+  flex-shrink: 0;
+  transition:
+    background 0.12s,
+    border-color 0.12s,
+    color 0.12s;
 }
-.topbar .icon-btn:hover {
+.icon-btn:hover {
   background: var(--card-soft);
+  color: var(--ink);
+}
+.icon-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 .topbar .avatar {
   width: 28px;
@@ -416,17 +427,18 @@ body[data-topbar-hidden="true"] .ra-main .portfolio-switch {
   display: flex;
   gap: 4px;
   /* Symmetric padding (8 top / 8 bottom) — buttons sit centered in the bar
-     with breathing room above and below. Margin-bottom adds extra space
-     between the sticky bar and the content feed below. */
-  padding: 8px 16px 8px;
+     with breathing room above and below. */
+  padding: 8px 16px;
+  scroll-padding-right: 16px;
   margin-bottom: 8px;
+  /* Negative margin-top so natural rest position matches sticky top: no
+     2px jump between scrollTop=0 and scrollTop>=2 when sticky engages. */
+  margin-top: -2px;
   overflow-x: auto;
   scrollbar-width: none;
   position: sticky;
   /* `48px` (= topbar 50 - 2) creates a 2px overlap with the topbar's bottom
-     edge. The topbar has a higher z-index so the overlap is invisible at
-     rest. During the scroll-hide transition both elements transform by the
-     same amount, so the overlap persists — no sub-pixel seam can appear. */
+     edge. Topbar has higher z-index so the overlap is hidden at rest. */
   top: calc(48px + var(--demo-banner-h, 0px));
   z-index: 20;
   background: var(--bg);
@@ -505,16 +517,20 @@ body[data-topbar-hidden="true"] .ra-main .portfolio-switch {
   border-color: transparent;
 }
 
-/* Modal sheet (Import holdings, Read URL, etc.) */
+/* Responsive dialog (Material 3-inspired)
+ * Desktop/tablet (≥600px): centered basic dialog, 560px max, 28px radius, scale-in.
+ * Mobile (<600px):          full-screen edge-to-edge, slides up.
+ */
 .sheet-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.4);
+  background: rgba(0, 0, 0, 0.32);
   z-index: 100;
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   justify-content: center;
-  animation: fadeIn 0.18s ease-out;
+  padding: 24px;
+  animation: fadeIn 0.2s ease-out;
 }
 [data-theme="dark"] .sheet-overlay {
   background: rgba(0, 0, 0, 0.6);
@@ -529,14 +545,38 @@ body[data-topbar-hidden="true"] .ra-main .portfolio-switch {
 }
 .sheet {
   width: 100%;
-  max-width: 440px;
+  max-width: 560px;
   background: var(--paper);
-  border-top-left-radius: 22px;
-  border-top-right-radius: 22px;
-  padding: 12px 18px 28px;
-  max-height: 85vh;
+  border-radius: 28px;
+  padding: 24px;
+  max-height: calc(100vh - 48px);
   overflow-y: auto;
-  animation: slideUp 0.22s ease-out;
+  animation: dialogIn 0.25s cubic-bezier(0.2, 0, 0, 1);
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.18);
+}
+@keyframes dialogIn {
+  from {
+    opacity: 0;
+    transform: scale(0.94);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+@media (max-width: 599px) {
+  .sheet-overlay {
+    align-items: stretch;
+    padding: 0;
+  }
+  .sheet {
+    max-width: 100%;
+    max-height: 100dvh;
+    border-radius: 0;
+    padding: 16px 18px 28px;
+    box-shadow: none;
+    animation: slideUp 0.22s ease-out;
+  }
 }
 @keyframes slideUp {
   from {
@@ -546,12 +586,14 @@ body[data-topbar-hidden="true"] .ra-main .portfolio-switch {
     transform: translateY(0);
   }
 }
+@media (prefers-reduced-motion: reduce) {
+  .sheet-overlay,
+  .sheet {
+    animation: none;
+  }
+}
 .sheet-handle {
-  width: 36px;
-  height: 4px;
-  background: var(--line);
-  border-radius: 2px;
-  margin: 0 auto 16px;
+  display: none;
 }
 .sheet-title {
   font-size: 18px;
@@ -592,21 +634,96 @@ body[data-topbar-hidden="true"] .ra-main .portfolio-switch {
   box-shadow: var(--chip-shadow);
 }
 
-textarea.sheet-input {
+/* Unified sheet input styling so <input> and <textarea> match. */
+.sheet-input {
   width: 100%;
   background: var(--card-soft);
   border: 1px solid var(--line-soft);
   border-radius: 12px;
-  padding: 12px 14px;
+  padding: 10px 14px;
+  font-family: var(--font-sans);
+  font-size: 13.5px;
+  letter-spacing: -0.005em;
+  color: var(--ink);
+  outline: none;
+  appearance: none;
+  -webkit-appearance: none;
+  transition:
+    border-color 0.15s,
+    background 0.15s;
+}
+.sheet-input::placeholder {
+  color: var(--muted);
+  opacity: 0.7;
+}
+.sheet-input:focus,
+.sheet-input:focus-visible {
+  border-color: var(--accent);
+  background: var(--paper);
+}
+textarea.sheet-input {
   font-family: var(--font-mono);
   font-size: 12.5px;
-  color: var(--ink);
+  padding: 12px 14px;
   resize: vertical;
-  min-height: 110px;
-  outline: none;
+  min-height: 60px;
 }
-textarea.sheet-input:focus {
+/* Search-style inputs: strip browser default decorations (clear button etc.) */
+.sheet-input::-webkit-search-decoration,
+.sheet-input::-webkit-search-cancel-button,
+.sheet-input::-webkit-search-results-button,
+.sheet-input::-webkit-search-results-decoration {
+  display: none;
+}
+
+/* Icon picker grid (Portfolio sheet). Fixed 6-column layout reads consistently
+   across mobile and desktop — same visual rhythm whether the dialog is 100vw
+   or 560px. */
+.icon-grid {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 6px;
+}
+.icon-grid button {
+  /* Fixed-height cells (instead of 1:1 aspect-ratio) so wide dialogs don't
+     stretch cells tall and leave the icon floating in empty space. */
+  height: 44px;
+  border-radius: 10px;
+  border: 1px solid var(--line-soft);
+  background: var(--paper);
+  color: var(--ink-soft);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition:
+    border-color 0.12s,
+    background 0.12s,
+    color 0.12s;
+}
+.icon-grid button:hover {
+  border-color: var(--line);
+  background: var(--card-soft);
+}
+.icon-grid button[data-selected="true"] {
   border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent-ink);
+}
+.icon-grid .icon-grid-empty {
+  grid-column: 1 / -1;
+  padding: 14px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 12.5px;
+}
+
+/* Sheet actions: divider + breathing room so buttons don't crowd the last
+   helper text in the form body. */
+.sheet-actions {
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line-soft);
 }
 
 /* Drop zone */
@@ -906,6 +1023,24 @@ textarea.sheet-input:focus {
   letter-spacing: 0.02em;
   margin-bottom: 4px;
   font-weight: 400;
+}
+.hero-edit-btn {
+  background: transparent;
+  border: 0;
+  color: var(--muted);
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  opacity: 0.6;
+  transition:
+    opacity 0.15s,
+    background 0.15s;
+}
+.hero-edit-btn:hover {
+  opacity: 1;
+  background: var(--card-soft);
 }
 .hero-value {
   font-size: 36px;
@@ -1425,11 +1560,10 @@ textarea.sheet-input:focus {
 .portfolio-switch {
   display: flex;
   gap: 4px;
-  /* Match .sub-tabs symmetric padding + margin + overlap so the visual
-     rhythm is consistent across Portfolio / Markets / Journal. The 2px
-     overlap with topbar prevents any sub-pixel gap during scroll-hide. */
-  padding: 8px 16px 8px;
+  padding: 8px 16px;
+  scroll-padding-right: 16px;
   margin-bottom: 8px;
+  margin-top: -2px;
   overflow-x: auto;
   scrollbar-width: none;
   position: sticky;
@@ -1507,20 +1641,27 @@ textarea.sheet-input:focus {
   flex-shrink: 0;
 }
 
-/* Chart-card carousel (Portfolio extra charts) */
+/* Chart-card carousel (Portfolio extra charts).
+   Responsive card width: peek-style on mobile (~1 card visible), 2 cards mid,
+   3 cards wide. Cards visually scroll past the row's left/right edges — the
+   responsive width + the natural "peek" of the next card both signal that
+   the strip is horizontally scrollable. */
 .chart-row {
   display: flex;
   gap: 8px;
   padding: 0 16px 4px;
+  scroll-padding-left: 16px;
+  scroll-padding-right: 16px;
   overflow-x: auto;
   scrollbar-width: none;
-  scroll-snap-type: x mandatory;
+  scroll-snap-type: x proximity;
 }
 .chart-row::-webkit-scrollbar {
   display: none;
 }
 .chart-row .chart-card {
-  flex: 0 0 78%;
+  /* Responsive width: 1.2 cards on narrow (peek next), 2 cards mid, 3 cards wide. */
+  flex: 0 0 calc(85% - 8px);
   scroll-snap-align: start;
   background: var(--paper);
   border: 1px solid var(--line-soft);
@@ -1528,6 +1669,16 @@ textarea.sheet-input:focus {
   padding: 12px 14px;
   display: flex;
   flex-direction: column;
+}
+@media (min-width: 640px) {
+  .chart-row .chart-card {
+    flex: 0 0 calc(50% - 12px);
+  }
+}
+@media (min-width: 960px) {
+  .chart-row .chart-card {
+    flex: 0 0 calc(33.333% - 14px);
+  }
 }
 .chart-row .chart-card .h {
   font-size: 10px;
@@ -1908,7 +2059,7 @@ textarea.sheet-input:focus {
   margin: 6px 12px 14px;
 }
 
-/* Buckets panel */
+/* Portfolios panel */
 .ra-bucket-card {
   display: flex;
   align-items: center;
@@ -1923,6 +2074,53 @@ textarea.sheet-input:focus {
 .ra-bucket-card:hover {
   border-color: var(--line);
   background: var(--card-soft);
+}
+/* Variant when rendered as a <button> so it doesn't inherit OS defaults. */
+.ra-bucket-card-btn {
+  width: 100%;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+}
+/* Row wrapper: card + pencil button side-by-side, sharing the visual selection. */
+.ra-bucket-row {
+  display: flex;
+  align-items: stretch;
+  gap: 4px;
+  margin-bottom: 6px;
+}
+.ra-bucket-row .ra-bucket-card {
+  flex: 1;
+  margin-bottom: 0;
+}
+.ra-bucket-row[data-active="true"] .ra-bucket-card {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+.ra-bucket-row[data-active="true"] .ra-bucket-icon {
+  background: var(--accent);
+  color: var(--bg);
+}
+.ra-bucket-edit {
+  flex-shrink: 0;
+  background: transparent;
+  border: 1px solid var(--line-soft);
+  border-radius: 10px;
+  color: var(--muted);
+  cursor: pointer;
+  padding: 0 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition:
+    background 0.12s,
+    color 0.12s,
+    border-color 0.12s;
+}
+.ra-bucket-edit:hover {
+  background: var(--card-soft);
+  color: var(--ink);
+  border-color: var(--line);
 }
 .ra-bucket-icon {
   width: 30px;

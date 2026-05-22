@@ -58,7 +58,7 @@ export function DemoBanner() {
         textAlign: "center",
       }}
     >
-      <span>◐ Demo mode — your changes live in this browser session only.</span>
+      <span style={{ minWidth: 0 }}>Demo mode — your changes won't be saved.</span>
       <button
         type="button"
         onClick={exit}
@@ -72,6 +72,8 @@ export function DemoBanner() {
           fontSize: 11,
           fontWeight: 500,
           cursor: "pointer",
+          flexShrink: 0,
+          whiteSpace: "nowrap",
         }}
       >
         {exiting ? "Exiting…" : "Exit demo"}

@@ -369,7 +369,7 @@ export function ChatScreen({ persona = "advisor", seedPrompt, onPromptConsumed }
             ● INDEX TEACHER
           </span>
         </div>
-        <div className="avatar">PN</div>
+        <div className="avatar">DU</div>
       </div>
 
       <div

@@ -27,7 +27,7 @@ export function JournalScreen({ onOpenChat, onOpenModels, onOpenSettings }: Jour
       <div className="topbar">
         <div className="brand" style={{ flex: 1 }}>
           <span>Journal</span>
-          <span className="brand-chip">PICHANON N.</span>
+          <span className="brand-chip">DEMO USER</span>
         </div>
         <button className="icon-btn" aria-label="Settings" onClick={onOpenSettings}>
           <Icon name="settings" size={13} />
@@ -39,7 +39,7 @@ export function JournalScreen({ onOpenChat, onOpenModels, onOpenSettings }: Jour
           [
             { id: "plan", label: "Plan" },
             { id: "notes", label: "Notes" },
-            { id: "models", label: "Models" },
+            { id: "models", label: "Templates" },
             { id: "reading", label: "Reading" },
             { id: "feedback", label: "Feedback" },
           ] as { id: Tab; label: string }[]
@@ -717,12 +717,12 @@ function JournalModels({ saved, onOpenModels }: { saved: string[]; onOpenModels:
     return (
       <div>
         <EmptyTab
-          title="No saved models"
-          body="Pin index strategies from Models to track them here. The advisor can suggest models when you ask 'what should I hold?'"
+          title="No saved templates"
+          body="Pin index strategies from Templates to track them here. The advisor can suggest one when you ask 'what should I hold?'"
         />
         <div className="section" style={{ textAlign: "center" }}>
           <button className="btn ghost sm" onClick={onOpenModels}>
-            Browse model portfolios →
+            Browse templates →
           </button>
         </div>
       </div>
@@ -790,7 +790,7 @@ function JournalModels({ saved, onOpenModels }: { saved: string[]; onOpenModels:
           </div>
         ))}
         <button className="btn ghost full" onClick={onOpenModels} style={{ marginTop: 8 }}>
-          Browse all {all.length} model portfolios →
+          Browse all {all.length} templates →
         </button>
       </div>
     </div>

@@ -106,7 +106,7 @@ export function AddHoldingsSheet({ open, onClose, onAdd }: AddHoldingsSheetProps
 
   const submit = async () => {
     if (!bucketId) {
-      setSubmitError("Pick a bucket first");
+      setSubmitError("Pick a portfolio first");
       return;
     }
     let toAdd: ExtractedHolding[] = [];
@@ -222,7 +222,7 @@ export function AddHoldingsSheet({ open, onClose, onAdd }: AddHoldingsSheetProps
                 display: "block",
               }}
             >
-              BUCKET
+              PORTFOLIO
             </label>
             <select
               value={bucketId}
@@ -240,7 +240,7 @@ export function AddHoldingsSheet({ open, onClose, onAdd }: AddHoldingsSheetProps
               }}
             >
               {!buckets || buckets.length === 0 ? (
-                <option value="">No buckets yet</option>
+                <option value="">No portfolios yet</option>
               ) : (
                 buckets.map((b) => (
                   <option key={b.id} value={b.id}>
@@ -331,6 +331,8 @@ export function AddHoldingsSheet({ open, onClose, onAdd }: AddHoldingsSheetProps
               }
               value={pasteText}
               onChange={(e) => setPasteText(e.target.value)}
+              rows={5}
+              style={{ minHeight: 120 }}
             />
             <div
               style={{

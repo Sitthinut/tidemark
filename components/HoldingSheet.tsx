@@ -78,7 +78,7 @@ export function HoldingSheet({
       return;
     }
     if (!values.bucketId) {
-      setError("Bucket is required");
+      setError("Portfolio is required");
       return;
     }
     if (!Number.isFinite(values.units) || values.units <= 0) {
@@ -99,7 +99,7 @@ export function HoldingSheet({
 
   const handleDelete = async () => {
     if (!onDelete) return;
-    const ok = window.confirm(`Delete ${values.ticker} from this bucket?`);
+    const ok = window.confirm(`Delete ${values.ticker} from this portfolio?`);
     if (!ok) return;
     setSubmitting(true);
     try {
@@ -118,7 +118,7 @@ export function HoldingSheet({
         <div className="sheet-title">{isEdit ? "Edit holding" : "Add holding"}</div>
         <div className="sheet-subtitle">
           {isEdit
-            ? "Update units, cost basis, or move to another bucket."
+            ? "Update units, cost basis, or move to another portfolio."
             : "Add a single fund position. Use the import sheet for multiple at once."}
         </div>
 
@@ -153,7 +153,7 @@ export function HoldingSheet({
           </FormRow>
 
           {bucketOptions && bucketOptions.length > 0 && (
-            <FormRow label="Bucket">
+            <FormRow label="Portfolio">
               <select
                 className="sheet-input"
                 value={values.bucketId}
