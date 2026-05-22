@@ -1,5 +1,13 @@
 // Seed mock data into a fresh demo SQLite. Mirrors lib/mock/seed.ts but runs
 // against an in-memory DB passed in (no path resolution, no migrations).
+//
+// To make the PortfolioScreen PerfChart render immediately (instead of
+// serial-fetching ~180 days of NAVs from the Thai SEC API on first paint),
+// this seed also writes ~180 days of synthetic-but-realistic daily NAVs to
+// `nav_history`, plus a current-day row to `fund_quotes`. Both tables use
+// the combined `${quoteSource}:${ticker}` cache key — same format produced
+// by lib/market/cache.ts so the live refresh path treats this as a warm
+// cache.
 
 import type { drizzle } from "drizzle-orm/better-sqlite3";
 import type * as schema from "../db/schema";
@@ -9,12 +17,26 @@ import {
   holdings,
   journalEntries,
   modelPortfolios,
+  navHistory,
   plans,
 } from "../db/schema";
 import { MODEL_PORTFOLIOS, PORTFOLIOS, USER_GOALS, USER_JOURNAL, USER_PLAN } from "./data";
 
 type Db = ReturnType<typeof drizzle<typeof schema>>;
 const REFERENCE_TODAY = new Date("2026-05-21T00:00:00Z");
+
+// All demo seed holdings are Thai mutual funds, per the existing seed.
+// Kept as a constant so the combined cache key matches what the live
+// refresh path will produce when it later calls cache.ts.
+const DEMO_QUOTE_SOURCE = "thai_mutual_fund" as const;
+
+// ~180 calendar days ≈ 128 business days. The walk is a log-space Brownian
+// bridge between a start anchored near avg_cost and an end pinned at the
+// holding's "current" NAV — so fund_quotes (current) and nav_history (last
+// row) always agree, and the curve has a sensible direction. Daily σ ≈ 1%
+// keeps the wiggle realistic without producing big jumps.
+const HISTORY_DAYS = 180;
+const DAILY_SIGMA = 0.01;
 
 function parseRelativeDate(text: string, today = REFERENCE_TODAY): string {
   const rel = text.match(/^(\d+)\s+(day|days|week|weeks|month|months)\s+ago$/i);
@@ -32,6 +54,135 @@ function parseRelativeDate(text: string, today = REFERENCE_TODAY): string {
     if (!Number.isNaN(parsed.getTime())) return parsed.toISOString();
   }
   return today.toISOString();
+}
+
+// Stable 32-bit FNV-1a hash so re-seeds with the same ticker produce the
+// same synthetic series across processes. Mulberry32 PRNG keeps each
+// step cheap and deterministic.
+function fnv1a(text: string): number {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < text.length; i++) {
+    h ^= text.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  return h >>> 0;
+}
+
+function mulberry32(seed: number): () => number {
+  let s = seed >>> 0;
+  return () => {
+    s = (s + 0x6d2b79f5) >>> 0;
+    let t = s;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+// Box-Muller — turn two uniforms into one standard normal.
+function gauss(rand: () => number): number {
+  const u1 = Math.max(rand(), Number.EPSILON);
+  const u2 = rand();
+  return Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
+}
+
+function yyyyMmDd(d: Date): string {
+  return d.toISOString().slice(0, 10);
+}
+
+function isWeekend(d: Date): boolean {
+  const day = d.getUTCDay();
+  return day === 0 || day === 6;
+}
+
+/**
+ * Generate ~HISTORY_DAYS calendar days of synthetic daily NAVs ending on
+ * `endDate`, skipping weekends.
+ *
+ * Implemented as a log-space Brownian bridge between a chosen `baseStart`
+ * (anchored to avg_cost when available, so the chart starts near the
+ * holding's purchase price) and `targetNav` (the "current" value the
+ * holdings table reports). Noise wanders freely in the middle but both
+ * endpoints are pinned — so `fund_quotes.nav` and the last `nav_history`
+ * row always agree, and the trajectory has the right direction regardless
+ * of which random shocks the PRNG produces.
+ */
+function generateSeries(
+  ticker: string,
+  targetNav: number,
+  startingNavHint: number | null,
+  endDate: Date,
+): Array<{ date: string; nav: number }> {
+  const dates: Date[] = [];
+  for (let i = HISTORY_DAYS - 1; i >= 0; i--) {
+    const d = new Date(endDate);
+    d.setUTCDate(d.getUTCDate() - i);
+    if (!isWeekend(d)) dates.push(d);
+  }
+  if (dates.length === 0) return [];
+
+  const rand = mulberry32(fnv1a(ticker));
+
+  // Anchor the *start* of the walk near the holding's avg_cost when we
+  // have one — that way a holding that gained value looks like a generally
+  // rising line. Pull the start 5% below avg_cost so there's room to drift
+  // back up. Holdings without avg_cost (cost==0) fall back to a scale that
+  // matches `targetNav` so the walk has the right order of magnitude.
+  const hintedStart =
+    startingNavHint && startingNavHint > 0 ? startingNavHint * 0.95 : targetNav * 0.95;
+
+  // Drift toward the end so the unconstrained walk roughly heads in the
+  // right direction — but the bridge correction below is what actually
+  // pins the endpoints.
+  const logStart = Math.log(hintedStart);
+  const logEnd = Math.log(targetNav);
+
+  const n = dates.length;
+  // Build an unconstrained random walk first (drift roughly aimed at the
+  // end so the bridge correction stays small / noise stays subtle).
+  const drift = (logEnd - logStart) / Math.max(n - 1, 1);
+  const walk: number[] = [logStart];
+  for (let i = 1; i < n; i++) {
+    const shock = gauss(rand) * DAILY_SIGMA;
+    walk.push(walk[i - 1] + drift + shock);
+  }
+
+  // Brownian-bridge correction: linearly subtract the endpoint error from
+  // every interior point so walk[n-1] = logEnd exactly while preserving
+  // the noise shape.
+  const endError = walk[n - 1] - logEnd;
+  for (let i = 0; i < n; i++) {
+    walk[i] -= (i / Math.max(n - 1, 1)) * endError;
+  }
+
+  return dates.map((d, i) => ({
+    date: yyyyMmDd(d),
+    nav: Number(Math.exp(walk[i]).toFixed(6)),
+  }));
+}
+
+function computeYtdPct(series: Array<{ date: string; nav: number }>, asOf: Date): number | null {
+  if (series.length < 2) return null;
+  const year = asOf.getUTCFullYear();
+  const first = series.find((p) => p.date.startsWith(`${year}-`));
+  if (!first) return null;
+  const last = series[series.length - 1];
+  return ((last.nav - first.nav) / first.nav) * 100;
+}
+
+function computeReturnPct(
+  series: Array<{ date: string; nav: number }>,
+  asOf: Date,
+  days: number,
+): number | null {
+  if (series.length < 2) return null;
+  const cutoff = new Date(asOf);
+  cutoff.setUTCDate(cutoff.getUTCDate() - days);
+  const cutoffStr = yyyyMmDd(cutoff);
+  const start = series.find((p) => p.date >= cutoffStr);
+  if (!start) return null;
+  const last = series[series.length - 1];
+  return ((last.nav - start.nav) / start.nav) * 100;
 }
 
 export function seedDemoData(db: Db): void {
@@ -94,7 +245,7 @@ export function seedDemoData(db: Db): void {
           color: h.color,
           source: h.source,
           // All demo seed holdings are Thai mutual funds.
-          quoteSource: "thai_mutual_fund",
+          quoteSource: DEMO_QUOTE_SOURCE,
           acquiredOn: null,
           createdAt: now,
           updatedAt: now,
@@ -103,14 +254,55 @@ export function seedDemoData(db: Db): void {
 
       if (!seenTickers.has(h.ticker)) {
         seenTickers.add(h.ticker);
+
+        // Combined cache key used by both fund_quotes.ticker and
+        // nav_history.ticker — must match lib/market/cache.ts:cacheKey()
+        // exactly so the live refresh path treats this as a warm cache.
+        const cacheKey = `${DEMO_QUOTE_SOURCE}:${h.ticker}`;
+
+        const series = generateSeries(h.ticker, h.nav, avgCost, REFERENCE_TODAY);
+
+        // Insert each NAV row. Conflicts shouldn't happen on a fresh demo
+        // DB, but guard anyway in case seedDemoData ever runs twice on
+        // the same sqlite instance.
+        for (const row of series) {
+          db.insert(navHistory)
+            .values({ ticker: cacheKey, date: row.date, nav: row.nav })
+            .onConflictDoUpdate({
+              target: [navHistory.ticker, navHistory.date],
+              set: { nav: row.nav },
+            })
+            .run();
+        }
+
+        // Recompute perf percentages off the synthetic series so the UI's
+        // "today's change" row matches what the chart shows. Fall back to
+        // the curated values in data.ts when the synthetic window is too
+        // short (e.g. y1 — we only generate ~180 days).
+        const last = series[series.length - 1];
+        const prev = series.length > 1 ? series[series.length - 2] : null;
+        const d1Pct = last && prev ? ((last.nav - prev.nav) / prev.nav) * 100 : (h.d1 ?? null);
+        const ytdPct = computeYtdPct(series, REFERENCE_TODAY) ?? h.ytd ?? null;
+        const y1Pct = computeReturnPct(series, REFERENCE_TODAY, 365) ?? h.y1 ?? null;
+
         db.insert(fundQuotes)
           .values({
-            ticker: h.ticker,
-            nav: h.nav,
-            d1Pct: h.d1,
-            ytdPct: h.ytd,
-            y1Pct: h.y1,
+            ticker: cacheKey,
+            nav: last?.nav ?? h.nav,
+            d1Pct,
+            ytdPct,
+            y1Pct,
             updatedAt: now,
+          })
+          .onConflictDoUpdate({
+            target: fundQuotes.ticker,
+            set: {
+              nav: last?.nav ?? h.nav,
+              d1Pct,
+              ytdPct,
+              y1Pct,
+              updatedAt: now,
+            },
           })
           .run();
       }
