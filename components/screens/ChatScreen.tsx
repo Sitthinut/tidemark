@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FeedbackRow } from "@/components/FeedbackRow";
 import { Icon } from "@/components/Icon";
+import { invalidate } from "@/lib/fetchers/swr";
 import {
   AI_PERSONALITIES,
   MODEL_PORTFOLIOS,
@@ -10,6 +11,7 @@ import {
   USER_GOALS,
   USER_PLAN,
 } from "@/lib/mock/data";
+import { applyPlanEdit } from "@/lib/portfolio/plan-edit";
 
 const ACTIVE_THREAD_KEY = "macrotide_chat_active_thread";
 
@@ -381,28 +383,45 @@ export function ChatScreen({ persona = "advisor", seedPrompt, onPromptConsumed }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [seedPrompt, onPromptConsumed, ask]);
 
-  const applyProposal = (idx: number, proposal: PlanProposal) => {
-    const sectionHeader = `## ${proposal.section}`;
-    const newLine = `\n${proposal.add}`;
-    if (USER_PLAN.markdown.includes(sectionHeader)) {
-      USER_PLAN.markdown = USER_PLAN.markdown.replace(
-        new RegExp(
-          `(${sectionHeader.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}[\\s\\S]*?)(?=\\n##|$)`,
-        ),
-        `$1${newLine}\n`,
-      );
-    } else {
-      USER_PLAN.markdown += `\n\n${sectionHeader}\n${proposal.add}\n`;
-    }
-    USER_PLAN.lastUpdated = "Just now";
-    USER_PLAN.versions = [
-      {
-        date: "Just now",
-        change: `Added to ${proposal.section}: ${proposal.add?.replace(/^- /, "") ?? ""}`,
-      },
-      ...USER_PLAN.versions,
-    ];
+  const applyProposal = async (idx: number, proposal: PlanProposal) => {
+    // Optimistic: mark applied immediately, roll back on failure.
     setMessages((prev) => prev.map((x, i) => (i === idx ? { ...x, applied: true } : x)));
+    try {
+      const planRes = await fetch("/api/plan");
+      if (!planRes.ok) throw new Error(`plan fetch ${planRes.status}`);
+      const current = (await planRes.json()) as {
+        markdown?: string;
+        selectedModelId?: string | null;
+      };
+      const nextMarkdown = applyPlanEdit(current.markdown ?? "", {
+        section: proposal.section,
+        add: proposal.add,
+        rm: proposal.rm,
+      });
+      const putRes = await fetch("/api/plan", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          markdown: nextMarkdown,
+          selectedModelId: current.selectedModelId ?? null,
+        }),
+      });
+      if (!putRes.ok) throw new Error(`plan put ${putRes.status}`);
+      invalidate("/api/plan");
+    } catch (err) {
+      // Roll back the optimistic apply and surface the error inline.
+      setMessages((prev) =>
+        prev.map((x, i) =>
+          i === idx
+            ? {
+                ...x,
+                applied: undefined,
+                text: `${x.text}\n\n(Couldn't save: ${err instanceof Error ? err.message : "unknown error"}. Try again?)`,
+              }
+            : x,
+        ),
+      );
+    }
   };
 
   return (
