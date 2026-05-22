@@ -1,19 +1,21 @@
 // Provider-agnostic shape for market data sources.
 //
 // A provider knows how to:
-//   - decide whether it owns a symbol (`matches`)
-//   - return a normalized quote + daily series in one call (`fetchSeries`)
+//   - decide whether it owns a given (source, ticker) pair (`matches`)
+//   - return a normalized quote + daily series for that pair (`fetchSeries`)
 //
-// The registry (see `lib/market/registry.ts`) iterates providers in
-// registration order and picks the first match. Add a new provider by
-// implementing this interface and registering it.
+// `source` names the asset class (see lib/market/sources.ts — e.g. "yahoo",
+// "thai_mutual_fund"). `ticker` is the symbol exactly as it appears on a
+// holding row — no namespace prefix, no provider-specific encoding. The
+// registry (see lib/market/registry.ts) iterates providers in registration
+// order and picks the first match.
 
 export type SeriesRange = "1mo" | "3mo" | "6mo" | "1y" | "5y" | "max";
 export type SeriesInterval = "1d" | "1wk" | "1mo";
 
 export interface Quote {
-  /** Symbol returned by the provider (may be canonicalized). */
-  symbol: string;
+  /** Ticker echoed back as the provider canonicalized it. */
+  ticker: string;
   /** Human-friendly name when the provider has one. */
   name: string;
   currency: string;
@@ -33,11 +35,11 @@ export interface SeriesPoint {
 export interface Provider {
   /** Stable id, used in logs and error messages. */
   readonly id: string;
-  /** True when this provider handles the given symbol. */
-  matches(symbol: string): boolean;
+  /** True when this provider handles the given (source, ticker) pair. */
+  matches(source: string, ticker: string): boolean;
   /** Fetch quote + daily series. Throws on failure. */
   fetchSeries(
-    symbol: string,
+    ticker: string,
     range: SeriesRange,
     interval: SeriesInterval,
   ): Promise<{ quote: Quote; series: SeriesPoint[] }>;

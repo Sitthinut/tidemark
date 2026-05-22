@@ -5,7 +5,8 @@ import { INDICES } from "@/lib/market/indices";
 export async function GET() {
   const results = await Promise.allSettled(
     INDICES.map(async (def) => {
-      const cached = await getCachedSeries(def.symbol, "6mo", "1d");
+      // Indices route through Yahoo (^SET.BK, ^GSPC, ^IXIC, ^N225, THB=X).
+      const cached = await getCachedSeries("yahoo", def.symbol, "6mo", "1d");
       const series = cached.series;
       const latest = series.at(-1);
       const prev = series.length > 1 ? series[series.length - 2] : null;

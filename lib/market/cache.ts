@@ -8,6 +8,16 @@ import { resolveProvider } from "./registry";
 const QUOTE_TTL_MS = 5 * 60_000; // 5 min for live quote
 const HISTORY_TTL_MS = 24 * 60 * 60_000; // 24 h for daily series
 
+/**
+ * The cache table (fund_quotes / nav_history) is keyed by a single TEXT column
+ * called `ticker` for historical reasons. To support multiple data sources
+ * cleanly we namespace inserts by combining source + ticker into one key
+ * string. The combined key is internal — never returned to the UI.
+ */
+function cacheKey(source: string, ticker: string): string {
+  return `${source}:${ticker}`;
+}
+
 function isFresh(updatedAt: string, ttlMs: number): boolean {
   return Date.now() - new Date(updatedAt).getTime() < ttlMs;
 }
@@ -17,7 +27,8 @@ function yyyyMmDd(unixSeconds: number): string {
 }
 
 export interface CachedSeries {
-  symbol: string;
+  /** Original ticker, as caller passed in. */
+  ticker: string;
   series: { date: string; close: number }[];
   /** Most recent value (mirrors fund_quotes). */
   quote: {
@@ -28,27 +39,30 @@ export interface CachedSeries {
 }
 
 /**
- * Return cached daily series for `symbol` if it's <24h old, otherwise refetch
- * from the appropriate provider and upsert into nav_history + fund_quotes.
- * The cached version is always preferred to keep upstream load minimal.
+ * Return cached daily series for `(source, ticker)` if it's <24h old,
+ * otherwise refetch from the resolved provider and upsert into nav_history +
+ * fund_quotes. The cached version is always preferred to keep upstream load
+ * minimal.
  */
 export async function getCachedSeries(
-  symbol: string,
+  source: string,
+  ticker: string,
   range: SeriesRange = "6mo",
   interval: SeriesInterval = "1d",
 ): Promise<CachedSeries> {
-  const cachedQuote = db.select().from(fundQuotes).where(eq(fundQuotes.ticker, symbol)).get();
+  const key = cacheKey(source, ticker);
+  const cachedQuote = db.select().from(fundQuotes).where(eq(fundQuotes.ticker, key)).get();
 
   if (cachedQuote && isFresh(cachedQuote.updatedAt, HISTORY_TTL_MS)) {
     const sinceDate = rangeStart(range);
     const rows = db
       .select()
       .from(navHistory)
-      .where(and(eq(navHistory.ticker, symbol), gte(navHistory.date, sinceDate)))
+      .where(and(eq(navHistory.ticker, key), gte(navHistory.date, sinceDate)))
       .orderBy(navHistory.date)
       .all();
     return {
-      symbol,
+      ticker,
       series: rows.map((r) => ({ date: r.date, close: r.nav })),
       quote: {
         price: cachedQuote.nav,
@@ -58,10 +72,10 @@ export async function getCachedSeries(
     };
   }
 
-  const provider = resolveProvider(symbol);
-  const fresh = await provider.fetchSeries(symbol, range, interval);
+  const provider = resolveProvider(source, ticker);
+  const fresh = await provider.fetchSeries(ticker, range, interval);
   if (fresh.series.length === 0) {
-    return { symbol, series: [], quote: null };
+    return { ticker, series: [], quote: null };
   }
 
   const updatedAt = new Date().toISOString();
@@ -73,7 +87,7 @@ export async function getCachedSeries(
 
   db.insert(fundQuotes)
     .values({
-      ticker: symbol,
+      ticker: key,
       nav: fresh.quote.price,
       d1Pct,
       ytdPct,
@@ -95,7 +109,7 @@ export async function getCachedSeries(
   for (const p of fresh.series) {
     const date = yyyyMmDd(p.t);
     db.insert(navHistory)
-      .values({ ticker: symbol, date, nav: p.close })
+      .values({ ticker: key, date, nav: p.close })
       .onConflictDoUpdate({
         target: [navHistory.ticker, navHistory.date],
         set: { nav: p.close },
@@ -104,7 +118,7 @@ export async function getCachedSeries(
   }
 
   return {
-    symbol,
+    ticker,
     series: fresh.series.map((p) => ({ date: yyyyMmDd(p.t), close: p.close })),
     quote: {
       price: fresh.quote.price,
@@ -152,23 +166,23 @@ function computeReturnPct(series: { close: number; t: number }[], days: number):
 }
 
 /**
- * Force-refresh a set of symbols. Used by the `npm run market:refresh` job
- * and by an admin/manual endpoint. Each symbol is fetched independently —
- * a single failure doesn't abort the rest.
+ * Force-refresh a set of holdings. Each is fetched independently — a single
+ * failure doesn't abort the rest.
  */
 export async function refreshSymbols(
-  symbols: string[],
+  refs: Array<{ source: string; ticker: string }>,
   range: SeriesRange = "6mo",
-): Promise<{ symbol: string; ok: boolean; error?: string }[]> {
-  const results: { symbol: string; ok: boolean; error?: string }[] = [];
-  for (const s of symbols) {
+): Promise<{ source: string; ticker: string; ok: boolean; error?: string }[]> {
+  const results: { source: string; ticker: string; ok: boolean; error?: string }[] = [];
+  for (const r of refs) {
     try {
-      db.delete(fundQuotes).where(eq(fundQuotes.ticker, s)).run();
-      await getCachedSeries(s, range);
-      results.push({ symbol: s, ok: true });
+      const key = cacheKey(r.source, r.ticker);
+      db.delete(fundQuotes).where(eq(fundQuotes.ticker, key)).run();
+      await getCachedSeries(r.source, r.ticker, range);
+      results.push({ ...r, ok: true });
     } catch (err) {
       results.push({
-        symbol: s,
+        ...r,
         ok: false,
         error: err instanceof Error ? err.message : String(err),
       });
@@ -177,18 +191,31 @@ export async function refreshSymbols(
   return results;
 }
 
-/** List symbols that have any cached history, with their last-updated timestamp. */
-export function listCachedSymbols(): { ticker: string; updatedAt: string; navCount: number }[] {
+/** List cache entries by source+ticker, with the last-updated timestamp. */
+export function listCachedSymbols(): {
+  source: string;
+  ticker: string;
+  updatedAt: string;
+  navCount: number;
+}[] {
   const rows = db
     .select({
-      ticker: fundQuotes.ticker,
+      key: fundQuotes.ticker,
       updatedAt: fundQuotes.updatedAt,
       navCount: sql<number>`(SELECT COUNT(*) FROM nav_history WHERE ticker = ${fundQuotes.ticker})`,
     })
     .from(fundQuotes)
     .orderBy(desc(fundQuotes.updatedAt))
     .all();
-  return rows;
+  return rows.map((row) => {
+    const idx = row.key.indexOf(":");
+    return {
+      source: idx >= 0 ? row.key.slice(0, idx) : "",
+      ticker: idx >= 0 ? row.key.slice(idx + 1) : row.key,
+      updatedAt: row.updatedAt,
+      navCount: row.navCount,
+    };
+  });
 }
 
 void QUOTE_TTL_MS;

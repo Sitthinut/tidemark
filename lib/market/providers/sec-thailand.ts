@@ -13,14 +13,14 @@
 // recommended. HTTP 421 signals over-limit; respect Retry-After.
 // Refresh windows: 09:30 + 17:30 Bangkok time.
 //
-// Symbol format: "thfund:<code>" — case-insensitive. The `code` can be either
+// Ticker format: the user-typed fund code, case-insensitive. Can be either
 // a parent fund's proj_abbr_name (e.g. `HI-DIV-RMF`) for funds without share
 // classes, OR a share-class name (e.g. `K-FIXED-A`, `HIDIV-D`). When a parent
 // fund has share classes, the parent itself is NOT investable — typing the
 // parent code returns a helpful error listing the available classes.
 //
-// The `thfund:` prefix names the ASSET CLASS (Thai mutual fund), not this
-// provider — holdings stay valid if the underlying data source is ever swapped.
+// Routing is driven by the holding's `quote_source` column (= "thai_mutual_fund"
+// here), not by a prefix in the ticker. The provider sees only the bare code.
 //
 // Endpoints used (v2 — new portal):
 //   GET /v2/fund/general-info/profiles?fund_class_name={code}   — exact lookup
@@ -42,7 +42,7 @@ import {
   type SeriesRange,
 } from "./types";
 
-export const SEC_THAILAND_PREFIX = "thfund:";
+export const SEC_THAILAND_SOURCE = "thai_mutual_fund";
 const BASE_URL = "https://api.sec.or.th";
 // Portal recommends ≥16ms between requests under the 5000-per-300s ceiling.
 // 20ms gives margin. With targeted (per-symbol) lookups instead of a global
@@ -242,16 +242,6 @@ async function resolveSymbol(code: string): Promise<ResolvedFund> {
   );
 }
 
-function parseSymbol(symbol: string): string {
-  if (!symbol.startsWith(SEC_THAILAND_PREFIX)) {
-    throw new ProviderError(
-      `Expected symbol to start with "${SEC_THAILAND_PREFIX}", got "${symbol}"`,
-      "sec-thailand",
-    );
-  }
-  return symbol.slice(SEC_THAILAND_PREFIX.length);
-}
-
 function rangeToDays(range: SeriesRange): number {
   switch (range) {
     case "1mo":
@@ -275,16 +265,15 @@ function yyyyMmDd(d: Date): string {
 
 export const secThailandProvider: Provider = {
   id: "sec-thailand",
-  matches(symbol: string): boolean {
-    return symbol.startsWith(SEC_THAILAND_PREFIX);
+  matches(source: string, _ticker: string): boolean {
+    return source === SEC_THAILAND_SOURCE;
   },
   async fetchSeries(
-    symbol: string,
+    ticker: string,
     range: SeriesRange,
     _interval: SeriesInterval,
   ): Promise<{ quote: Quote; series: SeriesPoint[] }> {
-    const code = parseSymbol(symbol);
-    const entry = await resolveSymbol(code);
+    const entry = await resolveSymbol(ticker);
 
     const key = apiKey();
     const today = new Date();
@@ -324,7 +313,7 @@ export const secThailandProvider: Provider = {
 
     if (series.length === 0) {
       throw new ProviderError(
-        `No NAV data returned for ${symbol} over the requested range`,
+        `No NAV data returned for ${ticker} over the requested range`,
         "sec-thailand",
       );
     }
@@ -332,7 +321,7 @@ export const secThailandProvider: Provider = {
     const latest = series[series.length - 1];
     const previous = series.length > 1 ? series[series.length - 2] : latest;
     const quote: Quote = {
-      symbol,
+      ticker,
       name: entry.name,
       currency: "THB",
       price: latest.close,

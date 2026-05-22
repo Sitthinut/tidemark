@@ -117,7 +117,7 @@ type YahooResult = NonNullable<YahooChartResponse["chart"]["result"]>[number];
 
 function toQuote(r: YahooResult): Quote {
   return {
-    symbol: r.meta.symbol,
+    ticker: r.meta.symbol,
     name: r.meta.longName ?? r.meta.shortName ?? r.meta.symbol,
     currency: r.meta.currency,
     price: r.meta.regularMarketPrice,
@@ -128,17 +128,15 @@ function toQuote(r: YahooResult): Quote {
 
 export const yahooProvider: Provider = {
   id: "yahoo",
-  matches(symbol: string): boolean {
-    // Yahoo handles bare / dotted / caret-prefixed / =X symbols.
-    // Prefixed symbols (e.g. "thfund:XXX") go to other providers.
-    return !symbol.includes(":");
+  matches(source: string, _ticker: string): boolean {
+    return source === "yahoo";
   },
   async fetchSeries(
-    symbol: string,
+    ticker: string,
     range: SeriesRange,
     interval: SeriesInterval,
   ): Promise<{ quote: Quote; series: SeriesPoint[] }> {
-    const r = await fetchChart(symbol, range, interval);
+    const r = await fetchChart(ticker, range, interval);
     const timestamps = r.timestamp ?? [];
     const closes = r.indicators.quote[0]?.close ?? [];
     const series: SeriesPoint[] = [];

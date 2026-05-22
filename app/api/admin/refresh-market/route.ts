@@ -13,26 +13,34 @@ import { refreshSymbols } from "@/lib/market/cache";
 import { INDICES } from "@/lib/market/indices";
 
 export async function POST() {
-  const heldTickers = db.selectDistinct({ ticker: holdings.ticker }).from(holdings).all();
-  const indexSymbols = INDICES.map((i) => i.symbol);
-  const heldSymbols = heldTickers
-    .map((r) => r.ticker)
-    // Yahoo doesn't carry Thai mutual fund NAVs — skip them so we don't hammer
-    // the API with guaranteed-misses. Tickers starting with letters and
-    // containing & or "-" are typically Thai mutual funds.
-    .filter((t) => !/^[A-Z]+[-&]/i.test(t));
+  // Indices always route through Yahoo.
+  const indexRefs = INDICES.map((i) => ({ source: "yahoo", ticker: i.symbol }));
+  // Every held position is refreshed via its own provider — holdings now
+  // carry quote_source explicitly so we don't need to guess by ticker shape.
+  const heldRows = db
+    .selectDistinct({ source: holdings.quoteSource, ticker: holdings.ticker })
+    .from(holdings)
+    .all();
+  const heldRefs = heldRows.map((r) => ({ source: r.source, ticker: r.ticker }));
 
-  const allSymbols = Array.from(new Set([...indexSymbols, ...heldSymbols]));
-  const results = await refreshSymbols(allSymbols, "6mo");
+  const seen = new Set<string>();
+  const allRefs = [...indexRefs, ...heldRefs].filter((r) => {
+    const k = `${r.source}:${r.ticker}`;
+    if (seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  });
+
+  const results = await refreshSymbols(allRefs, "6mo");
   const ok = results.filter((r) => r.ok).length;
   const failed = results.filter((r) => !r.ok);
 
   return NextResponse.json({
     refreshedAt: new Date().toISOString(),
-    requested: allSymbols.length,
+    requested: allRefs.length,
     ok,
     failed: failed.length,
-    errors: failed.map((f) => ({ symbol: f.symbol, error: f.error })),
+    errors: failed.map((f) => ({ source: f.source, ticker: f.ticker, error: f.error })),
   });
 }
 

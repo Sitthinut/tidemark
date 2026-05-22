@@ -4,7 +4,8 @@ import { listFundQuotes } from "@/lib/db/queries/quotes";
 import { getCachedSeries } from "@/lib/market/cache";
 
 interface QuoteResult {
-  symbol: string;
+  source: string;
+  ticker: string;
   ok: boolean;
   price?: number;
   previousClose?: number;
@@ -13,41 +14,46 @@ interface QuoteResult {
 }
 
 /**
- * GET /api/quotes?tickers=A,B,C
- *   Return cached fund_quotes rows for the requested tickers (read-only).
+ * Each `refs` parameter value is a `source:ticker` pair. Examples:
+ *   refs=yahoo:AAPL,yahoo:^GSPC
+ *   refs=thai_mutual_fund:K-FIXED-A
  *
- * GET /api/quotes?tickers=A,B,C&refresh=1
- *   Refresh each ticker through its provider (Yahoo / Thai SEC / …) and
- *   return normalized quote+freshness payload. Cache misses trigger a
- *   network call; cache hits (<24h history TTL) are served from the DB.
+ * Without `refresh=1`, returns the raw cached fund_quotes rows for the
+ * matching keys (read-only, no network calls).
+ * With `refresh=1`, dispatches each ref through its provider, populates
+ * the cache, and returns normalized post-fetch state.
  */
 export async function GET(req: Request) {
   const url = new URL(req.url);
-  const tickersParam = url.searchParams.get("tickers");
+  const refsParam = url.searchParams.get("refs");
   const refresh = url.searchParams.get("refresh") === "1";
-  const tickers = tickersParam
-    ? tickersParam
+
+  const refs = refsParam
+    ? refsParam
         .split(",")
-        .map((t) => t.trim())
+        .map((s) => s.trim())
         .filter(Boolean)
-    : undefined;
+        .map(parseRef)
+        .filter((r): r is { source: string; ticker: string } => r !== null)
+    : [];
 
   if (!refresh) {
-    return withDb(() => NextResponse.json(listFundQuotes(tickers)));
+    const keys = refs.map((r) => `${r.source}:${r.ticker}`);
+    return withDb(() => NextResponse.json(listFundQuotes(keys.length ? keys : undefined)));
   }
 
-  if (!tickers || tickers.length === 0) {
-    return NextResponse.json({ error: "tickers query parameter required" }, { status: 400 });
+  if (refs.length === 0) {
+    return NextResponse.json({ error: "refs query parameter required" }, { status: 400 });
   }
 
   const results = await Promise.allSettled(
-    tickers.map(async (symbol): Promise<QuoteResult> => {
-      const cached = await getCachedSeries(symbol, "6mo", "1d");
+    refs.map(async (ref): Promise<QuoteResult> => {
+      const cached = await getCachedSeries(ref.source, ref.ticker, "6mo", "1d");
       if (!cached.quote) {
-        return { symbol, ok: false, error: "no data" };
+        return { ...ref, ok: false, error: "no data" };
       }
       return {
-        symbol,
+        ...ref,
         ok: true,
         price: cached.quote.price,
         previousClose: cached.quote.previousClose,
@@ -59,11 +65,17 @@ export async function GET(req: Request) {
   const payload: QuoteResult[] = results.map((r, i) => {
     if (r.status === "fulfilled") return r.value;
     return {
-      symbol: tickers[i],
+      ...refs[i],
       ok: false,
       error: r.reason instanceof Error ? r.reason.message : String(r.reason),
     };
   });
 
   return NextResponse.json(payload);
+}
+
+function parseRef(value: string): { source: string; ticker: string } | null {
+  const idx = value.indexOf(":");
+  if (idx <= 0 || idx === value.length - 1) return null;
+  return { source: value.slice(0, idx), ticker: value.slice(idx + 1) };
 }

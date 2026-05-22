@@ -39,7 +39,6 @@ function makeFetchStub() {
       const cls = u.searchParams.get("fund_class_name");
       const proj = u.searchParams.get("project_info");
 
-      // 1) Share-class exact lookup
       if (cls) {
         if (cls === "EX-CLASS-A") {
           return new Response(
@@ -74,7 +73,6 @@ function makeFetchStub() {
         return new Response(envelope([]), { status: 200 });
       }
 
-      // 2) project_info partial lookup
       if (proj) {
         if (proj === "EX-MAIN-FUND") {
           return new Response(
@@ -164,20 +162,20 @@ describe("sec-thailand provider", () => {
     delete process.env.SEC_API_KEY;
   });
 
-  it("matches thfund: prefixed symbols only", () => {
-    expect(secThailandProvider.matches("thfund:EX-MAIN-FUND")).toBe(true);
-    expect(secThailandProvider.matches("AAPL")).toBe(false);
-    expect(secThailandProvider.matches("^SET.BK")).toBe(false);
+  it("matches only the thai_mutual_fund source", () => {
+    expect(secThailandProvider.matches("thai_mutual_fund", "anything")).toBe(true);
+    expect(secThailandProvider.matches("yahoo", "AAPL")).toBe(false);
+    expect(secThailandProvider.matches("", "EX-CLASS-A")).toBe(false);
   });
 
   it("resolves a share-class code via fund_class_name lookup", async () => {
     const fetchStub = makeFetchStub();
     vi.stubGlobal("fetch", fetchStub);
 
-    const result = await secThailandProvider.fetchSeries("thfund:EX-CLASS-A", "1mo", "1d");
+    const result = await secThailandProvider.fetchSeries("EX-CLASS-A", "1mo", "1d");
 
     expect(result.quote.name).toBe("Example Parent Fund");
-    expect(result.quote.symbol).toBe("thfund:EX-CLASS-A");
+    expect(result.quote.ticker).toBe("EX-CLASS-A");
     expect(result.quote.currency).toBe("THB");
     expect(result.series.length).toBeGreaterThan(0);
 
@@ -191,12 +189,11 @@ describe("sec-thailand provider", () => {
     const fetchStub = makeFetchStub();
     vi.stubGlobal("fetch", fetchStub);
 
-    const result = await secThailandProvider.fetchSeries("thfund:EX-MAIN-FUND", "1mo", "1d");
+    const result = await secThailandProvider.fetchSeries("EX-MAIN-FUND", "1mo", "1d");
 
     expect(result.quote.name).toBe("Example Main Fund");
     expect(result.series.length).toBeGreaterThan(0);
 
-    // Both endpoints were tried — class lookup missed, project_info hit.
     const urls = fetchStub.mock.calls.map((c) => (c[0] as URL | string).toString());
     expect(urls.some((u) => u.includes("fund_class_name=EX-MAIN-FUND"))).toBe(true);
     expect(urls.some((u) => u.includes("project_info=EX-MAIN-FUND"))).toBe(true);
@@ -206,7 +203,7 @@ describe("sec-thailand provider", () => {
     const fetchStub = makeFetchStub();
     vi.stubGlobal("fetch", fetchStub);
 
-    await expect(secThailandProvider.fetchSeries("thfund:EX-PARENT", "1mo", "1d")).rejects.toThrow(
+    await expect(secThailandProvider.fetchSeries("EX-PARENT", "1mo", "1d")).rejects.toThrow(
       /parent fund with multiple share classes.*EX-CLASS-A.*EX-CLASS-B/s,
     );
   });
@@ -215,7 +212,7 @@ describe("sec-thailand provider", () => {
     const fetchStub = makeFetchStub();
     vi.stubGlobal("fetch", fetchStub);
 
-    const result = await secThailandProvider.fetchSeries("thfund:ex-class-a", "1mo", "1d");
+    const result = await secThailandProvider.fetchSeries("ex-class-a", "1mo", "1d");
     expect(result.quote.name).toBe("Example Parent Fund");
   });
 
@@ -223,9 +220,9 @@ describe("sec-thailand provider", () => {
     const fetchStub = makeFetchStub();
     vi.stubGlobal("fetch", fetchStub);
 
-    await expect(
-      secThailandProvider.fetchSeries("thfund:DOES-NOT-EXIST", "1mo", "1d"),
-    ).rejects.toThrow(/Unknown Thai fund code/);
+    await expect(secThailandProvider.fetchSeries("DOES-NOT-EXIST", "1mo", "1d")).rejects.toThrow(
+      /Unknown Thai fund code/,
+    );
   });
 
   it("throws when SEC_API_KEY is missing", async () => {
@@ -233,7 +230,7 @@ describe("sec-thailand provider", () => {
     const fetchStub = makeFetchStub();
     vi.stubGlobal("fetch", fetchStub);
 
-    await expect(secThailandProvider.fetchSeries("thfund:EX-CLASS-A", "1mo", "1d")).rejects.toThrow(
+    await expect(secThailandProvider.fetchSeries("EX-CLASS-A", "1mo", "1d")).rejects.toThrow(
       /SEC_API_KEY is not set/,
     );
   });
@@ -242,7 +239,7 @@ describe("sec-thailand provider", () => {
     const fetchStub = vi.fn(async () => new Response("unauthorized", { status: 401 }));
     vi.stubGlobal("fetch", fetchStub);
 
-    await expect(secThailandProvider.fetchSeries("thfund:EX-CLASS-A", "1mo", "1d")).rejects.toThrow(
+    await expect(secThailandProvider.fetchSeries("EX-CLASS-A", "1mo", "1d")).rejects.toThrow(
       /rejected the subscription key/,
     );
   });
@@ -251,18 +248,18 @@ describe("sec-thailand provider", () => {
     const fetchStub = vi.fn(async () => new Response("too many", { status: 421 }));
     vi.stubGlobal("fetch", fetchStub);
 
-    await expect(secThailandProvider.fetchSeries("thfund:EX-CLASS-A", "1mo", "1d")).rejects.toThrow(
+    await expect(secThailandProvider.fetchSeries("EX-CLASS-A", "1mo", "1d")).rejects.toThrow(
       /rate-limited \(421\)/,
     );
   });
 
-  it("caches resolved symbols across calls", async () => {
+  it("caches resolved tickers across calls", async () => {
     const fetchStub = makeFetchStub();
     vi.stubGlobal("fetch", fetchStub);
 
-    await secThailandProvider.fetchSeries("thfund:EX-CLASS-A", "1mo", "1d");
+    await secThailandProvider.fetchSeries("EX-CLASS-A", "1mo", "1d");
     const callsAfterFirst = fetchStub.mock.calls.length;
-    await secThailandProvider.fetchSeries("thfund:EX-CLASS-A", "1mo", "1d");
+    await secThailandProvider.fetchSeries("EX-CLASS-A", "1mo", "1d");
     const callsAfterSecond = fetchStub.mock.calls.length;
 
     // The second call should hit only the NAV endpoint (no re-resolution).
