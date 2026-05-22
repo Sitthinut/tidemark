@@ -10,6 +10,7 @@ import {
   usePortfolioView,
   useSelectedModelId,
 } from "@/lib/fetchers/legacy";
+import type { SeriesRange } from "@/lib/fetchers/portfolio";
 import { invalidate } from "@/lib/fetchers/swr";
 import { fmtPct } from "@/lib/format";
 import { DEFAULT_QUOTE_SOURCE, isQuoteSource } from "@/lib/market/sources";
@@ -162,7 +163,22 @@ export function PortfolioScreen({
     invalidate(/^\/api\/holdings/);
   }
 
-  const { portfolios, aggregate, isLoading } = usePortfolioView();
+  const seriesRange: SeriesRange = useMemo(() => {
+    switch (range) {
+      case "1M":
+        return "1mo";
+      case "3M":
+        return "3mo";
+      case "1Y":
+        return "1y";
+      case "All":
+        return "max";
+      default:
+        return "6mo";
+    }
+  }, [range]);
+
+  const { portfolios, aggregate, isLoading } = usePortfolioView(seriesRange);
   const { models } = useModelPortfoliosView();
   const planSelectedModelId = useSelectedModelId();
 
@@ -432,6 +448,11 @@ export function PortfolioScreen({
           }
           height={130}
           accent="var(--accent)"
+          emptyHint={
+            view.holdings.length === 0
+              ? "Add holdings to see how this portfolio tracks over time."
+              : "We're still fetching NAV history. Pull-to-refresh or wait a moment."
+          }
         />
         <div className="filter-chips" style={{ padding: "8px 0 0", marginLeft: -8 }}>
           <span
@@ -814,6 +835,31 @@ export function PortfolioScreen({
       </div>
 
       <div className="holdings-list">
+        {filtered.length === 0 && (
+          <div
+            className="card-soft"
+            style={{
+              padding: "18px 16px",
+              textAlign: "center",
+              color: "var(--muted)",
+              fontSize: 13,
+              lineHeight: 1.5,
+            }}
+          >
+            {view.holdings.length === 0 ? (
+              <>
+                <div style={{ marginBottom: 10, color: "var(--ink-soft)" }}>
+                  No holdings in this portfolio yet.
+                </div>
+                <button className="btn sm primary" onClick={onOpenImport}>
+                  <Icon name="plus" size={12} /> Add your first holding
+                </button>
+              </>
+            ) : (
+              <>No {filter} holdings here. Switch filters to see the rest.</>
+            )}
+          </div>
+        )}
         {filtered.map((h) => {
           const pct = view.totalValue > 0 ? (h.value / view.totalValue) * 100 : 0;
           const editable = h.id !== undefined;

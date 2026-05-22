@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { Icon } from "@/components/Icon";
 import { useBuckets } from "@/lib/fetchers/portfolio";
 import { invalidate } from "@/lib/fetchers/swr";
+import { QUOTE_SOURCE_LABELS, QUOTE_SOURCES, type QuoteSource } from "@/lib/market/sources";
 
 interface Row {
   ticker: string;
@@ -44,6 +45,7 @@ export function AddHoldingsSheet({ open, onClose, onAdd }: AddHoldingsSheetProps
     { ticker: "", units: "", value: "" },
   ]);
   const [source, setSource] = useState("Manual");
+  const [quoteSource, setQuoteSource] = useState<QuoteSource>("thai_mutual_fund");
   const [bucketId, setBucketId] = useState<string>("");
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -140,10 +142,7 @@ export function AddHoldingsSheet({ open, onClose, onAdd }: AddHoldingsSheetProps
             ter: 0,
             color: "var(--accent)",
             source: row.source || source,
-            // Bulk imports default to Thai mutual fund — most likely shape
-            // for the audience. User can edit individual holdings to switch
-            // type (Stock / ETF / Index) via HoldingSheet.
-            quoteSource: "thai_mutual_fund",
+            quoteSource,
           }),
         });
         if (!res.ok) throw new Error(`Add ${ticker} failed (${res.status})`);
@@ -289,6 +288,53 @@ export function AddHoldingsSheet({ open, onClose, onAdd }: AddHoldingsSheetProps
               <option>BBLAM</option>
               <option>Other Thai brokerage</option>
             </select>
+          </div>
+        </div>
+
+        <div style={{ marginBottom: 14 }}>
+          <label
+            style={{
+              fontSize: 11,
+              fontFamily: "var(--font-mono)",
+              color: "var(--muted)",
+              letterSpacing: "0.04em",
+              marginBottom: 4,
+              display: "block",
+            }}
+          >
+            TYPE
+          </label>
+          <select
+            value={quoteSource}
+            onChange={(e) => setQuoteSource(e.target.value as QuoteSource)}
+            className="twk-field"
+            style={{
+              width: "100%",
+              padding: "8px 10px",
+              background: "var(--card-soft)",
+              border: "1px solid var(--line-soft)",
+              borderRadius: 8,
+              fontFamily: "var(--font-sans)",
+              fontSize: 13,
+              color: "var(--ink)",
+            }}
+          >
+            {QUOTE_SOURCES.map((s) => (
+              <option key={s} value={s}>
+                {QUOTE_SOURCE_LABELS[s]}
+              </option>
+            ))}
+          </select>
+          <div
+            style={{
+              fontSize: 11,
+              color: "var(--muted)",
+              marginTop: 4,
+              lineHeight: 1.4,
+            }}
+          >
+            Determines where we fetch prices. Pick "Thai mutual fund" for SEC-registered funds,
+            "Stock / ETF / Index" for everything else.
           </div>
         </div>
 

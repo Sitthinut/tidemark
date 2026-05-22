@@ -56,12 +56,15 @@ export function PerfChart({
   accent = "var(--accent)",
   benchmarkData = null,
   benchmarkLabel = null,
+  emptyHint = null,
 }: {
   data: SeriesPoint[];
   height?: number;
   accent?: string;
   benchmarkData?: SeriesPoint[] | null;
   benchmarkLabel?: string | null;
+  /** Sub-line shown under "NO HISTORY YET" — explains what's needed. */
+  emptyHint?: string | null;
 }) {
   const W = 400;
   const padLeft = 0,
@@ -77,15 +80,20 @@ export function PerfChart({
           width: "100%",
           height,
           display: "flex",
+          flexDirection: "column",
+          gap: 6,
           alignItems: "center",
           justifyContent: "center",
           color: "var(--muted)",
-          fontSize: 12,
-          fontFamily: "var(--font-mono)",
-          letterSpacing: "0.04em",
+          textAlign: "center",
         }}
       >
-        NO HISTORY YET
+        <div style={{ fontSize: 12, fontFamily: "var(--font-mono)", letterSpacing: "0.04em" }}>
+          NO HISTORY YET
+        </div>
+        {emptyHint && (
+          <div style={{ fontSize: 11, maxWidth: 320, lineHeight: 1.5 }}>{emptyHint}</div>
+        )}
       </div>
     );
   }
@@ -174,13 +182,23 @@ export function PerfChart({
         fill={accent}
         opacity="0.2"
       ></circle>
-      {pts.map((p, i) =>
-        i % 2 === 0 ? (
-          <text key={i} x={p[0]} y={height - 6} textAnchor="middle" className="chart-axis">
-            {p[2].d}
-          </text>
-        ) : null,
-      )}
+      {(() => {
+        // Spread ~6 evenly-spaced labels across the x-axis regardless of how
+        // many points the series has. With raw daily NAV history (100+ pts)
+        // labelling every-other point would render as overlapping text.
+        const labelCount = Math.min(pts.length, 6);
+        if (labelCount < 2) return null;
+        const step = (pts.length - 1) / (labelCount - 1);
+        return Array.from({ length: labelCount }, (_, k) => {
+          const i = Math.round(k * step);
+          const p = pts[i];
+          return (
+            <text key={i} x={p[0]} y={height - 6} textAnchor="middle" className="chart-axis">
+              {p[2].d}
+            </text>
+          );
+        });
+      })()}
       {benchmarkLabel && benchPts && (
         <text
           x={W - 4}

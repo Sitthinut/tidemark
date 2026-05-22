@@ -17,6 +17,7 @@ import type {
   PortfolioType,
   ReadingItem,
   RiskBand,
+  SeriesPoint,
   UserJournal,
 } from "@/lib/mock/types";
 
@@ -89,10 +90,42 @@ function inferPortfolioType(typeLabel: string | null): PortfolioType {
   return "free";
 }
 
+// Convert "YYYY-MM-DD" → "MMM DD" (e.g. "2026-05-22" → "May 22"). The chart's
+// x-axis uses the short label.
+function formatSeriesDate(iso: string): string {
+  const d = new Date(`${iso}T00:00:00Z`);
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
+}
+
+function toSeriesPoints(raw: { date: string; value: number }[] | undefined): SeriesPoint[] {
+  if (!raw || raw.length === 0) return [];
+  return raw.map((p) => ({ d: formatSeriesDate(p.date), v: p.value }));
+}
+
+// Look back `days` calendar days from the latest point and return the % delta
+// vs the closest point on or before that target date. Falls back to the first
+// point if the series doesn't reach that far back.
+function lookbackPct(raw: { date: string; value: number }[] | undefined, days: number): number {
+  if (!raw || raw.length < 2) return 0;
+  const latest = raw[raw.length - 1];
+  if (!latest.value) return 0;
+  const target = new Date(`${latest.date}T00:00:00Z`);
+  target.setUTCDate(target.getUTCDate() - days);
+  const targetIso = target.toISOString().slice(0, 10);
+  let start = raw[0];
+  for (const p of raw) {
+    if (p.date <= targetIso) start = p;
+    else break;
+  }
+  if (!start.value) return 0;
+  return ((latest.value - start.value) / start.value) * 100;
+}
+
 export function adaptBucket(
   bucket: Bucket,
   bucketHoldings: DbHolding[],
   quotes: Map<string, FundQuote>,
+  rawSeries?: { date: string; value: number }[],
 ): Portfolio {
   const holdings = bucketHoldings.map((h) => holdingFromDb(h, quotes, bucket.brokerage));
   const totalValue = holdings.reduce((s, h) => s + h.value, 0);
@@ -121,20 +154,26 @@ export function adaptBucket(
     }),
     brokerage: bucket.brokerage,
     perfPct: {
-      d7: 0,
-      d30: 0,
+      d7: lookbackPct(rawSeries, 7),
+      d30: lookbackPct(rawSeries, 30),
       ytd: weightedPct(holdings, totalValue, "ytd"),
       y1: weightedPct(holdings, totalValue, "y1"),
     },
-    series: [],
+    series: toSeriesPoints(rawSeries),
     holdings,
   };
+}
+
+export interface SeriesBundle {
+  aggregate: { date: string; value: number }[];
+  perBucket: Record<string, { date: string; value: number }[]>;
 }
 
 export function adaptPortfolios(
   buckets: Bucket[],
   holdings: DbHolding[],
   quotes: FundQuote[],
+  series?: SeriesBundle,
 ): Portfolio[] {
   const byTicker = quotesByTicker(quotes);
   return buckets.map((b) =>
@@ -142,11 +181,15 @@ export function adaptPortfolios(
       b,
       holdings.filter((h) => h.bucketId === b.id),
       byTicker,
+      series?.perBucket[b.id],
     ),
   );
 }
 
-export function adaptAggregate(portfolios: Portfolio[]): AggregatePortfolio {
+export function adaptAggregate(
+  portfolios: Portfolio[],
+  rawSeries?: { date: string; value: number }[],
+): AggregatePortfolio {
   const allHoldings = portfolios.flatMap((p) => p.holdings);
   const totalValue = portfolios.reduce((s, p) => s + p.totalValue, 0);
   const initialInvestment = portfolios.reduce((s, p) => s + p.initialInvestment, 0);
@@ -155,15 +198,15 @@ export function adaptAggregate(portfolios: Portfolio[]): AggregatePortfolio {
     baseCurrency: "THB",
     initialInvestment,
     perfPct: {
-      d7: 0,
-      d30: 0,
+      d7: lookbackPct(rawSeries, 7),
+      d30: lookbackPct(rawSeries, 30),
       ytd: weightedPct(allHoldings, totalValue, "ytd"),
       y1: weightedPct(allHoldings, totalValue, "y1"),
     },
     asOf: portfolios[0]?.asOf ?? "",
     brokerage: portfolios[0]?.brokerage ?? "",
     holdings: allHoldings,
-    series: [],
+    series: toSeriesPoints(rawSeries),
     target: { equity: 70, bond: 20, alternative: 7, cash: 3 },
   };
 }

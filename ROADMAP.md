@@ -875,6 +875,33 @@ SEC_API_KEY=...   # Thai SEC Open API subscription key (Ocp-Apim-Subscription-Ke
 - Broker scraping (Phase 4b, possibly never).
 - Commercial fund-supermarket data sources — see "Source" note above.
 
+### Known follow-ups (Phase 3b polish pass)
+
+- **PerfChart interactivity** — the current chart in [components/charts.tsx](./components/charts.tsx)
+  is hand-drawn SVG with `preserveAspectRatio="none"`. This stretches the
+  entire `<svg>` (including axis-label `<text>` glyphs) to the container
+  width, so labels look visually wide on a desktop layout. It also has no
+  hover/tap tooltip — you can't read the value at a date.
+
+  Options when we revisit:
+  1. **Render axis labels in HTML overlaying the SVG** (cheap fix for the
+     stretching only — still no tooltips).
+  2. **Adopt a chart library** — leading candidates:
+     - **uPlot** (~40KB, fastest, imperative) — good for many series, but
+       its visual idiom is BI-dashboard rather than our typography-led look.
+     - **visx** (~50KB tree-shaken) — keeps SVG primitives but supplies
+       scales/axes/tooltip helpers. Closest match to the current aesthetic.
+     - **lightweight-charts** (TradingView, ~100KB) — finance-flavored,
+       built-in crosshair/tooltip; opinionated styling.
+     - **Recharts** (~100KB+) — easiest API but heavier and most opinionated
+       visually.
+
+     Lean: **visx** when the time comes — it gives us tooltip + axis-tick
+     spacing without forcing a different visual style.
+
+  Trigger to actually do this: when we add hover-to-inspect or
+  brush-to-zoom. Until then, the stretched labels are tolerable.
+
 ---
 
 ## Phase 4 — Portfolio import

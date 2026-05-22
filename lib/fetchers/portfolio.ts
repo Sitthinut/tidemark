@@ -62,6 +62,25 @@ export function useJournalEntries() {
   return useResource<JournalEntry[]>("/api/journal");
 }
 
+export type SeriesRange = "1mo" | "3mo" | "6mo" | "1y" | "5y" | "max";
+
+export interface PortfolioSeriesPoint {
+  date: string;
+  value: number;
+}
+
+export interface PortfolioSeriesResponse {
+  aggregate: PortfolioSeriesPoint[];
+  perBucket: Record<string, PortfolioSeriesPoint[]>;
+  asOf: string | null;
+}
+
+export function usePortfolioSeries(range: SeriesRange = "6mo") {
+  return useResource<PortfolioSeriesResponse>(
+    `/api/portfolios/series?range=${encodeURIComponent(range)}`,
+  );
+}
+
 export interface MarketIndexResponse {
   ok: boolean;
   symbol: string;
