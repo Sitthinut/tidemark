@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ChatThreadList } from "@/components/ChatThreadList";
 import { FeedbackRow } from "@/components/FeedbackRow";
 import { Icon } from "@/components/Icon";
 import { invalidate } from "@/lib/fetchers/swr";
@@ -137,7 +138,39 @@ export function ChatScreen({ persona = "advisor", seedPrompt, onPromptConsumed }
   const [loading, setLoading] = useState(false);
   const [threadId, setThreadId] = useState<string | null>(null);
   const [msgFeedback, setMsgFeedback] = useState<Record<number, MsgFeedback>>({});
+  const [showThreads, setShowThreads] = useState(false);
   const streamRef = useRef<HTMLDivElement>(null);
+
+  const loadThread = useCallback(
+    async (id: string): Promise<boolean> => {
+      try {
+        const res = await fetch(`/api/chat/threads/${encodeURIComponent(id)}`);
+        if (!res.ok) return false;
+        const { messages: rows } = (await res.json()) as {
+          messages: Array<{ id: number; role: string; content: string; createdAt: string }>;
+        };
+        setThreadId(id);
+        if (typeof window !== "undefined") {
+          window.localStorage.setItem(ACTIVE_THREAD_KEY, id);
+        }
+        setMessages(
+          rows.length === 0
+            ? initial
+            : rows.map((r) => ({
+                role: r.role === "assistant" ? "ai" : "user",
+                text: r.content,
+                ts: Date.parse(r.createdAt) || Date.now(),
+                id: `db-${r.id}`,
+              })),
+        );
+        setMsgFeedback({});
+        return true;
+      } catch {
+        return false;
+      }
+    },
+    [initial],
+  );
 
   // Hydrate the most recently active thread on mount. If the server doesn't
   // know about the stored id (e.g. demo session restarted, DB wiped), we silently
@@ -148,34 +181,16 @@ export function ChatScreen({ persona = "advisor", seedPrompt, onPromptConsumed }
     if (!stored) return;
     let cancelled = false;
     (async () => {
-      try {
-        const res = await fetch(`/api/chat/threads/${encodeURIComponent(stored)}`);
-        if (cancelled) return;
-        if (!res.ok) {
-          window.localStorage.removeItem(ACTIVE_THREAD_KEY);
-          return;
-        }
-        const { messages: rows } = (await res.json()) as {
-          messages: Array<{ id: number; role: string; content: string; createdAt: string }>;
-        };
-        if (cancelled || rows.length === 0) return;
-        setThreadId(stored);
-        setMessages(
-          rows.map((r) => ({
-            role: r.role === "assistant" ? "ai" : "user",
-            text: r.content,
-            ts: Date.parse(r.createdAt) || Date.now(),
-            id: `db-${r.id}`,
-          })),
-        );
-      } catch {
-        // Network blip; leave the stored id alone and let the next turn retry.
+      const ok = await loadThread(stored);
+      if (cancelled) return;
+      if (!ok && typeof window !== "undefined") {
+        window.localStorage.removeItem(ACTIVE_THREAD_KEY);
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [loadThread]);
 
   const newChat = useCallback(() => {
     if (typeof window !== "undefined") {
@@ -229,6 +244,9 @@ export function ChatScreen({ persona = "advisor", seedPrompt, onPromptConsumed }
           window.localStorage.setItem(ACTIVE_THREAD_KEY, returnedThread);
         }
       }
+      // Refresh the sidebar so the new/updated thread surfaces next time
+      // the drawer opens.
+      void invalidate("/api/chat/threads");
 
       // The route returns a UI message stream — each line is `data: <json>`.
       const reader = res.body.getReader();
@@ -409,6 +427,17 @@ export function ChatScreen({ persona = "advisor", seedPrompt, onPromptConsumed }
       className="screen chat-shell"
     >
       <div className="topbar">
+        <button
+          type="button"
+          className="btn ghost sm"
+          onClick={() => setShowThreads(true)}
+          disabled={loading}
+          aria-label="Open chat list"
+          title="All chats"
+          style={{ padding: "4px 8px" }}
+        >
+          <Icon name="menu" size={14} />
+        </button>
         <div className="brand" style={{ flex: 1 }}>
           <span>{AI_PERSONALITIES.advisor.label}</span>
           <span
@@ -434,6 +463,18 @@ export function ChatScreen({ persona = "advisor", seedPrompt, onPromptConsumed }
         </button>
         <div className="avatar">DU</div>
       </div>
+
+      <ChatThreadList
+        open={showThreads}
+        onClose={() => setShowThreads(false)}
+        activeThreadId={threadId}
+        onSelect={(id) => {
+          if (id !== threadId) {
+            void loadThread(id);
+          }
+        }}
+        onNewChat={newChat}
+      />
 
       <div
         className="chat-stream"

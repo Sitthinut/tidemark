@@ -674,17 +674,20 @@ app/
   idle-TTL like the rest of demo state.
 - Typecheck + lint + build + tests all green.
 
-### Deferred (sidebar UI)
+### Deferred (sidebar UI) — shipped 2026-05-22
 
-The thread-list sidebar in `ChatScreen` was scoped out of the initial
-2.6 commits. The localStorage-pinned "current thread" already delivers
-the reload-survives-chat win; a sidebar adds layout work (side-by-side
-desktop / mobile drawer / delete affordance) that's better tackled in a
-dedicated UI pass when users actually accumulate threads worth
-switching between.
+Originally scoped out of the initial 2.6 commits. Landed alongside the
+Phase 3b polish pass: [components/ChatThreadList.tsx](./components/ChatThreadList.tsx)
+provides a slide-out drawer triggered from a hamburger button in the
+chat topbar.
 
-The `/api/chat/threads` GET endpoint is already live, so wiring a
-sidebar later is a pure UI exercise — no backend work needed.
+- Threads grouped by recency buckets (Today / Yesterday / Last 7 days
+  / Last 30 days / Older), most-recent first.
+- Click a thread to switch (its messages hydrate via the existing
+  `/api/chat/threads/[id]` endpoint).
+- Per-thread delete with a confirm prompt.
+- Closes on Escape or backdrop click. Mobile-friendly width
+  (`min(320px, 88vw)`).
 
 ### Outstanding (deferred to Phase 6)
 
