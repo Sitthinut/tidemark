@@ -38,7 +38,7 @@ Don't rely on it for real investment decisions.
 - [Vercel AI SDK](https://sdk.vercel.ai/) via [OpenRouter](https://openrouter.ai/)
   for chat (one key, every major model)
 - [better-auth](https://www.better-auth.com/) + passkeys for sign-in — see
-  [AUTH.md](./AUTH.md), [SECURITY.md](./SECURITY.md), [DEPLOY.md](./DEPLOY.md), [ROADMAP.md](./ROADMAP.md)
+  [AUTH.md](./AUTH.md), [SECURITY.md](./SECURITY.md), [DEPLOY.md](./DEPLOY.md), [ROADMAP.md](./ROADMAP.md), [AGENTS.md](./AGENTS.md)
 
 ## Quick start
 
@@ -69,7 +69,7 @@ npm run typecheck  # tsc --noEmit
 
 ## Project layout
 
-```
+```text
 macrotide/
 ├── app/
 │   ├── (auth)/login/        Passkey sign-in screen
@@ -97,7 +97,7 @@ macrotide/
 │   ├── format.ts, useViewport.ts, useScrollHide.ts
 ├── data/                    SQLite + daily backups (gitignored)
 ├── tests/                   Vitest
-├── AUTH.md, DEPLOY.md, SECURITY.md, ROADMAP.md, README.md
+├── AUTH.md, DEPLOY.md, SECURITY.md, ROADMAP.md, AGENTS.md, README.md
 ```
 
 ## Contributing

@@ -1,8 +1,21 @@
 # Roadmap
 
 > **Status:** Active. The working plan for turning the static-data prototype
-> into real software. Last updated 2026-05-22 (Phase 2.6 shipped: chat
-> persistence, plan-edit Apply, mock-import migration).
+> into real software. Last updated 2026-05-22 (Phase 3b detailed, Phase 5
+> sketched, thread-list sidebar landed).
+
+## How to read this doc
+
+- **Source of truth for feature status.** Every shipped feature should be
+  reflected in [Phases at a glance](#phases-at-a-glance) and its phase
+  section. If reality drifts from what's written here, fix the doc.
+- **Phases are gates, not silos.** A "shipped" phase has acceptance criteria
+  met; a "partial" phase has working pieces but missing AC.
+- **The implementation order section in each phase is the contract.** When
+  changing it, leave a one-line note explaining why.
+
+See [AGENTS.md](./AGENTS.md) for project conventions an AI agent needs before
+touching code (DB routing, demo mode, where things live).
 
 ---
 
@@ -71,8 +84,8 @@
 **Phase 3 partial:** Yahoo Finance client + cache + `/api/market/indices`;
 MarketsScreen pulls live SET / S&P / Nasdaq / Nikkei / USD-THB with 24h
 cache and graceful 429 fallback. News, digest, learn content, and Thai
-mutual-fund NAVs still mocked (no public API; AIMC or scrape is a later
-pass).
+mutual-fund NAVs still mocked. Phase 3b adds Thai fund NAVs via the
+official Thai SEC Open API (free with a subscription key).
 
 What's still mocked: ANALYSIS scores (need AI tool-calls — Phase 6),
 ANALYSIS chart series (need NAV history backfill — Phase 3b), market news
@@ -123,10 +136,11 @@ exposes the gaps that need polish; polishing on mock data risks rework.
 | 2.5 | Passkey + demo | ✅ Shipped 2026-05-21 | Single-owner auth + per-session in-memory demo DB |
 | 2.6 | Cleanup & chat persistence | ✅ Shipped 2026-05-22 | Chat history persists; plan-edit Apply wired; mock-import migration done. Thread-list sidebar deferred to a polish pass |
 | 3 | Market data | 🟡 Partial | SET/global indices live; funds + news in 3b |
-| 3b | Fund NAVs + news + NAV history | Pending | AIMC scrape; news source TBD |
+| 3b | Fund NAVs + news + NAV history | Pending | Thai SEC Open API (official, free with subscription key); RSS for news; provider plug-in shape |
 | 4 | Portfolio import | 🟡 Partial | CSV done; OCR pending Phase 2 maturity |
 | 4b | Broker scraping / API integration | Out of scope | Revisit only if a clear personal need emerges |
-| 5 | Scheduled jobs / digests / notifications | Pending | Depends on 3b and 6 |
+| 5 | Long-term memory + history compression | Pending | Per-user explicit-save preferences; chat compression to control OpenRouter cost. Research libraries first |
+| 5b | Scheduled jobs / digests / notifications | Pending | Depends on 3b and 6 |
 | 6 | Multi-user (Google + GitHub SSO + passkey, public-discoverable) | Pending | Data-layer migration to per-user, OAuth, Turnstile, quotas, account page |
 
 ## Phase 1 — Persistence
@@ -695,74 +709,150 @@ sidebar later is a pure UI exercise — no backend work needed.
 
 ---
 
-## Phase 3 — Market data
+## Phase 3 — Market data (partial, shipped)
 
 **Goal:** the charts on PortfolioScreen and MarketsScreen show real prices.
 The `read_market_view` tool gives the model live data.
+
+### What shipped
+
+- `lib/market/yahoo.ts` — Yahoo Finance chart client (no auth, needs UA).
+- `lib/market/cache.ts` — SQLite-backed cache against `fund_quotes` +
+  `nav_history` (5-min quote TTL, 24h history TTL).
+- `lib/market/indices.ts` — convenience wrapper for SET / S&P / Nasdaq /
+  Nikkei / USD-THB.
+- `app/api/market/indices/route.ts` powers `MarketsScreen`.
 
 ### Sources
 
 | Data | Provider | Notes |
 | --- | --- | --- |
-| SET index + Thai stocks | Yahoo Finance `^SET.BK` via `query1.finance.yahoo.com` | No auth. Polite caching mandatory (24h for history, 5min for last). |
-| US indexes / global ETFs | Yahoo Finance | Same. |
-| Thai mutual fund NAVs | AIMC (Association of Investment Management Companies) public data, or scrape fund-supermarket pages with Playwright | Slowest, most fragile. Cache 24h. |
-| FX rates (THB/USD) | exchangerate.host or Yahoo | Daily cache. |
+| SET index + global indices + FX | Yahoo Finance `query1.finance.yahoo.com` | No auth. UA header required. 24h history cache, 5min quote cache. |
+| Thai mutual fund NAVs | **Thai SEC Open API** (Phase 3b) | Official government source. Free with subscription key. |
+| News (Thai + global) | RSS aggregation (Phase 3b, optional) | Bangkok Post, SET news, etc. XML parsing. |
 
-> **Defer**: news / earnings calendars / macro feeds. The chat tool surface
-> doesn't need them yet, and they bloat scope.
-
-### File layout
-
-```
-lib/
-  market/
-    yahoo.ts                # generic Yahoo chart endpoint client
-    set-index.ts            # convenience wrapper for ^SET.BK + sectors
-    fund-platform.ts        # Thai fund NAV scraper (Playwright)
-    fx.ts                   # FX rates
-    cache.ts                # SQLite-backed cache (fund_quotes + nav_history tables from Phase 1)
-    types.ts
-
-app/
-  api/
-    market/
-      set/route.ts          # GET ?range=1m|3m|1y
-      fund/[ticker]/route.ts
-      fx/route.ts
-```
-
-### Implementation order
-
-1. `lib/market/cache.ts` — read/write `fund_quotes` + `nav_history` from
-   Phase 1.
-2. `lib/market/yahoo.ts` — generic fetcher with retry + Yahoo's quirky CSRF.
-3. `lib/market/set-index.ts` + `app/api/market/set/route.ts`.
-4. Wire `MarketsScreen` charts to fetch real series.
-5. `lib/market/fund-platform.ts` (Playwright scraper for Thai fund NAVs).
-   Run as a `npm run refresh-navs` script first; later move to a scheduled job
-   (Phase 5).
-6. `app/api/market/fund/[ticker]/route.ts` returns NAV + history from cache,
-   triggers a scrape if cache is cold.
-7. Update Phase-2 `read_market_view` tool to call real endpoints.
-8. PortfolioScreen perf chart: portfolio value vs benchmark, normalized to
-   100, using real NAV history.
-
-### Acceptance criteria
-
-- MarketsScreen shows live SET index + at least 4 holdings with real NAVs.
-- Chat: *"How did my portfolio do vs SET this quarter?"* — answer uses real
-  numbers.
-- Cache headers / DB timestamps prevent re-fetch within TTL.
-- Charts gracefully render when NAV history is partial (e.g. <90 days).
-
-### Risk
+### Risk (retained)
 
 - **Yahoo blocks**: rare but happens. Have a retry + UA rotation. If it
   becomes painful, swap to Alpha Vantage (free tier 25 calls/day; enough for
   a daily refresh).
-- **Fund-supermarket page changes**: scrapers break. Keep selectors in one
-  file; failure mode is "stale cache + log warning," not "crash."
+
+---
+
+## Phase 3b — Thai fund NAVs + NAV history
+
+**Goal:** real Thai mutual-fund NAVs land in `fund_quotes` + `nav_history`
+so PortfolioScreen shows accurate value-vs-cost on real holdings, and the
+chat advisor can reference real returns.
+
+### Source — Thai SEC Open API
+
+The **Securities and Exchange Commission of Thailand** publishes daily
+fund disclosure data via an official, government-run API. This is the
+authoritative source — better than scraping any private fund supermarket.
+
+- **Current portal:** [api-portal.sec.or.th](https://api-portal.sec.or.th/)
+  (discontinuing 30 June 2026).
+- **New portal:** [secopendata.sec.or.th/sec-open-apis](https://secopendata.sec.or.th/sec-open-apis)
+  (launched 12 January 2026). The codebase should target the new portal.
+- **Pricing:** free for public disclosure data. Subscription key required
+  (Azure APIM header `Ocp-Apim-Subscription-Key`).
+- **Rate limit:** 3,000 calls per 300 seconds (≈10 req/sec average).
+  Comfortable for our cache-heavy access pattern.
+- **Relevant products:** "Fund Daily Info" (NAV by date), "Fund Factsheet"
+  (fund metadata, policy, fees).
+
+> No private-company data sources are referenced in code or docs. Reason:
+> avoid TOS/legal exposure and brand-implication for an experimental
+> personal project. If the SEC API gaps need filling, raise as a discussion
+> with the user — don't quietly add a scraper.
+
+### Provider plug-in shape (refactor first)
+
+Current `lib/market/yahoo.ts` is the only provider and `lib/market/cache.ts`
+hard-codes Yahoo. Refactor to a registry so adding providers is a one-file
+change:
+
+```
+lib/market/
+├── providers/
+│   ├── types.ts        # Provider interface; normalized Quote / Series
+│   ├── yahoo.ts        # US, global, Thai SET index, FX
+│   └── sec-thailand.ts # Thai mutual fund NAVs (Phase 3b)
+├── registry.ts         # resolve(symbol) -> Provider
+├── cache.ts            # provider-agnostic
+└── indices.ts          # uses cache
+```
+
+**Symbol routing** (prefix-based):
+
+| Symbol pattern | Provider | Example |
+| --- | --- | --- |
+| `^XXX`, `XXX=X`, `XXX.BK`, bare tickers | yahoo | `^SET.BK`, `THB=X`, `AAPL` |
+| `TH:<fund-code>` | sec-thailand | `TH:EXAMPLE-FUND-A` |
+
+`Quote` and `Series` types are provider-agnostic — `{ price, asOf, currency }`
+and `[{ date, close }]`. Existing `fund_quotes` / `nav_history` schema is
+already provider-agnostic; no migration needed.
+
+### Implementation order
+
+1. **Refactor `lib/market/` to provider shape** — pure code move; existing
+   tests stay green; no behavior change.
+2. **`lib/market/providers/sec-thailand.ts`** — `fetchQuote` and
+   `fetchSeries` against Thai SEC Open API. Strict Zod parsing of the
+   response. Env: `SEC_API_KEY`.
+3. **`app/api/quotes/route.ts`** — accept `?symbol=` (multi-symbol via
+   repeats), dispatch through the registry + cache.
+4. **Fixtures + tests** — record a synthetic response shape (no real fund
+   codes); test cache hit / cache miss / API error fallback paths.
+5. **Wire into Portfolio holdings** — when a holding has a `symbol` like
+   `TH:XYZ` (or the existing ticker field is set), the API enriches with a
+   real NAV. UI shows real value-vs-cost and ROI %. Missing NAVs render as
+   "—" with no chart line break.
+6. **News (RSS) — optional** — `lib/market/news.ts` aggregates Bangkok Post
+   and SET news RSS. May ship as Phase 3c instead.
+
+### Env vars added
+
+```bash
+SEC_API_KEY=...   # Thai SEC Open API subscription key (Ocp-Apim-Subscription-Key)
+```
+
+### Acceptance criteria
+
+- `npm run typecheck` + `npm test` + `npm run build` all green after the
+  provider refactor with no behavior change.
+- Fresh `SEC_API_KEY` resolves a Thai fund symbol end-to-end:
+  `curl 'http://localhost:3000/api/quotes?symbol=TH:<code>'` returns
+  `{ symbol, price, asOf, currency }` with a real NAV.
+- Subsequent requests within TTL hit cache (no outbound network call).
+- PortfolioScreen renders real NAVs for Thai-fund holdings and "—" for
+  unknown ones, without crashing.
+- Daily series populates `nav_history` and powers the perf chart for at
+  least 30 days of data.
+- `Ocp-Apim-Subscription-Key` is never logged at info level; never
+  returned in browser-visible payloads.
+
+### Risk
+
+- **Portal migration mid-implementation**: existing portal discontinues
+  30 June 2026. Target the new `secopendata.sec.or.th` portal from day
+  one. If endpoint shapes differ, parse defensively.
+- **Holiday gaps**: SET observes Thai public holidays; NAV history has
+  natural gaps. Charts must render gracefully.
+- **Subscription key lifecycle**: keys can be rotated. Surface a clear
+  401-handling error path; document key-rotation steps in
+  [DEPLOY.md](./DEPLOY.md).
+- **Cost discipline**: rate limit is generous but cache-first remains the
+  default. Never bypass the cache from a hot path.
+
+### Out of scope (Phase 3b)
+
+- Real-time intraday prices for SET stocks (Phase 3 covers index-level).
+- Earnings calendars, macro data feeds.
+- Broker scraping (Phase 4b, possibly never).
+- Commercial fund-supermarket data sources — see "Source" note above.
 
 ---
 
@@ -820,6 +910,171 @@ once you have a clear personal need.
   schema, low temperature, validation against `known-funds.ts`.
 - **CSV variance**: real broker exports have weird columns. Build the parser
   defensively; let the user map columns in the UI if auto-detect fails.
+
+---
+
+## Phase 5 — Long-term memory + history compression
+
+**Goal:** the chat advisor remembers what the user has told it across
+threads (preferences, risk tolerance, constraints) AND long threads stay
+affordable on OpenRouter. Two related concerns, one phase, because both
+center on "what we send to the model on every turn."
+
+> **Status:** Pending. Specifies the design and the libraries to research
+> before any code lands. Do not start implementation without re-validating
+> the recommendations below — the AI agent memory space is moving fast.
+
+### 5a — Long-term per-user memory (explicit save)
+
+**Approach:** Option A from the planning discussion — the model has an
+explicit tool the user (implicitly or explicitly) triggers. No silent
+auto-summarization of the conversation behind the user's back.
+
+```ts
+// model tool definition (sketch — Vercel AI SDK shape)
+save_preference: {
+  description: "Save a durable fact about the user (preference, constraint, goal).",
+  parameters: z.object({
+    key: z.string(),           // e.g. "max-single-stock-pct"
+    value: z.string(),         // e.g. "15"
+    rationale: z.string(),     // why we're saving this; goes in the audit row
+  }),
+}
+forget_preference: { parameters: z.object({ key: z.string() }) }
+list_preferences: { parameters: z.object({}) }
+```
+
+Triggered by phrases like *"remember that I never want >15% in any single
+stock"* or *"forget what I said about retirement age"*. Stored in a new
+`user_preferences` table, surfaced as a system-message section on every
+chat turn, editable in the Settings page.
+
+**Schema sketch:**
+
+```sql
+CREATE TABLE user_preferences (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id    TEXT,                     -- NULL pre-Phase-6; FK after
+  key        TEXT NOT NULL,
+  value      TEXT NOT NULL,
+  rationale  TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  UNIQUE(user_id, key)
+);
+```
+
+### 5b — Chat history compression
+
+**Approach:** hierarchical summarization paired with a sliding window.
+When a thread exceeds N tokens (or M turns), summarize the older half
+into a single system-message block, drop the originals from the model
+input. Original messages stay in `chat_messages` for display; only the
+**model input** is compressed.
+
+Trigger options (TBD during implementation):
+
+- Turn-count threshold (e.g. >30 turns)
+- Token-count threshold (e.g. >40% of model context)
+- Cost threshold (input tokens × current price > $X)
+
+### Research before coding
+
+The agent-memory space has matured fast. Before starting 5a/5b, evaluate
+these libraries against macrotide's constraints (single-VM, SQLite,
+TypeScript, no Python sidecar):
+
+| Library | Strength | Fit for macrotide |
+| --- | --- | --- |
+| **mem0** | Open-source memory layer that bolts onto existing chat. JS SDK. Vector + relational hybrid. | Strong candidate for 5a. Validate the JS SDK shape against the AI SDK tool-call pattern. |
+| **Letta (MemGPT)** | OS-inspired tiered memory (core / archival / recall). Self-editing memory via tool calls. | Heavier than we need; designed for autonomous long-running agents, not chat advisors. Skip unless 5a's explicit-save model proves insufficient. |
+| **Zep** | Production-grade vector + graph; strong for long-running enterprise sessions. | Mostly Python; service-oriented. Wrong scale for a personal app. |
+| **LangChain Memory** | Built-in summarization buffers, vector retrievers. | Adds a heavy dependency for one feature. Prefer a 50-line bespoke implementation over pulling in LangChain. |
+| **Cognee** | Deep knowledge graph retrieval. | Overkill. |
+| **Hand-rolled** | Direct Drizzle + AI SDK. Full control. | The honest default. Memory in macrotide is small (preferences + plan + journal already exist as structured tables). |
+
+**Recommendation entering implementation:** start hand-rolled for 5a
+(it's <200 lines), and only adopt mem0 if the bespoke version starts
+duplicating significant infrastructure. For 5b, prototype summarization
+with a cheap model (Haiku 4.5) using the same OpenRouter key, no library
+required.
+
+**Recommendation update for compression:** the summarize-and-replace
+pattern Claude Code itself uses (the `<summary>` block at the start of
+this conversation) is the proven baseline. Implement that first, then
+measure whether semantic retrieval over `chat_messages` adds enough
+value to justify a vector store.
+
+### File layout (sketch)
+
+```text
+lib/
+  memory/
+    preferences.ts          # CRUD over user_preferences
+    inject.ts               # build the system-message memory block per turn
+    compression.ts          # turn ChatMessage[] -> (summary, recentWindow)
+  db/
+    queries/
+      preferences.ts        # typed wrappers
+```
+
+### Implementation order
+
+1. **Re-validate library choices** — read the latest docs for mem0,
+   Letta, LangChain Memory; check JS SDK shapes; benchmark prompt
+   sizes; decide.
+2. **5a schema + queries** — `user_preferences` table, Drizzle migration.
+3. **5a tool definitions** — `save_preference` / `forget_preference` /
+   `list_preferences` in the chat tools surface. Persist tool-call rows
+   in `chat_messages`.
+4. **5a system-message injection** — every chat turn loads preferences,
+   formats as a small markdown block, prepends to the system prompt.
+5. **5a Settings UI** — list / edit / delete preferences. Cards with
+   rationale visible.
+6. **5b token measurement** — log per-turn input/output tokens in the
+   existing `usage` table (defined in Phase 6 schema, materialize early
+   if needed).
+7. **5b summarizer** — when thread exceeds threshold, call cheap model
+   to produce a summary; store as a `chat_messages` row with
+   `role='system'` and a marker; drop summarized rows from the next
+   turn's input.
+8. **5b sanity** — make sure compression is idempotent and a re-summary
+   doesn't drift the meaning.
+
+### Acceptance criteria
+
+- User says *"remember I'm targeting retirement at 50"* → model calls
+  `save_preference` → next chat turn (even in a new thread) the model
+  shows it knows.
+- Settings page lists preferences with delete buttons; deleting them
+  removes them from future chat context within one turn.
+- A 50-turn thread runs at <2× the input-token cost of a 5-turn thread
+  (compression working).
+- Compression never drops messages from the persisted DB — only from
+  the model's input view.
+- Demo path: preferences persist for the session and disappear on
+  idle-sweep.
+
+### Risk
+
+- **Library churn**: mem0/Letta/Zep all moved versions in the last 6
+  months. Recheck before committing to a dep.
+- **Preference rot**: stale "remember I'm 28" becomes wrong over time.
+  Surface an `updated_at` and let the user audit. Don't auto-prune.
+- **Summarization drift**: hierarchical summaries lose nuance. Mitigation:
+  cap depth (one summary per thread, re-generated rather than
+  re-summarized).
+- **Privacy**: preferences are sensitive. Once Phase 6 ships, never
+  surface another user's preferences via tool calls — `user_id` filter
+  is invariant.
+
+---
+
+## Phase 5b — Scheduled jobs / digests / notifications
+
+> Renamed from the previous "Phase 5" to make room for the memory phase.
+> Unchanged in intent: scheduled NAV refresh, optional weekly digest
+> email, push notifications. Depends on 3b and 6.
 
 ---
 
@@ -1093,7 +1348,7 @@ Locked decisions, kept here so re-cloners and future-you don't re-litigate.
 | Chat model | `AI_MODELS` env (comma-separated fallback chain), `openrouter/auto` default | Hardcoding one model means a one-string change every model bump |
 | Auth library (Phase 2.5 + 6) | better-auth + passkey + Google/GitHub social (Phase 6) | NextAuth v5 heavier, Clerk vendor lock-in, Auth0 vendor cost |
 | Email transport | **Skip entirely** — Phase 6 uses Google/GitHub SSO only, no magic link | Resend free-tier is fine but DNS + spam-folder UX is friction for a soft-public launch |
-| Market data: Thai funds | Playwright scrape of fund-supermarket pages (Phase 3b) | AIMC feed is the alternative if scraping breaks |
+| Market data: Thai funds | Thai SEC Open API (Phase 3b) — official, free with subscription key | Scraping private fund supermarkets — TOS/legal exposure for an experimental app |
 | Public sign-up bot defense (Phase 6) | Cloudflare Turnstile | hCaptcha works too; Turnstile is already in the zone |
 | Admin tooling (Phase 6) | SQL first; build `/admin` UI only if SQL friction shows up | better-auth's `admin` plugin is there when needed |
 
@@ -1112,7 +1367,7 @@ Locked decisions, kept here so re-cloners and future-you don't re-litigate.
 - **News / research / earnings feeds** — defer until the chat is good enough
   that you'd actually use them.
 - **Mobile-native app / PWA** — desktop / mobile web only.
-- **Notifications / digests / scheduled runs** — Phase 5 if ever.
+- **Notifications / digests / scheduled runs** — Phase 5b if ever.
 - **Enterprise SSO (SAML/OIDC), org accounts, magic-link email** — see
   Phase 6's "What stays out of scope" for why.
 
@@ -1136,18 +1391,44 @@ After each phase, look for:
 - **Phase 4 done**: import flow polish (drag-and-drop affordance, OCR
   confirmation UX), error states.
 
+## Doc stewardship
+
+Stale docs are this project's #1 failure mode. Every code change that ships
+a feature **must** include the matching doc update. Treat docs as part of
+the PR, not a follow-up.
+
+| When you change… | Update… |
+| --- | --- |
+| A phase's deliverables | [ROADMAP.md](./ROADMAP.md) — phase section + "Phases at a glance" table |
+| Status / what works today | [README.md](./README.md) Status block + project-layout block if files moved |
+| Env vars | [.env.example](./.env.example) + [AUTH.md](./AUTH.md) + [DEPLOY.md](./DEPLOY.md) + [AGENTS.md](./AGENTS.md) (env var table) |
+| Auth or security posture | [SECURITY.md](./SECURITY.md) + [AUTH.md](./AUTH.md) |
+| Deployment topology / systemd / Caddy | [DEPLOY.md](./DEPLOY.md) |
+| Conventions an AI agent must know | [AGENTS.md](./AGENTS.md) |
+| External data source (provider, API) | [ROADMAP.md](./ROADMAP.md) Phase 3/3b "Sources" + [SECURITY.md](./SECURITY.md) if it touches auth |
+
+If a doc references a function, env var, or file path, that reference is a
+contract. When you rename / move / delete it, grep the docs:
+
+```bash
+grep -rn "thing_being_renamed" *.md
+```
+
+Verify after writing the change: open each doc you touched and read the
+section end-to-end. Stale doc lines tend to cluster in the same paragraph
+that was edited.
+
 ## Next session pickup
 
 1. `cd macrotide` and re-read this file.
-2. **Phase 3b is the recommended next phase.** Real Thai mutual fund NAVs
-   are the headline value for a Thai investor — without them,
-   PortfolioScreen still shows "—" for friends' actual holdings after
-   they import. Smallest useful loop: AIMC scraper (or fund-supermarket
-   pages via Playwright) → `fund_quotes` + `nav_history` cache → wire
-   into the existing PortfolioScreen perf chart.
-3. **Or jump to Phase 6** (multi-user with Google/GitHub SSO, passkey,
-   Turnstile) if you'd rather invite people now with placeholder NAVs
-   and add real ones later.
-4. **If you want a polish pass first:** the chat thread-list sidebar is
-   the obvious one — the `/api/chat/threads` GET endpoint already lists
-   them, the UI just needs to render a switcher.
+2. **Where we are (2026-05-22):** Phase 3b in flight (provider refactor +
+   Thai SEC Open API integration), thread-list sidebar shipping in the
+   same pass. Phase 5 sketched but research-gated.
+3. **What to pick next:**
+   - **Phase 4 OCR import** — solid follow-on once 3b lands; needs no big
+     decisions, uses Claude vision via OpenRouter.
+   - **Phase 5a (memory)** — pick this if user appetite is "make chat
+     feel personal" before opening multi-user. Re-validate library
+     choices first.
+   - **Phase 6 (multi-user)** — when ready to share with family/friends.
+     One-way door on schema; only start when committed.
