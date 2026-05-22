@@ -792,7 +792,12 @@ lib/market/
 | Symbol pattern | Provider | Example |
 | --- | --- | --- |
 | `^XXX`, `XXX=X`, `XXX.BK`, bare tickers | yahoo | `^SET.BK`, `THB=X`, `AAPL` |
-| `TH:<fund-code>` | sec-thailand | `TH:EXAMPLE-FUND-A` |
+| `thfund:<fund-code>` | sec-thailand | `thfund:EXAMPLE-FUND-A` |
+
+The prefix names the asset class, not the provider — so a Thai mutual
+fund holding keeps the same ticker even if we swap the underlying data
+source later. New providers should claim asset-class names (`crypto:`,
+`bond:`, `fx:`), not provider names.
 
 `Quote` and `Series` types are provider-agnostic — `{ price, asOf, currency }`
 and `[{ date, close }]`. Existing `fund_quotes` / `nav_history` schema is
@@ -809,10 +814,10 @@ already provider-agnostic; no migration needed.
    repeats), dispatch through the registry + cache.
 4. **Fixtures + tests** — record a synthetic response shape (no real fund
    codes); test cache hit / cache miss / API error fallback paths.
-5. **Wire into Portfolio holdings** — when a holding has a `symbol` like
-   `TH:XYZ` (or the existing ticker field is set), the API enriches with a
-   real NAV. UI shows real value-vs-cost and ROI %. Missing NAVs render as
-   "—" with no chart line break.
+5. **Wire into Portfolio holdings** — when a holding has a `ticker` like
+   `thfund:XYZ`, the API enriches with a real NAV. UI shows real
+   value-vs-cost and ROI %. Missing NAVs render as "—" with no chart
+   line break.
 6. **News (RSS) — optional** — `lib/market/news.ts` aggregates Bangkok Post
    and SET news RSS. May ship as Phase 3c instead.
 
@@ -827,7 +832,7 @@ SEC_API_KEY=...   # Thai SEC Open API subscription key (Ocp-Apim-Subscription-Ke
 - `npm run typecheck` + `npm test` + `npm run build` all green after the
   provider refactor with no behavior change.
 - Fresh `SEC_API_KEY` resolves a Thai fund symbol end-to-end:
-  `curl 'http://localhost:3000/api/quotes?symbol=TH:<code>'` returns
+  `curl 'http://localhost:3000/api/quotes?tickers=thfund:<code>&refresh=1'` returns
   `{ symbol, price, asOf, currency }` with a real NAV.
 - Subsequent requests within TTL hit cache (no outbound network call).
 - PortfolioScreen renders real NAVs for Thai-fund holdings and "—" for

@@ -1,20 +1,35 @@
 // Thai SEC Open API provider — Thai mutual fund daily NAV.
 //
 // Source: official Securities and Exchange Commission of Thailand.
-// Portal: https://api-portal.sec.or.th/ (migrating to
-//   https://secopendata.sec.or.th/sec-open-apis by 30 June 2026).
-// Base URL: https://api.sec.or.th
+// Portal: https://secopendata.sec.or.th/sec-open-apis (launched 2026-01-12).
+//   Old portal at https://api-portal.sec.or.th/ retires 2026-06-30.
 //
-// Auth: Ocp-Apim-Subscription-Key header (Azure APIM). Two product
-// subscriptions are required:
-//   - FundFactsheet: lists AMCs + funds (proj_abbr_name → proj_id)
-//   - FundDailyInfo: per-date NAV by proj_id
+// Auth: single subscription on the new portal gives you Primary + Secondary
+// keys (rotation pair — both valid). One subscription covers all six product
+// groups (/bond, /fund, /digital-asset, /LicenseCheck, /onereport, /pvd).
+// Header: Ocp-Apim-Subscription-Key (Azure APIM standard).
 //
-// Rate limit: 3,000 calls per 300 seconds (≈10 req/sec).
+// Rate limit: 5,000 calls per 300 seconds. Min ~16ms between requests
+// recommended. HTTP 421 (not 429) signals over-limit; respect Retry-After.
+// Refresh windows: 09:30 + 17:30 Bangkok time.
 //
-// Symbol format: "TH:<proj_abbr_name>" (e.g. "TH:EXAMPLE-FUND-A"). The
-// human-friendly abbr name is resolved to a UUID-shaped proj_id via a
-// cached lookup; the daily NAV endpoint takes proj_id, not the name.
+// Symbol format: "thfund:<proj_abbr_name>" (e.g. "thfund:EXAMPLE-FUND-A").
+// The `thfund:` prefix names the ASSET CLASS (Thai mutual fund), not this
+// provider — so holdings stay valid if we ever swap the underlying data
+// source. The human-friendly abbr name resolves to a UUID-shaped proj_id
+// via a cached lookup; the daily NAV endpoint takes proj_id, not the name.
+//
+// ┌──────────────────────────────────────────────────────────────────────┐
+// │ MIGRATION TODO                                                       │
+// │ The endpoint paths below target the LEGACY portal:                   │
+// │   /FundFactsheet/fund/amc                                            │
+// │   /FundFactsheet/fund/amc/{unique_id}                                │
+// │   /FundDailyInfo/{proj_id}/dailynav/{date}                           │
+// │ The new portal reorganized everything under /fund/* with cursor      │
+// │ pagination (response wrapper: {message, page_size, next_cursor,      │
+// │ items: [...]}). These legacy paths work until 2026-06-30 then die.   │
+// │ Refresh against the new portal's Fund API product page before then.  │
+// └──────────────────────────────────────────────────────────────────────┘
 //
 // Endpoints used:
 //   GET /FundFactsheet/fund/amc                      → [{ unique_id, ... }]
@@ -35,9 +50,12 @@ import {
   type SeriesRange,
 } from "./types";
 
-export const SEC_THAILAND_PREFIX = "TH:";
+export const SEC_THAILAND_PREFIX = "thfund:";
 const BASE_URL = "https://api.sec.or.th";
-const REQUEST_DELAY_MS = 110; // ≤10 req/s — comfortably under the 3k/300s budget
+// Portal recommends ≥16ms between requests under the 5000-per-300s ceiling
+// (≈16.6 req/sec headroom). We sleep 20ms to give ourselves margin while still
+// finishing a 1-month NAV scan in under a second of wall time.
+const REQUEST_DELAY_MS = 20;
 const FUND_INDEX_TTL_MS = 24 * 60 * 60_000;
 
 interface SecAmc {
@@ -70,18 +88,10 @@ type FundIndex = {
 let fundIndexCache: FundIndex | null = null;
 let fundIndexInflight: Promise<FundIndex> | null = null;
 
-function factsheetKey(): string {
-  const k = process.env.SEC_FUND_FACTSHEET_KEY ?? process.env.SEC_API_KEY;
+function apiKey(): string {
+  const k = process.env.SEC_API_KEY;
   if (!k) {
-    throw new ProviderError("SEC_FUND_FACTSHEET_KEY (or SEC_API_KEY) is not set", "sec-thailand");
-  }
-  return k;
-}
-
-function dailyKey(): string {
-  const k = process.env.SEC_FUND_DAILY_INFO_KEY ?? process.env.SEC_API_KEY;
-  if (!k) {
-    throw new ProviderError("SEC_FUND_DAILY_INFO_KEY (or SEC_API_KEY) is not set", "sec-thailand");
+    throw new ProviderError("SEC_API_KEY is not set", "sec-thailand");
   }
   return k;
 }
@@ -103,8 +113,13 @@ async function secFetch<T>(path: string, key: string): Promise<T | null> {
       res.status,
     );
   }
-  if (res.status === 429) {
-    throw new ProviderError(`Thai SEC API rate-limited (429)`, "sec-thailand", 429);
+  // New portal returns 421 for over-rate-limit; legacy returns 429. Handle both.
+  if (res.status === 421 || res.status === 429) {
+    throw new ProviderError(
+      `Thai SEC API rate-limited (${res.status})`,
+      "sec-thailand",
+      res.status,
+    );
   }
   if (!res.ok) {
     throw new ProviderError(
@@ -119,7 +134,7 @@ async function secFetch<T>(path: string, key: string): Promise<T | null> {
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
 async function buildFundIndex(): Promise<FundIndex> {
-  const key = factsheetKey();
+  const key = apiKey();
   const amcs = (await secFetch<SecAmc[]>("/FundFactsheet/fund/amc", key)) ?? [];
   const byAbbr = new Map<string, FundIndexEntry>();
   for (const amc of amcs) {
@@ -218,7 +233,7 @@ export const secThailandProvider: Provider = {
       );
     }
 
-    const key = dailyKey();
+    const key = apiKey();
     const days = rangeToDays(range);
     const series: SeriesPoint[] = [];
     const today = new Date();

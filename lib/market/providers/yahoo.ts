@@ -130,7 +130,7 @@ export const yahooProvider: Provider = {
   id: "yahoo",
   matches(symbol: string): boolean {
     // Yahoo handles bare / dotted / caret-prefixed / =X symbols.
-    // Prefixed symbols (e.g. "TH:XXX") go to other providers.
+    // Prefixed symbols (e.g. "thfund:XXX") go to other providers.
     return !symbol.includes(":");
   },
   async fetchSeries(

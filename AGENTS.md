@@ -114,13 +114,26 @@ that takes a write.
 A holding's `ticker` field drives provider routing in
 [lib/market/registry.ts](./lib/market/registry.ts):
 
-| Pattern | Provider | Examples |
+| Pattern | Provider (today) | Examples |
 | --- | --- | --- |
-| `TH:<fund-code>` | Thai SEC Open API | `TH:EXAMPLE-FUND-A` |
+| `thfund:<fund-code>` | Thai SEC Open API | `thfund:EXAMPLE-FUND-A` |
 | anything else (no colon) | Yahoo Finance | `^SET.BK`, `AAPL`, `PTT.BK`, `THB=X` |
 
-When adding a new provider, claim a colon-prefixed namespace (e.g. `CG:` for
-CoinGecko) and register it ahead of Yahoo in the registry list.
+**The prefix names the asset class, not the provider.** `thfund:` means "Thai
+mutual fund" regardless of which API serves it. If we ever switch the
+underlying provider, the holdings keep working — only the registry's routing
+map changes. This is the chosen alternative to a `holdings.source` schema
+column; revisit (Option B in past discussion) only when one of these triggers:
+
+- A fund needs finer routing than asset class (same asset class, different
+  source).
+- Multi-user accounts want per-user provider preferences.
+- The prefix grows past ~5 providers with complex routing rules.
+
+When adding a new provider, claim an asset-class-named prefix
+(`crypto:`, `bond:`, `fx:` — not `coingecko:` or `fred:`) and register it
+ahead of Yahoo in the registry list. The Yahoo provider is the broad
+fallback for bare/dotted/caret-prefixed symbols.
 
 ## Auth conventions
 
@@ -142,9 +155,7 @@ CoinGecko) and register it ahead of Yahoo in the registry list.
 | `AUTH_SECRET` | production | Required when `NODE_ENV=production`. |
 | `AUTH_DISABLED` | dev convenience | Set to `1` to skip the login gate on localhost. |
 | `PUBLIC_APP_URL` | production | Canonical URL; passkeys break if this changes. |
-| `SEC_API_KEY` | Phase 3b (combined) | Thai SEC Open API subscription key. Falls back from `SEC_FUND_FACTSHEET_KEY` / `SEC_FUND_DAILY_INFO_KEY` if not set per-product. |
-| `SEC_FUND_FACTSHEET_KEY` | Phase 3b (per-product) | Subscription key for the FundFactsheet product (AMC + fund list). |
-| `SEC_FUND_DAILY_INFO_KEY` | Phase 3b (per-product) | Subscription key for the FundDailyInfo product (per-date NAV). |
+| `SEC_API_KEY` | for `thfund:` | Thai SEC Open API subscription key (Primary or Secondary — both valid). One subscription covers all 6 product groups. Header: `Ocp-Apim-Subscription-Key`. |
 
 Keep [.env.example](./.env.example), [AUTH.md](./AUTH.md), and
 [DEPLOY.md](./DEPLOY.md) in sync when you add/rename variables.
@@ -158,7 +169,7 @@ npm run lint       # Biome check
 npm run format     # Biome --write
 npm run typecheck  # tsc --noEmit
 npm test           # vitest
-npm run smoke:sec -- TH:<FUND-CODE>   # smoke-test Thai SEC provider (needs SEC_API_KEY)
+npm run smoke:sec -- thfund:<FUND-CODE>   # smoke-test Thai SEC provider (needs SEC_API_KEY)
 ```
 
 Pre-commit hook (simple-git-hooks + lint-staged) runs Biome on staged files.

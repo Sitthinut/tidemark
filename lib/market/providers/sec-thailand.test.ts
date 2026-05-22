@@ -58,8 +58,8 @@ describe("sec-thailand provider", () => {
     delete process.env.SEC_API_KEY;
   });
 
-  it("matches TH: prefixed symbols only", () => {
-    expect(secThailandProvider.matches("TH:EXAMPLE-FUND-A")).toBe(true);
+  it("matches thfund: prefixed symbols only", () => {
+    expect(secThailandProvider.matches("thfund:EXAMPLE-FUND-A")).toBe(true);
     expect(secThailandProvider.matches("AAPL")).toBe(false);
     expect(secThailandProvider.matches("^SET.BK")).toBe(false);
   });
@@ -68,10 +68,10 @@ describe("sec-thailand provider", () => {
     const fetchStub = makeFetchStub();
     vi.stubGlobal("fetch", fetchStub);
 
-    const result = await secThailandProvider.fetchSeries("TH:EXAMPLE-FUND-A", "1mo", "1d");
+    const result = await secThailandProvider.fetchSeries("thfund:EXAMPLE-FUND-A", "1mo", "1d");
 
     expect(result.series.length).toBeGreaterThan(0);
-    expect(result.quote.symbol).toBe("TH:EXAMPLE-FUND-A");
+    expect(result.quote.symbol).toBe("thfund:EXAMPLE-FUND-A");
     expect(result.quote.currency).toBe("THB");
     expect(result.quote.name).toBe("Example Fund A");
     // Series only contains weekdays (weekends return 204).
@@ -91,7 +91,7 @@ describe("sec-thailand provider", () => {
     const fetchStub = makeFetchStub();
     vi.stubGlobal("fetch", fetchStub);
 
-    const result = await secThailandProvider.fetchSeries("TH:example-fund-a", "1mo", "1d");
+    const result = await secThailandProvider.fetchSeries("thfund:example-fund-a", "1mo", "1d");
     expect(result.quote.name).toBe("Example Fund A");
   });
 
@@ -99,29 +99,36 @@ describe("sec-thailand provider", () => {
     const fetchStub = makeFetchStub();
     vi.stubGlobal("fetch", fetchStub);
 
-    await expect(secThailandProvider.fetchSeries("TH:UNKNOWN-FUND-X", "1mo", "1d")).rejects.toThrow(
-      /Unknown Thai fund code/,
-    );
+    await expect(
+      secThailandProvider.fetchSeries("thfund:UNKNOWN-FUND-X", "1mo", "1d"),
+    ).rejects.toThrow(/Unknown Thai fund code/);
   });
 
-  it("throws when the subscription key is missing", async () => {
+  it("throws when SEC_API_KEY is missing", async () => {
     delete process.env.SEC_API_KEY;
-    delete process.env.SEC_FUND_FACTSHEET_KEY;
-    delete process.env.SEC_FUND_DAILY_INFO_KEY;
     const fetchStub = makeFetchStub();
     vi.stubGlobal("fetch", fetchStub);
 
-    await expect(secThailandProvider.fetchSeries("TH:EXAMPLE-FUND-A", "1mo", "1d")).rejects.toThrow(
-      /SEC_FUND_FACTSHEET_KEY/,
-    );
+    await expect(
+      secThailandProvider.fetchSeries("thfund:EXAMPLE-FUND-A", "1mo", "1d"),
+    ).rejects.toThrow(/SEC_API_KEY is not set/);
   });
 
   it("propagates 401 as ProviderError", async () => {
     const fetchStub = vi.fn(async () => new Response("unauthorized", { status: 401 }));
     vi.stubGlobal("fetch", fetchStub);
 
-    await expect(secThailandProvider.fetchSeries("TH:EXAMPLE-FUND-A", "1mo", "1d")).rejects.toThrow(
-      /rejected the subscription key/,
-    );
+    await expect(
+      secThailandProvider.fetchSeries("thfund:EXAMPLE-FUND-A", "1mo", "1d"),
+    ).rejects.toThrow(/rejected the subscription key/);
+  });
+
+  it("treats HTTP 421 as a rate-limit error (new portal)", async () => {
+    const fetchStub = vi.fn(async () => new Response("too many", { status: 421 }));
+    vi.stubGlobal("fetch", fetchStub);
+
+    await expect(
+      secThailandProvider.fetchSeries("thfund:EXAMPLE-FUND-A", "1mo", "1d"),
+    ).rejects.toThrow(/rate-limited \(421\)/);
   });
 });

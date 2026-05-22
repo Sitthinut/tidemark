@@ -16,7 +16,7 @@ const providers: Provider[] = [secThailandProvider, yahooProvider];
 /**
  * Register a provider at app boot. Idempotent on `id`. Providers added later
  * are inserted before the existing list, so a new prefixed provider (e.g.
- * `TH:`) wins against the broader Yahoo matcher.
+ * `thfund:`) wins against the broader Yahoo matcher.
  */
 export function registerProvider(p: Provider): void {
   const idx = providers.findIndex((existing) => existing.id === p.id);

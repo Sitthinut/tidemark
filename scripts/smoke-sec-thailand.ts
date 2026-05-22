@@ -8,7 +8,7 @@
 //        SEC_API_KEY=...
 //      (or SEC_FUND_FACTSHEET_KEY + SEC_FUND_DAILY_INFO_KEY if separate)
 //   3. Run:
-//        npm run smoke:sec -- TH:<FUND-CODE>
+//        npm run smoke:sec -- thfund:<FUND-CODE>
 //
 // Loads .env.local via tsx's `--env-file` flag (configured in package.json).
 //
@@ -20,12 +20,12 @@ import { secThailandProvider } from "../lib/market/providers/sec-thailand";
 async function main() {
   const symbol = process.argv[2];
   if (!symbol) {
-    console.error("Usage: npx tsx scripts/smoke-sec-thailand.ts TH:<FUND-CODE>");
-    console.error("Example: npx tsx scripts/smoke-sec-thailand.ts TH:EXAMPLE-FUND-A");
+    console.error("Usage: npx tsx scripts/smoke-sec-thailand.ts thfund:<FUND-CODE>");
+    console.error("Example: npx tsx scripts/smoke-sec-thailand.ts thfund:EXAMPLE-FUND-A");
     process.exit(2);
   }
-  if (!symbol.startsWith("TH:")) {
-    console.error(`Symbol must start with TH:; got "${symbol}"`);
+  if (!symbol.startsWith("thfund:")) {
+    console.error(`Symbol must start with thfund:; got "${symbol}"`);
     process.exit(2);
   }
 
