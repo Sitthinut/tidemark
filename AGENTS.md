@@ -158,6 +158,7 @@ npm run lint       # Biome check
 npm run format     # Biome --write
 npm run typecheck  # tsc --noEmit
 npm test           # vitest
+npm run smoke:sec -- TH:<FUND-CODE>   # smoke-test Thai SEC provider (needs SEC_API_KEY)
 ```
 
 Pre-commit hook (simple-git-hooks + lint-staged) runs Biome on staged files.
