@@ -3,7 +3,7 @@
 // Adapter-shaped fetchers — return the legacy `lib/mock/types` view so
 // existing screens can drop their mock imports without rewriting layout.
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import type { FundQuote } from "@/lib/db/queries/quotes";
 import {
   adaptAggregate,
@@ -12,19 +12,23 @@ import {
   adaptPortfolios,
 } from "@/lib/portfolio/adapter";
 import {
+  type SeriesRange,
   useBuckets,
   useHoldings,
   useJournalEntries,
   useModelPortfolios,
   usePlan,
+  usePortfolioSeries,
   useQuotes,
   useRefreshedQuotes,
 } from "./portfolio";
+import { invalidate } from "./swr";
 
-export function usePortfolioView() {
+export function usePortfolioView(range: SeriesRange = "6mo") {
   const { data: buckets, error: e1 } = useBuckets();
   const { data: holdings, error: e2 } = useHoldings();
   const { data: quotes, error: e3 } = useQuotes();
+  const { data: series, error: e4 } = usePortfolioSeries(range);
 
   // Live-refresh quotes for every held position. Cache hits return from the
   // DB synchronously; misses trigger a network call through the provider
@@ -38,6 +42,24 @@ export function usePortfolioView() {
     [holdings],
   );
   const { data: refreshed } = useRefreshedQuotes(refs);
+
+  // The series endpoint reads nav_history, which `useRefreshedQuotes` writes
+  // to as a side-effect. On a cold cache (e.g. a fresh demo session) the
+  // series query lands before history exists, so SWR caches an empty result.
+  // Re-invalidate once a refresh response arrives that wrote at least one
+  // new row, so the chart fills in without a manual page reload.
+  const invalidatedKey = useRef<string | null>(null);
+  useEffect(() => {
+    if (!refreshed || refreshed.length === 0) return;
+    const okKey = refreshed
+      .filter((r) => r.ok)
+      .map((r) => `${r.source}:${r.ticker}@${r.asOf ?? ""}`)
+      .sort()
+      .join(",");
+    if (!okKey || invalidatedKey.current === okKey) return;
+    invalidatedKey.current = okKey;
+    invalidate(/^\/api\/portfolios\/series/);
+  }, [refreshed]);
 
   // Overlay refreshed values onto the cached quote list so the adapter
   // sees the freshest NAVs without needing a separate revalidation pass.
@@ -62,17 +84,23 @@ export function usePortfolioView() {
   }, [quotes, refreshed]);
 
   const portfolios = useMemo(
-    () => (buckets && holdings ? adaptPortfolios(buckets, holdings, effectiveQuotes) : null),
-    [buckets, holdings, effectiveQuotes],
+    () =>
+      buckets && holdings
+        ? adaptPortfolios(buckets, holdings, effectiveQuotes, series ?? undefined)
+        : null,
+    [buckets, holdings, effectiveQuotes, series],
   );
 
-  const aggregate = useMemo(() => (portfolios ? adaptAggregate(portfolios) : null), [portfolios]);
+  const aggregate = useMemo(
+    () => (portfolios ? adaptAggregate(portfolios, series?.aggregate) : null),
+    [portfolios, series],
+  );
 
   return {
     portfolios,
     aggregate,
     isLoading: !buckets || !holdings || !quotes,
-    error: e1 ?? e2 ?? e3,
+    error: e1 ?? e2 ?? e3 ?? e4,
   };
 }
 

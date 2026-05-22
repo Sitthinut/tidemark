@@ -46,32 +46,34 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "refs query parameter required" }, { status: 400 });
   }
 
-  const results = await Promise.allSettled(
-    refs.map(async (ref): Promise<QuoteResult> => {
-      const cached = await getCachedSeries(ref.source, ref.ticker, "6mo", "1d");
-      if (!cached.quote) {
-        return { ...ref, ok: false, error: "no data" };
-      }
+  return withDb(async () => {
+    const results = await Promise.allSettled(
+      refs.map(async (ref): Promise<QuoteResult> => {
+        const cached = await getCachedSeries(ref.source, ref.ticker, "6mo", "1d");
+        if (!cached.quote) {
+          return { ...ref, ok: false, error: "no data" };
+        }
+        return {
+          ...ref,
+          ok: true,
+          price: cached.quote.price,
+          previousClose: cached.quote.previousClose,
+          asOf: cached.quote.asOf,
+        };
+      }),
+    );
+
+    const payload: QuoteResult[] = results.map((r, i) => {
+      if (r.status === "fulfilled") return r.value;
       return {
-        ...ref,
-        ok: true,
-        price: cached.quote.price,
-        previousClose: cached.quote.previousClose,
-        asOf: cached.quote.asOf,
+        ...refs[i],
+        ok: false,
+        error: r.reason instanceof Error ? r.reason.message : String(r.reason),
       };
-    }),
-  );
+    });
 
-  const payload: QuoteResult[] = results.map((r, i) => {
-    if (r.status === "fulfilled") return r.value;
-    return {
-      ...refs[i],
-      ok: false,
-      error: r.reason instanceof Error ? r.reason.message : String(r.reason),
-    };
+    return NextResponse.json(payload);
   });
-
-  return NextResponse.json(payload);
 }
 
 function parseRef(value: string): { source: string; ticker: string } | null {

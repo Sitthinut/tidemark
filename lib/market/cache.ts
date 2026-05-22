@@ -1,6 +1,6 @@
 import "server-only";
 import { and, desc, eq, gte, sql } from "drizzle-orm";
-import { db } from "@/lib/db/client";
+import { getDb } from "@/lib/db/context";
 import { fundQuotes, navHistory } from "@/lib/db/schema";
 import type { SeriesInterval, SeriesRange } from "./providers/types";
 import { resolveProvider } from "./registry";
@@ -50,6 +50,9 @@ export async function getCachedSeries(
   range: SeriesRange = "6mo",
   interval: SeriesInterval = "1d",
 ): Promise<CachedSeries> {
+  // Resolve the per-request DB so demo sessions write to their isolated
+  // in-memory copy instead of the owner singleton.
+  const db = getDb();
   const key = cacheKey(source, ticker);
   const cachedQuote = db.select().from(fundQuotes).where(eq(fundQuotes.ticker, key)).get();
 
@@ -173,6 +176,7 @@ export async function refreshSymbols(
   refs: Array<{ source: string; ticker: string }>,
   range: SeriesRange = "6mo",
 ): Promise<{ source: string; ticker: string; ok: boolean; error?: string }[]> {
+  const db = getDb();
   const results: { source: string; ticker: string; ok: boolean; error?: string }[] = [];
   for (const r of refs) {
     try {
@@ -198,6 +202,7 @@ export function listCachedSymbols(): {
   updatedAt: string;
   navCount: number;
 }[] {
+  const db = getDb();
   const rows = db
     .select({
       key: fundQuotes.ticker,
