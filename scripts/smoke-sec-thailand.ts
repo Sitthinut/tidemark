@@ -1,19 +1,17 @@
 // Smoke-test the Thai SEC Open API provider against a real subscription key.
 //
 // Usage:
-//   1. Subscribe to FundFactsheet + FundDailyInfo at
-//      https://api-portal.sec.or.th/ (or the new portal at
-//      https://secopendata.sec.or.th/sec-open-apis after Jan 12, 2026).
-//   2. Add your key to .env.local:
+//   1. Subscribe at https://secopendata.sec.or.th/sec-open-apis (one
+//      subscription covers all six product groups).
+//   2. Paste either the Primary or Secondary key into .env.local:
 //        SEC_API_KEY=...
-//      (or SEC_FUND_FACTSHEET_KEY + SEC_FUND_DAILY_INFO_KEY if separate)
 //   3. Run:
 //        npm run smoke:sec -- thfund:<FUND-CODE>
 //
 // Loads .env.local via tsx's `--env-file` flag (configured in package.json).
 //
-// This script makes real HTTP requests; expect it to take ~30s for a
-// 1mo range due to the rate-limiter (~10 req/sec).
+// Typical end-to-end latency is ~2 s (share-class lookup + date-range NAV
+// fetch, each one paginated v2 call).
 
 import { secThailandProvider } from "../lib/market/providers/sec-thailand";
 
@@ -30,7 +28,6 @@ async function main() {
   }
 
   console.log(`Resolving ${symbol} via Thai SEC Open API…`);
-  console.log("(building the fund index from /FundFactsheet first; this may take a few seconds)");
 
   const start = Date.now();
   try {
@@ -47,7 +44,7 @@ async function main() {
       const first = result.series[0];
       const last = result.series[result.series.length - 1];
       console.log(
-        `            ${new Date(first.t * 1000).toISOString().slice(0, 10)} → ${last.close.toFixed(4)}`,
+        `            ${new Date(first.t * 1000).toISOString().slice(0, 10)} → ${first.close.toFixed(4)}`,
       );
       console.log(
         `            ${new Date(last.t * 1000).toISOString().slice(0, 10)} → ${last.close.toFixed(4)}`,

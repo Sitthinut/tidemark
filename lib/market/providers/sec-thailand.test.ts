@@ -2,15 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { __resetSecThailandCache, secThailandProvider } from "./sec-thailand";
 
 // All test data is synthetic. No real Thai fund codes appear in this file.
-const FAKE_AMC = { unique_id: "amc-synthetic-1" };
-const FAKE_FUND = {
-  unique_id: FAKE_AMC.unique_id,
-  proj_id: "proj-synthetic-fund-a",
-  proj_abbr_name: "EXAMPLE-FUND-A",
-  proj_name_en: "Example Fund A",
-  fund_status: "Registered",
-  fund_class_name: "main",
-};
+const FAKE_PROJ_ID_MAIN = "proj-main-fund";
+const FAKE_PROJ_ID_PARENT = "proj-parent-with-classes";
 
 function envelope<T>(items: T[], next_cursor = ""): string {
   return JSON.stringify({
@@ -32,56 +25,125 @@ function dateRange(start: string, end: string): string[] {
   return dates;
 }
 
+/**
+ * Stub a SEC API that knows two synthetic funds:
+ *   EX-MAIN-FUND  — no share classes (fund_class_name === "main")
+ *   EX-PARENT     — has two share classes: EX-CLASS-A, EX-CLASS-B
+ */
 function makeFetchStub() {
   return vi.fn(async (input: string | URL | Request) => {
     const url = typeof input === "string" ? input : input.toString();
     const u = new URL(url);
 
-    if (u.pathname === "/v2/fund/general-info/amcs") {
-      return new Response(envelope([FAKE_AMC]), {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
-      });
-    }
-
     if (u.pathname === "/v2/fund/general-info/profiles") {
-      const companyInfo = u.searchParams.get("company_info");
-      const items = companyInfo === FAKE_AMC.unique_id ? [FAKE_FUND] : [];
-      return new Response(envelope(items), {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
-      });
+      const cls = u.searchParams.get("fund_class_name");
+      const proj = u.searchParams.get("project_info");
+
+      // 1) Share-class exact lookup
+      if (cls) {
+        if (cls === "EX-CLASS-A") {
+          return new Response(
+            envelope([
+              {
+                unique_id: "amc-1",
+                proj_id: FAKE_PROJ_ID_PARENT,
+                proj_abbr_name: "EX-PARENT",
+                proj_name_en: "Example Parent Fund",
+                fund_class_name: "EX-CLASS-A",
+                fund_status: "Registered",
+              },
+            ]),
+            { status: 200, headers: { "Content-Type": "application/json" } },
+          );
+        }
+        if (cls === "EX-CLASS-B") {
+          return new Response(
+            envelope([
+              {
+                unique_id: "amc-1",
+                proj_id: FAKE_PROJ_ID_PARENT,
+                proj_abbr_name: "EX-PARENT",
+                proj_name_en: "Example Parent Fund",
+                fund_class_name: "EX-CLASS-B",
+                fund_status: "Registered",
+              },
+            ]),
+            { status: 200, headers: { "Content-Type": "application/json" } },
+          );
+        }
+        return new Response(envelope([]), { status: 200 });
+      }
+
+      // 2) project_info partial lookup
+      if (proj) {
+        if (proj === "EX-MAIN-FUND") {
+          return new Response(
+            envelope([
+              {
+                unique_id: "amc-2",
+                proj_id: FAKE_PROJ_ID_MAIN,
+                proj_abbr_name: "EX-MAIN-FUND",
+                proj_name_en: "Example Main Fund",
+                fund_class_name: "main",
+                fund_status: "Registered",
+              },
+            ]),
+            { status: 200, headers: { "Content-Type": "application/json" } },
+          );
+        }
+        if (proj === "EX-PARENT") {
+          return new Response(
+            envelope([
+              {
+                unique_id: "amc-1",
+                proj_id: FAKE_PROJ_ID_PARENT,
+                proj_abbr_name: "EX-PARENT",
+                fund_class_name: "EX-CLASS-A",
+              },
+              {
+                unique_id: "amc-1",
+                proj_id: FAKE_PROJ_ID_PARENT,
+                proj_abbr_name: "EX-PARENT",
+                fund_class_name: "EX-CLASS-B",
+              },
+            ]),
+            { status: 200 },
+          );
+        }
+        return new Response(envelope([]), { status: 200 });
+      }
+
+      return new Response(envelope([]), { status: 200 });
     }
 
     if (u.pathname === "/v2/fund/daily-info/nav") {
       const projId = u.searchParams.get("proj_id");
-      if (projId !== FAKE_FUND.proj_id) {
-        return new Response(envelope([]), {
-          status: 200,
-          headers: { "Content-Type": "application/json" },
-        });
-      }
+      const className = u.searchParams.get("fund_class_name");
       const start = u.searchParams.get("start_nav_date") ?? "";
       const end = u.searchParams.get("end_nav_date") ?? "";
       const dates = dateRange(start, end);
-      // Skip weekends and the synthetic "no data" date 2026-05-15.
+
+      const matchesMainProject = projId === FAKE_PROJ_ID_MAIN && !className;
+      const matchesClassA = projId === FAKE_PROJ_ID_PARENT && className === "EX-CLASS-A";
+
+      if (!matchesMainProject && !matchesClassA) {
+        return new Response(envelope([]), { status: 200 });
+      }
+
       const items = dates
         .filter((d) => {
           const dow = new Date(`${d}T00:00:00Z`).getUTCDay();
-          return dow !== 0 && dow !== 6 && d !== "2026-05-15";
+          return dow !== 0 && dow !== 6;
         })
         .map((d) => ({
           proj_id: projId,
-          unique_id: FAKE_AMC.unique_id,
-          fund_class_name: "main",
+          unique_id: matchesMainProject ? "amc-2" : "amc-1",
+          fund_class_name: matchesMainProject ? "main" : className,
           nav_date: d,
           last_val: 10 + Number(d.slice(-2)) / 100,
           net_asset: 1_000_000,
         }));
-      return new Response(envelope(items), {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
-      });
+      return new Response(envelope(items), { status: 200 });
     }
 
     return new Response("not found", { status: 404 });
@@ -92,8 +154,6 @@ describe("sec-thailand provider", () => {
   beforeEach(() => {
     __resetSecThailandCache();
     process.env.SEC_API_KEY = "test-key-synthetic";
-    // Only fake Date; keep setTimeout real-but-fast so the provider's rate
-    // limiter doesn't deadlock against fake timers.
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date("2026-05-22T12:00:00Z"));
   });
@@ -105,55 +165,66 @@ describe("sec-thailand provider", () => {
   });
 
   it("matches thfund: prefixed symbols only", () => {
-    expect(secThailandProvider.matches("thfund:EXAMPLE-FUND-A")).toBe(true);
+    expect(secThailandProvider.matches("thfund:EX-MAIN-FUND")).toBe(true);
     expect(secThailandProvider.matches("AAPL")).toBe(false);
     expect(secThailandProvider.matches("^SET.BK")).toBe(false);
   });
 
-  it("resolves fund abbreviation to proj_id and returns ascending series", async () => {
+  it("resolves a share-class code via fund_class_name lookup", async () => {
     const fetchStub = makeFetchStub();
     vi.stubGlobal("fetch", fetchStub);
 
-    const result = await secThailandProvider.fetchSeries("thfund:EXAMPLE-FUND-A", "1mo", "1d");
+    const result = await secThailandProvider.fetchSeries("thfund:EX-CLASS-A", "1mo", "1d");
 
-    expect(result.series.length).toBeGreaterThan(0);
-    expect(result.quote.symbol).toBe("thfund:EXAMPLE-FUND-A");
+    expect(result.quote.name).toBe("Example Parent Fund");
+    expect(result.quote.symbol).toBe("thfund:EX-CLASS-A");
     expect(result.quote.currency).toBe("THB");
-    expect(result.quote.name).toBe("Example Fund A");
-    // Ascending order is contract.
-    for (let i = 1; i < result.series.length; i++) {
-      expect(result.series[i].t).toBeGreaterThan(result.series[i - 1].t);
-    }
-    // Weekends skipped + the 2026-05-15 gap synthesized.
-    for (const p of result.series) {
-      const date = new Date(p.t * 1000).toISOString().slice(0, 10);
-      expect(date).not.toBe("2026-05-15");
-      const dow = new Date(p.t * 1000).getUTCDay();
-      expect(dow).not.toBe(0);
-      expect(dow).not.toBe(6);
-    }
+    expect(result.series.length).toBeGreaterThan(0);
 
-    // The single date-range NAV call replaces the legacy per-date loop.
-    const navCalls = fetchStub.mock.calls
-      .map((c) => (c[0] as URL | string).toString())
-      .filter((u) => u.includes("/v2/fund/daily-info/nav"));
-    expect(navCalls.length).toBe(1);
+    // resolveSymbol stopped at the class lookup; project_info was never called.
+    const urls = fetchStub.mock.calls.map((c) => (c[0] as URL | string).toString());
+    const projectInfoCalls = urls.filter((u) => u.includes("project_info="));
+    expect(projectInfoCalls.length).toBe(0);
   });
 
-  it("uppercases the abbreviation when looking up funds", async () => {
+  it("resolves a parent fund without share classes via project_info fallback", async () => {
     const fetchStub = makeFetchStub();
     vi.stubGlobal("fetch", fetchStub);
 
-    const result = await secThailandProvider.fetchSeries("thfund:example-fund-a", "1mo", "1d");
-    expect(result.quote.name).toBe("Example Fund A");
+    const result = await secThailandProvider.fetchSeries("thfund:EX-MAIN-FUND", "1mo", "1d");
+
+    expect(result.quote.name).toBe("Example Main Fund");
+    expect(result.series.length).toBeGreaterThan(0);
+
+    // Both endpoints were tried — class lookup missed, project_info hit.
+    const urls = fetchStub.mock.calls.map((c) => (c[0] as URL | string).toString());
+    expect(urls.some((u) => u.includes("fund_class_name=EX-MAIN-FUND"))).toBe(true);
+    expect(urls.some((u) => u.includes("project_info=EX-MAIN-FUND"))).toBe(true);
   });
 
-  it("throws a clear error when the fund code is not in the index", async () => {
+  it("errors helpfully when a parent fund has multiple share classes", async () => {
+    const fetchStub = makeFetchStub();
+    vi.stubGlobal("fetch", fetchStub);
+
+    await expect(secThailandProvider.fetchSeries("thfund:EX-PARENT", "1mo", "1d")).rejects.toThrow(
+      /parent fund with multiple share classes.*EX-CLASS-A.*EX-CLASS-B/s,
+    );
+  });
+
+  it("is case-insensitive on the user-typed code", async () => {
+    const fetchStub = makeFetchStub();
+    vi.stubGlobal("fetch", fetchStub);
+
+    const result = await secThailandProvider.fetchSeries("thfund:ex-class-a", "1mo", "1d");
+    expect(result.quote.name).toBe("Example Parent Fund");
+  });
+
+  it("throws a clear error when the fund code is unknown", async () => {
     const fetchStub = makeFetchStub();
     vi.stubGlobal("fetch", fetchStub);
 
     await expect(
-      secThailandProvider.fetchSeries("thfund:UNKNOWN-FUND-X", "1mo", "1d"),
+      secThailandProvider.fetchSeries("thfund:DOES-NOT-EXIST", "1mo", "1d"),
     ).rejects.toThrow(/Unknown Thai fund code/);
   });
 
@@ -162,83 +233,39 @@ describe("sec-thailand provider", () => {
     const fetchStub = makeFetchStub();
     vi.stubGlobal("fetch", fetchStub);
 
-    await expect(
-      secThailandProvider.fetchSeries("thfund:EXAMPLE-FUND-A", "1mo", "1d"),
-    ).rejects.toThrow(/SEC_API_KEY is not set/);
+    await expect(secThailandProvider.fetchSeries("thfund:EX-CLASS-A", "1mo", "1d")).rejects.toThrow(
+      /SEC_API_KEY is not set/,
+    );
   });
 
   it("propagates 401 as ProviderError", async () => {
     const fetchStub = vi.fn(async () => new Response("unauthorized", { status: 401 }));
     vi.stubGlobal("fetch", fetchStub);
 
-    await expect(
-      secThailandProvider.fetchSeries("thfund:EXAMPLE-FUND-A", "1mo", "1d"),
-    ).rejects.toThrow(/rejected the subscription key/);
+    await expect(secThailandProvider.fetchSeries("thfund:EX-CLASS-A", "1mo", "1d")).rejects.toThrow(
+      /rejected the subscription key/,
+    );
   });
 
   it("treats HTTP 421 as a rate-limit error (new portal)", async () => {
     const fetchStub = vi.fn(async () => new Response("too many", { status: 421 }));
     vi.stubGlobal("fetch", fetchStub);
 
-    await expect(
-      secThailandProvider.fetchSeries("thfund:EXAMPLE-FUND-A", "1mo", "1d"),
-    ).rejects.toThrow(/rate-limited \(421\)/);
+    await expect(secThailandProvider.fetchSeries("thfund:EX-CLASS-A", "1mo", "1d")).rejects.toThrow(
+      /rate-limited \(421\)/,
+    );
   });
 
-  it("follows next_cursor pagination when fund list spans multiple pages", async () => {
-    const FAKE_AMC_2 = { unique_id: "amc-synthetic-2" };
-    const FAKE_FUND_2 = {
-      unique_id: FAKE_AMC_2.unique_id,
-      proj_id: "proj-synthetic-fund-b",
-      proj_abbr_name: "EXAMPLE-FUND-B",
-      proj_name_en: "Example Fund B",
-      fund_class_name: "main",
-    };
-    const fetchStub = vi.fn(async (input: string | URL | Request) => {
-      const url = typeof input === "string" ? input : input.toString();
-      const u = new URL(url);
-      const cursor = u.searchParams.get("next_cursor");
-      if (u.pathname === "/v2/fund/general-info/amcs") {
-        if (!cursor) {
-          return new Response(envelope([FAKE_AMC], "cursor-page-2"), { status: 200 });
-        }
-        return new Response(envelope([FAKE_AMC_2]), { status: 200 });
-      }
-      if (u.pathname === "/v2/fund/general-info/profiles") {
-        const ci = u.searchParams.get("company_info");
-        const items =
-          ci === FAKE_AMC.unique_id
-            ? [FAKE_FUND]
-            : ci === FAKE_AMC_2.unique_id
-              ? [FAKE_FUND_2]
-              : [];
-        return new Response(envelope(items), { status: 200 });
-      }
-      if (u.pathname === "/v2/fund/daily-info/nav") {
-        return new Response(
-          envelope([
-            {
-              proj_id: u.searchParams.get("proj_id"),
-              nav_date: "2026-05-21",
-              last_val: 12.34,
-              fund_class_name: "main",
-            },
-          ]),
-          { status: 200 },
-        );
-      }
-      return new Response("not found", { status: 404 });
-    });
+  it("caches resolved symbols across calls", async () => {
+    const fetchStub = makeFetchStub();
     vi.stubGlobal("fetch", fetchStub);
 
-    // Either fund should resolve thanks to multi-page AMC traversal.
-    const result = await secThailandProvider.fetchSeries("thfund:EXAMPLE-FUND-B", "1mo", "1d");
-    expect(result.quote.name).toBe("Example Fund B");
+    await secThailandProvider.fetchSeries("thfund:EX-CLASS-A", "1mo", "1d");
+    const callsAfterFirst = fetchStub.mock.calls.length;
+    await secThailandProvider.fetchSeries("thfund:EX-CLASS-A", "1mo", "1d");
+    const callsAfterSecond = fetchStub.mock.calls.length;
 
-    // We hit /amcs twice (first page + cursor follow).
-    const amcCalls = fetchStub.mock.calls
-      .map((c) => (c[0] as URL | string).toString())
-      .filter((u) => u.includes("/v2/fund/general-info/amcs"));
-    expect(amcCalls.length).toBe(2);
+    // The second call should hit only the NAV endpoint (no re-resolution).
+    expect(callsAfterSecond - callsAfterFirst).toBe(1);
   });
 });

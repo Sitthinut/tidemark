@@ -7,28 +7,31 @@
 //
 // Auth: single subscription on the new portal gives you Primary + Secondary
 // keys (rotation pair — both valid). One subscription covers all six product
-// groups (/bond, /fund, /digital-asset, /LicenseCheck, /onereport, /pvd).
-// Header: Ocp-Apim-Subscription-Key.
+// groups. Header: Ocp-Apim-Subscription-Key.
 //
 // Rate limit: 5,000 calls per 300 seconds. Min ~16ms between requests
-// recommended. HTTP 421 (not 429) signals over-limit; respect Retry-After.
+// recommended. HTTP 421 signals over-limit; respect Retry-After.
 // Refresh windows: 09:30 + 17:30 Bangkok time.
 //
-// Symbol format: "thfund:<proj_abbr_name>" (e.g. "thfund:EXAMPLE-FUND-A").
-// The `thfund:` prefix names the ASSET CLASS (Thai mutual fund), not this
-// provider — so holdings stay valid if we ever swap the underlying data
-// source. The human-friendly abbr name resolves to a proj_id via a cached
-// lookup; the daily NAV endpoint takes proj_id, not the name.
+// Symbol format: "thfund:<code>" — case-insensitive. The `code` can be either
+// a parent fund's proj_abbr_name (e.g. `HI-DIV-RMF`) for funds without share
+// classes, OR a share-class name (e.g. `K-FIXED-A`, `HIDIV-D`). When a parent
+// fund has share classes, the parent itself is NOT investable — typing the
+// parent code returns a helpful error listing the available classes.
 //
-// Endpoints used (v2 — the new portal's paths):
-//   GET /v2/fund/general-info/amcs                                → AMC list
-//   GET /v2/fund/general-info/profiles?company_info={unique_id}   → funds for one AMC
+// The `thfund:` prefix names the ASSET CLASS (Thai mutual fund), not this
+// provider — holdings stay valid if the underlying data source is ever swapped.
+//
+// Endpoints used (v2 — new portal):
+//   GET /v2/fund/general-info/profiles?fund_class_name={code}   — exact lookup
+//   GET /v2/fund/general-info/profiles?project_info={code}      — partial fallback
 //   GET /v2/fund/daily-info/nav?proj_id={id}
-//        &start_nav_date={YYYY-MM-DD}&end_nav_date={YYYY-MM-DD}   → NAV time series
+//        &fund_class_name={class}                                — narrow to one class
+//        &start_nav_date={YYYY-MM-DD}&end_nav_date={YYYY-MM-DD}  — date range
 //
 // All v2 responses are cursor-paginated:
 //   { message, page_size, next_cursor, items: [...] }
-// Empty `next_cursor` signals last page. Default/max `page_size` is 100.
+// Default/max page_size = 100; empty next_cursor signals last page.
 
 import {
   type Provider,
@@ -42,17 +45,11 @@ import {
 export const SEC_THAILAND_PREFIX = "thfund:";
 const BASE_URL = "https://api.sec.or.th";
 // Portal recommends ≥16ms between requests under the 5000-per-300s ceiling.
-// We sleep 20ms for margin. With date-range NAV queries, a typical fetchSeries
-// makes only 1–3 calls total (vs ~30 in the legacy per-date model).
+// 20ms gives margin. With targeted (per-symbol) lookups instead of a global
+// index build, a cold-start fetchSeries makes just 2–3 calls.
 const REQUEST_DELAY_MS = 20;
 const PAGE_SIZE = 100;
-const FUND_INDEX_TTL_MS = 24 * 60 * 60_000;
-
-interface SecAmc {
-  unique_id: string;
-  comp_name_th?: string;
-  comp_name_en?: string;
-}
+const SYMBOL_CACHE_TTL_MS = 24 * 60 * 60_000;
 
 interface SecFund {
   unique_id: string;
@@ -80,18 +77,19 @@ interface PaginatedEnvelope<T> {
   items?: T[];
 }
 
-interface FundIndexEntry {
+interface ResolvedFund {
   projId: string;
+  /** Display name, falls back through proj_name_en → proj_name_th → abbr. */
   name: string;
+  /**
+   * The fund_class_name to filter NAV queries by. `"main"` for funds without
+   * share classes; the share-class abbreviation otherwise.
+   */
+  fundClassName: string;
+  cachedAt: number;
 }
 
-type FundIndex = {
-  byAbbr: Map<string, FundIndexEntry>;
-  fetchedAt: number;
-};
-
-let fundIndexCache: FundIndex | null = null;
-let fundIndexInflight: Promise<FundIndex> | null = null;
+const symbolCache = new Map<string, ResolvedFund>();
 
 function apiKey(): string {
   const k = process.env.SEC_API_KEY;
@@ -103,11 +101,6 @@ function apiKey(): string {
 
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
-/**
- * Single HTTP GET against the SEC API. Returns the parsed envelope, or null
- * when the server responds 204 No Content. Throws ProviderError on auth or
- * rate-limit failures.
- */
 async function secFetch<T>(path: string, key: string): Promise<T | null> {
   const url = `${BASE_URL}${path}`;
   const res = await fetch(url, {
@@ -125,7 +118,6 @@ async function secFetch<T>(path: string, key: string): Promise<T | null> {
       res.status,
     );
   }
-  // New portal: 421. Legacy portal: 429. Handle both.
   if (res.status === 421 || res.status === 429) {
     throw new ProviderError(
       `Thai SEC API rate-limited (${res.status})`,
@@ -143,11 +135,6 @@ async function secFetch<T>(path: string, key: string): Promise<T | null> {
   return (await res.json()) as T;
 }
 
-/**
- * Drives the v2 cursor pagination: keeps calling the endpoint with `next_cursor`
- * until the server signals end-of-data (empty cursor or no items). Returns the
- * flat list across all pages.
- */
 async function secFetchPaginated<T>(
   path: string,
   query: Record<string, string>,
@@ -168,48 +155,91 @@ async function secFetchPaginated<T>(
   return items;
 }
 
-async function buildFundIndex(): Promise<FundIndex> {
-  const key = apiKey();
-  const amcs = await secFetchPaginated<SecAmc>("/v2/fund/general-info/amcs", {}, key);
-  const byAbbr = new Map<string, FundIndexEntry>();
-  for (const amc of amcs) {
-    await sleep(REQUEST_DELAY_MS);
-    const funds = await secFetchPaginated<SecFund>(
-      "/v2/fund/general-info/profiles",
-      { company_info: amc.unique_id },
-      key,
-    );
-    for (const f of funds) {
-      if (!f.proj_id || !f.proj_abbr_name) continue;
-      // Skip non-main class funds — multiple share-classes share one abbreviation,
-      // so first-wins-on-main keeps the lookup deterministic. Callers needing
-      // class-specific NAVs should pass a class-qualified symbol (future work).
-      if (f.fund_class_name && f.fund_class_name !== "main") continue;
-      const key = f.proj_abbr_name.toUpperCase();
-      if (byAbbr.has(key)) continue;
-      byAbbr.set(key, {
-        projId: f.proj_id,
-        name: f.proj_name_en ?? f.proj_name_th ?? f.proj_abbr_name,
-      });
-    }
-  }
-  return { byAbbr, fetchedAt: Date.now() };
+function nameOf(f: SecFund): string {
+  return f.proj_name_en ?? f.proj_name_th ?? f.proj_abbr_name;
 }
 
-async function getFundIndex(): Promise<FundIndex> {
-  if (fundIndexCache && Date.now() - fundIndexCache.fetchedAt < FUND_INDEX_TTL_MS) {
-    return fundIndexCache;
+/**
+ * Resolve a user-typed fund code to a proj_id + class filter. Tries the
+ * share-class endpoint first (cheap exact match), then falls back to
+ * project_info partial-match against parent fund names. Caches both
+ * successful and ambiguous resolutions for 24h.
+ *
+ * On ambiguity (parent fund with multiple share classes), throws a clear
+ * error listing the available classes so the user can pick one.
+ */
+async function resolveSymbol(code: string): Promise<ResolvedFund> {
+  const upper = code.trim().toUpperCase();
+  if (!upper) {
+    throw new ProviderError("empty Thai fund code", "sec-thailand");
   }
-  if (fundIndexInflight) return fundIndexInflight;
-  fundIndexInflight = buildFundIndex()
-    .then((idx) => {
-      fundIndexCache = idx;
-      return idx;
-    })
-    .finally(() => {
-      fundIndexInflight = null;
-    });
-  return fundIndexInflight;
+  const cached = symbolCache.get(upper);
+  if (cached && Date.now() - cached.cachedAt < SYMBOL_CACHE_TTL_MS) {
+    return cached;
+  }
+
+  const key = apiKey();
+
+  // 1) Treat the input as a share-class name. Exact match, single API call.
+  const byClass = await secFetchPaginated<SecFund>(
+    "/v2/fund/general-info/profiles",
+    { fund_class_name: upper },
+    key,
+  );
+  const exactClass = byClass.find((f) => (f.fund_class_name ?? "").toUpperCase() === upper);
+  if (exactClass) {
+    const entry: ResolvedFund = {
+      projId: exactClass.proj_id,
+      name: nameOf(exactClass),
+      fundClassName: exactClass.fund_class_name ?? upper,
+      cachedAt: Date.now(),
+    };
+    symbolCache.set(upper, entry);
+    return entry;
+  }
+
+  // 2) Treat the input as a parent proj_abbr_name. Partial match, then narrow.
+  await sleep(REQUEST_DELAY_MS);
+  const byProject = await secFetchPaginated<SecFund>(
+    "/v2/fund/general-info/profiles",
+    { project_info: upper },
+    key,
+  );
+  const parentMatches = byProject.filter((f) => (f.proj_abbr_name ?? "").toUpperCase() === upper);
+
+  // 2a) Single fund, no share classes (fund_class_name === "main" or absent).
+  const mainRow = parentMatches.find((f) => {
+    const c = (f.fund_class_name ?? "").trim().toLowerCase();
+    return c === "main" || c === "" || c === "-";
+  });
+  if (mainRow) {
+    const entry: ResolvedFund = {
+      projId: mainRow.proj_id,
+      name: nameOf(mainRow),
+      fundClassName: "main",
+      cachedAt: Date.now(),
+    };
+    symbolCache.set(upper, entry);
+    return entry;
+  }
+
+  // 2b) Parent with multiple share classes — ambiguous. Surface the options.
+  if (parentMatches.length > 0) {
+    const classes = parentMatches
+      .map((f) => f.fund_class_name)
+      .filter((c): c is string => Boolean(c))
+      .sort();
+    throw new ProviderError(
+      `"${upper}" is a parent fund with multiple share classes. ` +
+        `Specify one of: ${classes.map((c) => `thfund:${c}`).join(", ")}`,
+      "sec-thailand",
+    );
+  }
+
+  throw new ProviderError(
+    `Unknown Thai fund code "${upper}" — no match for share class or parent fund`,
+    "sec-thailand",
+  );
 }
 
 function parseSymbol(symbol: string): string {
@@ -219,7 +249,7 @@ function parseSymbol(symbol: string): string {
       "sec-thailand",
     );
   }
-  return symbol.slice(SEC_THAILAND_PREFIX.length).toUpperCase();
+  return symbol.slice(SEC_THAILAND_PREFIX.length);
 }
 
 function rangeToDays(range: SeriesRange): number {
@@ -253,15 +283,8 @@ export const secThailandProvider: Provider = {
     range: SeriesRange,
     _interval: SeriesInterval,
   ): Promise<{ quote: Quote; series: SeriesPoint[] }> {
-    const abbr = parseSymbol(symbol);
-    const index = await getFundIndex();
-    const entry = index.byAbbr.get(abbr);
-    if (!entry) {
-      throw new ProviderError(
-        `Unknown Thai fund code "${abbr}" — not present in SEC FundFactsheet index`,
-        "sec-thailand",
-      );
-    }
+    const code = parseSymbol(symbol);
+    const entry = await resolveSymbol(code);
 
     const key = apiKey();
     const today = new Date();
@@ -269,29 +292,34 @@ export const secThailandProvider: Provider = {
     const startDate = new Date(today);
     startDate.setUTCDate(startDate.getUTCDate() - rangeToDays(range));
 
-    const rows = await secFetchPaginated<SecDailyNav>(
-      "/v2/fund/daily-info/nav",
-      {
-        proj_id: entry.projId,
-        start_nav_date: yyyyMmDd(startDate),
-        end_nav_date: yyyyMmDd(today),
-      },
-      key,
-    );
+    const navQuery: Record<string, string> = {
+      proj_id: entry.projId,
+      start_nav_date: yyyyMmDd(startDate),
+      end_nav_date: yyyyMmDd(today),
+    };
+    // For share classes, narrow the response server-side. For "main" the
+    // server returns just the one row per date anyway, but we still apply
+    // a defensive client-side filter below.
+    if (entry.fundClassName !== "main") {
+      navQuery.fund_class_name = entry.fundClassName;
+    }
 
+    const rows = await secFetchPaginated<SecDailyNav>("/v2/fund/daily-info/nav", navQuery, key);
+
+    const wantClass = entry.fundClassName.toLowerCase();
     const series: SeriesPoint[] = [];
     for (const r of rows) {
-      // The API can return multiple class-fund rows per date; we asked for the
-      // main fund via proj_id but defensive-filter on `fund_class_name` to
-      // avoid picking up an unrelated share class if the server returns them.
-      if (r.fund_class_name && r.fund_class_name !== "main" && r.fund_class_name !== "-") continue;
+      const rc = (r.fund_class_name ?? "").trim().toLowerCase();
+      // Defensive: keep rows that match the wanted class (treating "", "-",
+      // "main" as equivalent for parent funds).
+      const isMainLike = rc === "" || rc === "-" || rc === "main";
+      const matchesWanted = wantClass === "main" ? isMainLike : rc === wantClass;
+      if (!matchesWanted) continue;
       if (r.last_val == null) continue;
       const t = Math.floor(Date.parse(`${r.nav_date}T00:00:00Z`) / 1000);
       if (!Number.isFinite(t)) continue;
       series.push({ t, close: r.last_val });
     }
-    // The server may return out-of-order rows depending on pagination —
-    // sort ascending by timestamp so consumers can rely on order.
     series.sort((a, b) => a.t - b.t);
 
     if (series.length === 0) {
@@ -315,8 +343,7 @@ export const secThailandProvider: Provider = {
   },
 };
 
-/** Test-only — reset the fund-index cache. */
+/** Test-only — reset the per-symbol cache. */
 export function __resetSecThailandCache(): void {
-  fundIndexCache = null;
-  fundIndexInflight = null;
+  symbolCache.clear();
 }
