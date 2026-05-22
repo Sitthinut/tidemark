@@ -129,7 +129,9 @@ that takes a write.
 | `AUTH_SECRET` | production | Required when `NODE_ENV=production`. |
 | `AUTH_DISABLED` | dev convenience | Set to `1` to skip the login gate on localhost. |
 | `PUBLIC_APP_URL` | production | Canonical URL; passkeys break if this changes. |
-| `SEC_API_KEY` | Phase 3b | Thai SEC Open API subscription key (`Ocp-Apim-Subscription-Key`). |
+| `SEC_API_KEY` | Phase 3b (combined) | Thai SEC Open API subscription key. Falls back from `SEC_FUND_FACTSHEET_KEY` / `SEC_FUND_DAILY_INFO_KEY` if not set per-product. |
+| `SEC_FUND_FACTSHEET_KEY` | Phase 3b (per-product) | Subscription key for the FundFactsheet product (AMC + fund list). |
+| `SEC_FUND_DAILY_INFO_KEY` | Phase 3b (per-product) | Subscription key for the FundDailyInfo product (per-date NAV). |
 
 Keep [.env.example](./.env.example), [AUTH.md](./AUTH.md), and
 [DEPLOY.md](./DEPLOY.md) in sync when you add/rename variables.

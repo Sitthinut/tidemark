@@ -4,10 +4,14 @@
 // returns true wins. Order matters: more-specific providers should come
 // before broader ones (Yahoo is the catch-all and ships last).
 
+import { secThailandProvider } from "./providers/sec-thailand";
 import type { Provider } from "./providers/types";
 import { yahooProvider } from "./providers/yahoo";
 
-const providers: Provider[] = [yahooProvider];
+// Order matters: more-specific (prefixed) providers first, broad
+// matchers last. Yahoo accepts anything without a colon, so it must
+// sit at the end of the list.
+const providers: Provider[] = [secThailandProvider, yahooProvider];
 
 /**
  * Register a provider at app boot. Idempotent on `id`. Providers added later
