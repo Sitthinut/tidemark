@@ -83,8 +83,15 @@ export function App() {
   const { data: plan } = usePlan();
   const [selectedModelOverride, setSelectedModelOverride] = useState<string | null>(null);
   const selectedModelId = selectedModelOverride ?? planSelectedModelId ?? "bogle3";
-  // Wide-only: which app panel is open on the right. Desktop opens chat by default.
-  const [activeApp, setActiveApp] = useState<AppId | null>("chat");
+  // Which app panel is open on the right.
+  // Default behaviour depends on viewport (thresholds mirror useViewport):
+  //   - Desktop (≥1000): chat opens by default — side-by-side fits.
+  //   - Tablet (700–999):  closed by default — panel is an overlay.
+  //   - Mobile (<700):     no panel rail at all; chat lives as its own screen.
+  const [activeApp, setActiveApp] = useState<AppId | null>(() => {
+    if (typeof window === "undefined") return "chat";
+    return window.innerWidth >= 1000 ? "chat" : null;
+  });
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
 
   // PortfolioSheet lives at the App level so it survives the mobile↔wide
@@ -414,20 +421,30 @@ export function App() {
           </div>
         </main>
 
-        {/* ===== Apps panel ===== */}
+        {/* ===== Apps panel + backdrop =====
+            Backdrop is only visible at tablet (CSS) where the panel becomes
+            an overlay over main content. Clicking it dismisses the panel. */}
         {activeApp && (
-          <section className="ra-panel">
-            {activeApp === "chat" && (
-              <ChatPanel
-                seedPrompt={pendingPrompt}
-                onPromptConsumed={() => setPendingPrompt(null)}
-                onClose={() => setActiveApp(null)}
-              />
-            )}
-            {activeApp === "portfolios" && <PortfoliosPanel onClose={() => setActiveApp(null)} />}
-            {activeApp === "plan" && <PlanPanel onClose={() => setActiveApp(null)} />}
-            {activeApp === "notes" && <NotesPanel onClose={() => setActiveApp(null)} />}
-          </section>
+          <>
+            <button
+              type="button"
+              className="ra-panel-backdrop"
+              onClick={() => setActiveApp(null)}
+              aria-label="Close panel"
+            />
+            <section className="ra-panel">
+              {activeApp === "chat" && (
+                <ChatPanel
+                  seedPrompt={pendingPrompt}
+                  onPromptConsumed={() => setPendingPrompt(null)}
+                  onClose={() => setActiveApp(null)}
+                />
+              )}
+              {activeApp === "portfolios" && <PortfoliosPanel onClose={() => setActiveApp(null)} />}
+              {activeApp === "plan" && <PlanPanel onClose={() => setActiveApp(null)} />}
+              {activeApp === "notes" && <NotesPanel onClose={() => setActiveApp(null)} />}
+            </section>
+          </>
         )}
 
         {/* ===== Right apps icon rail ===== */}

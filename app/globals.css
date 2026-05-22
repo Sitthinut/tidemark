@@ -124,6 +124,10 @@ html,
 body {
   margin: 0;
   padding: 0;
+  /* Kill the elastic / rubber-band scroll at the document level — a fixed
+     overlay panel decouples from the page when the page bounces, which
+     looks like the panel is "floating" out of place. */
+  overscroll-behavior: none;
 }
 body {
   font-family: var(--font-sans);
@@ -1760,20 +1764,34 @@ textarea.sheet-input {
   color: var(--ink);
 }
 
-/* Tablet: 88 | flex | 320 (if panel) | 72 */
-.ra-shell.tablet.panel-open {
-  grid-template-columns: 88px 1fr 340px 72px;
-}
+/* Tablet: 88 | flex | 72 — panel doesn't take a column, it overlays main
+   instead (see .ra-shell.tablet.panel-open .ra-panel below). Side-by-side
+   at 700-1199px squeezes main content down to ~200px, which is unusable. */
+.ra-shell.tablet.panel-open,
 .ra-shell.tablet.panel-closed {
   grid-template-columns: 88px 1fr 72px;
 }
 
-/* Desktop: 220 | flex | 380 (if panel) | 76 */
+/* Desktop ≥1200: 220 | flex | 380 (if panel) | 76 — full labeled rail. */
 .ra-shell.desktop.panel-open {
   grid-template-columns: 220px 1fr 380px 76px;
 }
 .ra-shell.desktop.panel-closed {
   grid-template-columns: 220px 1fr 76px;
+}
+
+/* Narrow desktop (1000–1199): keep side-by-side panel but borrow the tablet
+   rail (88px column, compact icon+label stack). The tablet rail styles
+   already exist — we just extend the same selectors below to also match
+   .ra-shell.desktop, gated to ≤1199px. The labeled-rail desktop variant is
+   wrapped in (min-width: 1200px) so it doesn't fight the compact one. */
+@media (max-width: 1199px) {
+  .ra-shell.desktop.panel-open {
+    grid-template-columns: 88px 1fr 380px 76px;
+  }
+  .ra-shell.desktop.panel-closed {
+    grid-template-columns: 88px 1fr 76px;
+  }
 }
 
 /* ----- Left nav rail ----- */
@@ -1788,12 +1806,22 @@ textarea.sheet-input {
   z-index: 25;
 }
 
+/* Compact rail (tablet + narrow desktop ≤1199): centered icons, 6px padding. */
 .ra-shell.tablet .ra-rail {
   padding: 18px 6px;
   align-items: center;
 }
-.ra-shell.desktop .ra-rail {
-  padding: 18px 12px;
+@media (max-width: 1199px) {
+  .ra-shell.desktop .ra-rail {
+    padding: 18px 6px;
+    align-items: center;
+  }
+}
+/* Labeled rail (desktop ≥1200): wider padding for side-by-side icon+label. */
+@media (min-width: 1200px) {
+  .ra-shell.desktop .ra-rail {
+    padding: 18px 12px;
+  }
 }
 
 .ra-rail-nav {
@@ -1831,6 +1859,7 @@ textarea.sheet-input {
   color: var(--accent-ink);
 }
 
+/* Compact rail-item (tablet + narrow desktop ≤1199): column-stacked icon + label. */
 .ra-shell.tablet .ra-rail-item {
   flex-direction: column;
   width: 76px;
@@ -1839,14 +1868,27 @@ textarea.sheet-input {
   font-size: 10.5px;
   line-height: 1.1;
 }
-.ra-shell.desktop .ra-rail-item {
-  padding: 9px 12px;
-  gap: 12px;
-  font-size: 13px;
+@media (max-width: 1199px) {
+  .ra-shell.desktop .ra-rail-item {
+    flex-direction: column;
+    width: 76px;
+    padding: 9px 4px 7px;
+    gap: 5px;
+    font-size: 10.5px;
+    line-height: 1.1;
+  }
 }
-.ra-shell.desktop .ra-rail-item-label {
-  flex: 1;
-  text-align: left;
+/* Labeled rail-item (desktop ≥1200): icon and label side-by-side. */
+@media (min-width: 1200px) {
+  .ra-shell.desktop .ra-rail-item {
+    padding: 9px 12px;
+    gap: 12px;
+    font-size: 13px;
+  }
+  .ra-shell.desktop .ra-rail-item-label {
+    flex: 1;
+    text-align: left;
+  }
 }
 
 /* Rail footer / avatar / account menu */
@@ -1861,6 +1903,14 @@ textarea.sheet-input {
   justify-content: center;
   border-top: 0;
   padding-top: 12px;
+}
+@media (max-width: 1199px) {
+  .ra-shell.desktop .ra-rail-foot {
+    display: flex;
+    justify-content: center;
+    border-top: 0;
+    padding-top: 12px;
+  }
 }
 .ra-rail-avatar-btn {
   background: transparent;
@@ -1880,6 +1930,15 @@ textarea.sheet-input {
 .ra-shell.tablet .ra-rail-avatar-btn {
   padding: 0;
   width: auto;
+}
+@media (max-width: 1199px) {
+  .ra-shell.desktop .ra-rail-avatar-btn {
+    padding: 0;
+    width: auto;
+  }
+  .ra-shell.desktop .ra-rail-acct-text {
+    display: none;
+  }
 }
 .ra-rail-avatar {
   width: 32px;
@@ -1954,6 +2013,35 @@ textarea.sheet-input {
   background: var(--bg);
   overflow-y: auto;
   height: calc(100vh - var(--demo-banner-h));
+  /* `none` (vs `contain`) also disables the elastic bounce *within* the
+     scroller itself, not just the chain to the parent. With a fixed overlay
+     panel, the bounce moved the page while the panel stayed still. */
+  overscroll-behavior: none;
+  /* Scrollbar: thin + transparent at rest, dim thumb on hover. Mimics the
+     overlay-scrollbar feel on macOS for platforms (Linux, Windows) that
+     would otherwise render a permanent chunky bar. */
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+.ra-main:hover {
+  scrollbar-color: var(--muted-2) transparent;
+}
+.ra-main::-webkit-scrollbar {
+  width: 8px;
+}
+.ra-main::-webkit-scrollbar-track {
+  background: transparent;
+}
+.ra-main::-webkit-scrollbar-thumb {
+  background: transparent;
+  border-radius: 4px;
+  transition: background 0.2s;
+}
+.ra-main:hover::-webkit-scrollbar-thumb {
+  background: var(--muted-2);
+}
+.ra-main::-webkit-scrollbar-thumb:hover {
+  background: var(--muted);
 }
 /* Banner sits outside .ra-main, so sticky descendants don't need the
    banner offset on their `top` (they'd double-offset otherwise).
@@ -2006,6 +2094,62 @@ textarea.sheet-input {
   flex-direction: column;
   overflow: hidden;
   z-index: 20;
+}
+
+/* Tablet: panel becomes an overlay anchored just inside the apps rail. Main
+   content underneath keeps its full width — no squeeze. */
+.ra-shell.tablet .ra-panel {
+  position: fixed;
+  top: var(--demo-banner-h, 0px);
+  right: 72px;
+  width: min(380px, calc(100vw - 88px - 72px - 24px));
+  height: calc(100vh - var(--demo-banner-h, 0px));
+  z-index: 50;
+  border-left: 1px solid var(--line-soft);
+  /* Subtle separation only — no heavy elevation. */
+  box-shadow: -2px 0 12px rgba(0, 0, 0, 0.06);
+  animation: slideInRight 0.22s ease-out;
+}
+
+@keyframes slideInRight {
+  from {
+    transform: translateX(8px);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+/* Backdrop sits behind the overlay panel so click-outside dismisses it.
+   Rendered as a <button> for accessibility, but visually a flat layer.
+   Hidden at every other viewport via the display rules below. */
+.ra-panel-backdrop {
+  display: none;
+  appearance: none;
+  -webkit-appearance: none;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  color: inherit;
+}
+.ra-shell.tablet.panel-open .ra-panel-backdrop {
+  /* No dim — keeps the dashboard fully readable while the chat panel is
+     open. The backdrop is still a click target for dismissing the panel. */
+  display: block;
+  position: fixed;
+  inset: 0;
+  background: transparent;
+  z-index: 49;
+  cursor: pointer;
+}
+@media (prefers-reduced-motion: reduce) {
+  .ra-shell.tablet .ra-panel,
+  .ra-shell.tablet.panel-open .ra-panel-backdrop {
+    animation: none;
+  }
 }
 .ra-panel-head {
   display: flex;
