@@ -84,7 +84,7 @@ function weightedPct(holdings: Holding[], total: number, key: "d1" | "ytd" | "y1
 function inferPortfolioType(typeLabel: string | null): PortfolioType {
   if (!typeLabel) return "free";
   const t = typeLabel.toLowerCase();
-  if (t.includes("ssf") || t.includes("tax")) return "tax-locked";
+  if (t.includes("ssf") || t.includes("rmf") || t.includes("tax")) return "tax-locked";
   if (t.includes("experiment")) return "experiment";
   return "free";
 }

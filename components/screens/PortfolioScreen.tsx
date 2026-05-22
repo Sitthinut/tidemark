@@ -56,17 +56,17 @@ const SEV_LABEL: Record<string, string> = {
 
 const SWATCH_ABBR: Record<string, string> = {
   "SCBS&P500": "S&P",
-  "K-USA-A": "USA",
+  "K-USA-A(A)": "USA",
   "K-WORLDX": "WLD",
+  "K-FIXED-A": "FIX",
   "KFGBRAND-A": "KFG",
+  "KFGTECH-A": "TEC",
+  "KFCASH-A": "$",
+  "K-INDIA-A(A)": "IND",
   ABSM: "ABS",
-  "K-FIXED": "FIX",
-  "KKP-GINFRA": "INF",
-  KFCASH: "$",
-  "SCBSFF-SSF": "SFF",
-  "K-USXNDQ-SSF": "NDQ",
-  "K-WPSPX-SSF": "WPX",
-  TISCOEM: "EM",
+  "K-USARMF": "USR",
+  "K-WORLDXRMF": "WLR",
+  "K-GINCOMERMF": "INC",
 };
 
 function swatchAbbr(t: string) {

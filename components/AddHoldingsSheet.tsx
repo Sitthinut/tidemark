@@ -87,13 +87,13 @@ export function AddHoldingsSheet({ open, onClose, onAdd }: AddHoldingsSheetProps
         setImgProcessing(false);
         setImgExtracted([
           {
-            ticker: "K-USA-A",
+            ticker: "K-USA-A(A)",
             units: "8945.31",
             value: "162804.55",
             source: "Kasikorn statement (Apr 2026)",
           },
           {
-            ticker: "K-FIXED",
+            ticker: "K-FIXED-A",
             units: "14820.30",
             value: "178420.27",
             source: "Kasikorn statement (Apr 2026)",
@@ -520,7 +520,7 @@ export function AddHoldingsSheet({ open, onClose, onAdd }: AddHoldingsSheetProps
             {rows.map((r, i) => (
               <div key={i} className="manual-row">
                 <input
-                  placeholder="K-USA-A"
+                  placeholder="K-USA-A(A)"
                   value={r.ticker}
                   onChange={(e) => updateRow(i, "ticker", e.target.value)}
                 />
