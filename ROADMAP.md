@@ -1,8 +1,8 @@
 # Roadmap
 
 > **Status:** Active. The working plan for turning the static-data prototype
-> into real software. Last updated 2026-05-22 (audit + reconciliation pass:
-> docs aligned with shipped state; multi-user redesigned as Phase 6).
+> into real software. Last updated 2026-05-22 (Phase 2.6 shipped: chat
+> persistence, plan-edit Apply, mock-import migration).
 
 ---
 
@@ -46,13 +46,35 @@
   right DB. Idle TTL 1h, hard cap 200 concurrent. Real users still share
   the owner SQLite (single-tenant for now).
 
+**Phase 2.6 mostly shipped** (chat persistence + plan-edit Apply + mock cleanup):
+
+- `lib/db/queries/chat.ts` wired to the previously-dead `chat_threads` +
+  `chat_messages` tables. `/api/chat` persists the user message before the
+  stream + the assistant message in an `onFinish` callback that re-enters
+  the request's `AsyncLocalStorage` DB context (so demo writes land in the
+  per-session in-memory SQLite).
+- `/api/chat/threads` + `/api/chat/threads/[id]` (GET / POST / PATCH /
+  DELETE).
+- `ChatScreen` hydrates the most-recently-active thread on mount via
+  localStorage. New "New chat" button in the topbar.
+- Plan-edit "Apply" no longer mutates the mock module — it fetches
+  `/api/plan`, applies the proposal via `lib/portfolio/plan-edit.ts`
+  (pure helper, 5 vitest cases), PUTs the result, and invalidates the
+  SWR cache so JournalScreen → Plan tab reflects the change.
+- Editorial + placeholder constants migrated out of `lib/mock/data.ts`:
+  `lib/static/{markets,learn,personalities,analysis}.ts` +
+  `lib/portfolio/plan-parser.ts`. Zero component imports from
+  `@/lib/mock/data` remain.
+- **Deferred:** thread-list sidebar UI. The localStorage-pinned "current
+  thread" delivers reload-survives chat without a layout rework.
+
 **Phase 3 partial:** Yahoo Finance client + cache + `/api/market/indices`;
 MarketsScreen pulls live SET / S&P / Nasdaq / Nikkei / USD-THB with 24h
 cache and graceful 429 fallback. News, digest, learn content, and Thai
 mutual-fund NAVs still mocked (no public API; AIMC or scrape is a later
 pass).
 
-What's still mocked: ANALYSIS scores (need AI tool-calls — Phase 2.6),
+What's still mocked: ANALYSIS scores (need AI tool-calls — Phase 6),
 ANALYSIS chart series (need NAV history backfill — Phase 3b), market news
 (Phase 3b), benchmark + drift + contrib series on PortfolioScreen.
 
@@ -96,10 +118,10 @@ exposes the gaps that need polish; polishing on mock data risks rework.
 
 | # | Phase | Status | Notes |
 | - | --- | --- | --- |
-| 1 | Persistence | ✅ Shipped 2026-05-21 | SQLite + Drizzle; mock-import cleanup deferred to 2.6 |
-| 2 | AI chat | 🟡 Partial | Scaffold + streaming live; persistence + plan-edit cards land in 2.6 |
+| 1 | Persistence | ✅ Shipped 2026-05-21 | SQLite + Drizzle |
+| 2 | AI chat | 🟡 Partial | Scaffold + streaming + history persistence live; tool calls + plan-edit cards pending Phase 6 |
 | 2.5 | Passkey + demo | ✅ Shipped 2026-05-21 | Single-owner auth + per-session in-memory demo DB |
-| 2.6 | Cleanup & chat persistence | 🔜 Next | Persist chat history, wire plan-edit Apply, finish mock-import migration |
+| 2.6 | Cleanup & chat persistence | ✅ Shipped 2026-05-22 | Chat history persists; plan-edit Apply wired; mock-import migration done. Thread-list sidebar deferred to a polish pass |
 | 3 | Market data | 🟡 Partial | SET/global indices live; funds + news in 3b |
 | 3b | Fund NAVs + news + NAV history | Pending | AIMC scrape; news source TBD |
 | 4 | Portfolio import | 🟡 Partial | CSV done; OCR pending Phase 2 maturity |
@@ -337,12 +359,12 @@ machinery; we'll wire mutations as plain `fetch` + `mutate()` calls.
   backups older than 30 days are pruned.
 - Typecheck + build pass.
 
-> **Deferred to Phase 2.6:** the original criterion "`lib/mock/data.ts` no
-> longer imported by any screen" did not fully ship — five components still
-> reach into mock constants for editorial content (`MARKETS`,
-> `LEARN_CONTENT`, `AI_PERSONALITIES`) and stand-ins (`ANALYSIS`, plus a
-> direct-mutation flow for `USER_PLAN` in `ChatScreen`). Finishing that
-> migration is the headline of Phase 2.6 below.
+> **Completed in Phase 2.6 (2026-05-22):** the original criterion
+> "`lib/mock/data.ts` no longer imported by any screen" finally shipped.
+> Editorial constants moved to `lib/static/*`, parse helpers to
+> `lib/portfolio/plan-parser.ts`, `USER_PLAN` mutation replaced with a
+> real `PUT /api/plan` round-trip. `grep -rn "from \"@/lib/mock/data\""
+> components/` returns zero hits.
 
 ### Risk
 
@@ -548,18 +570,22 @@ These all move to [Phase 6](#phase-6--multi-user).
 
 ## Phase 2.6 — Cleanup & chat persistence
 
+> **Status:** ✅ Shipped 2026-05-22, minus the deferred sidebar (see below).
+> Three commits: `a224687` (chat persistence), `6ea577d` (plan-edit Apply),
+> `19fe351` (mock-import migration).
+
 **Goal:** make the existing UI honest end-to-end. Chat history survives a
 reload, plan-edit "Apply" actually writes through, and no screen reaches
-into `lib/mock/data.ts` for live state. This is the cheapest path to
+into `lib/mock/data.ts` for live state. This was the cheapest path to
 "chat actually feels real" without expanding scope.
 
-### Why this is next, not Phase 6
+### Why this came before Phase 6
 
 Multi-user is a one-way door for the schema (`user_id` everywhere, backfill
 existing data). Better to lock the single-owner feature set first, then
-migrate once. A friend trying the app via the demo path today gets a
-broken-looking experience: streaming chat without persisted history,
-plan-edit Apply that quietly does nothing, mock content bleeding through.
+migrate once. A friend trying the app via the demo path today would have
+gotten a broken-looking experience: streaming chat without persisted history,
+plan-edit Apply that quietly did nothing, mock content bleeding through.
 Fixing that pays off whether or not Phase 6 ever happens.
 
 ### Three deliverables
@@ -634,7 +660,31 @@ app/
   idle-TTL like the rest of demo state.
 - Typecheck + lint + build + tests all green.
 
-### Risk
+### Deferred (sidebar UI)
+
+The thread-list sidebar in `ChatScreen` was scoped out of the initial
+2.6 commits. The localStorage-pinned "current thread" already delivers
+the reload-survives-chat win; a sidebar adds layout work (side-by-side
+desktop / mobile drawer / delete affordance) that's better tackled in a
+dedicated UI pass when users actually accumulate threads worth
+switching between.
+
+The `/api/chat/threads` GET endpoint is already live, so wiring a
+sidebar later is a pure UI exercise — no backend work needed.
+
+### Outstanding (deferred to Phase 6)
+
+- **No `/api/analysis` route.** `ANALYSIS` placeholder lives in
+  `lib/static/analysis.ts` and is read directly by PortfolioScreen +
+  AppPanels. Wiring an API route is wasted work until the numbers come
+  from AI tool calls — when they do, the route shape lands at the same
+  time. Until then the static-import path is the minimum thing.
+- **Types still in `lib/mock/types.ts`.** Components import shared types
+  (`Holding`, `Portfolio`, `LearnArticle`, etc.) from `@/lib/mock/types`.
+  These aren't mock — just misnamed. A future rename moves them to
+  `lib/static/types.ts` or `lib/types.ts`. Cosmetic, not blocking.
+
+### Risk (retained for posterity)
 
 - **Streaming + persistence timing** — writing only after `onFinish`
   means a mid-stream client disconnect drops the assistant message.
@@ -642,10 +692,6 @@ app/
 - **Plan-edit format** — for now, "Apply" sends the full proposed
   markdown. Structured diffs (`section`, `before`, `after`) wait until
   Phase 6's AI tool-call surface is real.
-- **Mock-import migration ripples** — the editorial constants
-  (`MARKETS`, `LEARN_CONTENT`, `AI_PERSONALITIES`) ship with mock-style
-  helpers and types currently in `lib/mock/types.ts`. Move the types to
-  `lib/static/types.ts` to keep `lib/mock/` purely seed-data.
 
 ---
 
@@ -1093,11 +1139,15 @@ After each phase, look for:
 ## Next session pickup
 
 1. `cd macrotide` and re-read this file.
-2. **Phase 2.6 is next.** Smallest useful loop: add `lib/db/queries/chat.ts`,
-   persist messages from `/api/chat`, surface a reload-survives thread
-   list in `ChatScreen`. That single change moves the app from "demo of
-   streaming" to "actual chat".
-3. Then plan-edit Apply (`PUT /api/plan`), then mock-import migration.
-4. After 2.6: Phase 3b (fund NAVs) if you want PortfolioScreen to be
-   useful to a friend's real holdings before sharing; otherwise jump to
-   Phase 6 (multi-user).
+2. **Phase 3b is the recommended next phase.** Real Thai mutual fund NAVs
+   are the headline value for a Thai investor — without them,
+   PortfolioScreen still shows "—" for friends' actual holdings after
+   they import. Smallest useful loop: AIMC scraper (or fund-supermarket
+   pages via Playwright) → `fund_quotes` + `nav_history` cache → wire
+   into the existing PortfolioScreen perf chart.
+3. **Or jump to Phase 6** (multi-user with Google/GitHub SSO, passkey,
+   Turnstile) if you'd rather invite people now with placeholder NAVs
+   and add real ones later.
+4. **If you want a polish pass first:** the chat thread-list sidebar is
+   the obvious one — the `/api/chat/threads` GET endpoint already lists
+   them, the UI just needs to render a switcher.

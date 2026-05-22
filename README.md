@@ -7,10 +7,12 @@
 
 **Experimental.** The 7-screen UI (Portfolio, Markets, Chat, Journal, Models,
 Connect, Settings) is responsive across mobile / tablet / desktop with
-light/dark/system themes. Persistence (SQLite + Drizzle), chat (Vercel AI SDK
-via OpenRouter), passkey auth, and live market indices are wired up. Thai
-mutual-fund NAVs, news, and ANALYSIS scores are still mocked. See
-[ROADMAP.md](./ROADMAP.md) for the full status board.
+light/dark/system themes. Persistence (SQLite + Drizzle), chat with reload-
+survives history (Vercel AI SDK via OpenRouter), plan-edit Apply that round-
+trips through the API, passkey auth, and live market indices are all wired
+up. Thai mutual-fund NAVs, news, and ANALYSIS scores are still placeholders
+pending Phase 3b and Phase 6. See [ROADMAP.md](./ROADMAP.md) for the full
+status board.
 
 Don't rely on it for real investment decisions.
 
@@ -72,8 +74,8 @@ macrotide/
 ├── app/
 │   ├── (auth)/login/        Passkey sign-in screen
 │   ├── api/                 Route handlers: buckets, holdings, journal, plan,
-│   │                        models, quotes, settings, chat, market, demo,
-│   │                        auth/[...all], admin
+│   │                        models, quotes, settings, chat (+threads),
+│   │                        market, demo, auth/[...all], admin
 │   ├── layout.tsx, page.tsx, error.tsx, globals.css
 ├── components/
 │   ├── screens/             Portfolio, Markets, Chat, Journal, Models,
@@ -88,7 +90,10 @@ macrotide/
 │   ├── fetchers/            SWR fetchers (client-side data layer)
 │   ├── market/              Yahoo client + cache + indices
 │   ├── mock/                Seed data + demo seed (used by db:seed)
-│   ├── portfolio/           Allocation/concentration analytics
+│   ├── portfolio/           Allocation/concentration analytics, plan parser,
+│   │                        plan-edit helper
+│   ├── static/              Editorial content (markets/learn/personalities)
+│   │                        and placeholder analytics
 │   ├── format.ts, useViewport.ts, useScrollHide.ts
 ├── data/                    SQLite + daily backups (gitignored)
 ├── tests/                   Vitest
