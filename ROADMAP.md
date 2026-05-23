@@ -53,7 +53,7 @@ verification · ⏸️ needs a user decision before it can proceed.
 | 9 | Phase 2 tool-call execution — tools mutate state via `requireUser` + per-user queries | `team/tool-calls` | ⬜ | 🧪 browser verify |
 | 10 | Plan-edit proposal cards — accept/reject UI wired to apply path | `team/plan-edit-cards` | ⬜ | Depends on #9 |
 | 11 | ANALYSIS scores — replace `/api/analysis` placeholder with real computed scores | `team/analysis-scores` | ⬜ | Depends on #9 |
-| 12 | Charts review + redesign — audit real-vs-mock (`DRIFT_SERIES`), build meaningful charts (hand-drawn SVG) | `team/charts` | ⬜ | User asked me to implement what's good |
+| 12 | Charts — **adopt a charting library** (hover + tooltips required; user wants interactivity, not hand-drawn SVG); audit real-vs-mock (`DRIFT_SERIES`), migrate the meaningful charts, build new worthwhile ones | `team/charts` | ⬜ | Lib pick (Recharts default, pending research); user authorized "go for it" |
 | 13 | Plan & Health review + redesign — audit `PortfolioScreen`/`AppPanels`/`api/plan`, ship worthwhile signals | `team/plan-health` | ⬜ | User asked me to implement what's good |
 
 ### ⏳ Needs the user (collected — do these when you're back)
