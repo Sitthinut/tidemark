@@ -1,8 +1,13 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Icon } from "@/components/Icon";
-import { useBuckets } from "@/lib/fetchers/portfolio";
+import {
+  filterKnownTickers,
+  mergeWithHoldings,
+  type TickerSuggestion,
+} from "@/lib/data/known-funds";
+import { useBuckets, useHoldings } from "@/lib/fetchers/portfolio";
 import { invalidate } from "@/lib/fetchers/swr";
 import { QUOTE_SOURCE_LABELS, QUOTE_SOURCES, type QuoteSource } from "@/lib/market/sources";
 
@@ -10,6 +15,9 @@ interface Row {
   ticker: string;
   units: string;
   value: string;
+  // Optional remembered English name when picked from autocomplete — used as
+  // the saved `englishName` so the user doesn't have to retype it.
+  englishName?: string;
 }
 
 interface ExtractedHolding {
@@ -44,7 +52,12 @@ export interface AddHoldingsSheetProps {
 
 export function AddHoldingsSheet({ open, onClose, onAdd }: AddHoldingsSheetProps) {
   const { data: buckets } = useBuckets();
+  const { data: holdings } = useHoldings();
   const [method, setMethod] = useState<"paste" | "image" | "manual">("paste");
+  // Autocomplete state: which row's ticker input has the dropdown open, plus
+  // a debounced copy of the query so typing doesn't re-render on every key.
+  const [openSuggestRow, setOpenSuggestRow] = useState<number | null>(null);
+  const [debouncedTicker, setDebouncedTicker] = useState("");
   const [pasteText, setPasteText] = useState("");
   const [imgPreview, setImgPreview] = useState<string | null>(null);
   const [imgProcessing, setImgProcessing] = useState(false);
@@ -69,6 +82,32 @@ export function AddHoldingsSheet({ open, onClose, onAdd }: AddHoldingsSheetProps
       setBucketId(buckets[0].id);
     }
   }, [open, bucketId, buckets]);
+
+  // Merged suggestion list — distinct user holdings surface first, then the
+  // static seed. Recomputed only when the holdings response changes.
+  const suggestionPool = useMemo<TickerSuggestion[]>(() => {
+    return mergeWithHoldings(
+      (holdings ?? []).map((h) => ({
+        ticker: h.ticker,
+        englishName: h.englishName,
+        quoteSource: h.quoteSource,
+      })),
+    );
+  }, [holdings]);
+
+  // Debounce the active row's ticker query so the filter doesn't refire on
+  // every keystroke. ~120 ms is short enough to feel live, long enough to
+  // settle paste / rapid typing.
+  const activeQuery = openSuggestRow !== null ? (rows[openSuggestRow]?.ticker ?? "") : "";
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedTicker(activeQuery), 120);
+    return () => clearTimeout(t);
+  }, [activeQuery]);
+
+  const suggestions = useMemo(
+    () => (openSuggestRow === null ? [] : filterKnownTickers(suggestionPool, debouncedTicker)),
+    [openSuggestRow, suggestionPool, debouncedTicker],
+  );
 
   if (!open) return null;
 
@@ -161,9 +200,17 @@ export function AddHoldingsSheet({ open, onClose, onAdd }: AddHoldingsSheetProps
       setSubmitError("Image tab is transcription-only. Switch to Manual or Paste to save rows.");
       return;
     }
-    let toAdd: ExtractedHolding[] = [];
+    let toAdd: (ExtractedHolding & { englishName?: string })[] = [];
     if (method === "paste") toAdd = parsePaste();
-    if (method === "manual") toAdd = rows.filter((r) => r.ticker && (r.units || r.value));
+    if (method === "manual")
+      toAdd = rows
+        .filter((r) => r.ticker && (r.units || r.value))
+        .map((r) => ({
+          ticker: r.ticker,
+          units: r.units,
+          value: r.value,
+          englishName: r.englishName,
+        }));
 
     if (toAdd.length === 0) {
       setSubmitError("No valid rows to add");
@@ -184,7 +231,7 @@ export function AddHoldingsSheet({ open, onClose, onAdd }: AddHoldingsSheetProps
           body: JSON.stringify({
             bucketId,
             ticker,
-            englishName: ticker, // user can rename later via HoldingSheet
+            englishName: row.englishName?.trim() || ticker,
             assetClass: "equity",
             units,
             avgCost,
@@ -239,7 +286,18 @@ export function AddHoldingsSheet({ open, onClose, onAdd }: AddHoldingsSheetProps
   const updateRow = (i: number, field: keyof Row, val: string) => {
     const copy = [...rows];
     copy[i] = { ...copy[i], [field]: val };
+    // If the user edits the ticker by typing, clear any remembered englishName
+    // — it no longer matches what they have in the field.
+    if (field === "ticker") copy[i].englishName = undefined;
     setRows(copy);
+  };
+
+  const pickSuggestion = (i: number, s: TickerSuggestion) => {
+    const copy = [...rows];
+    copy[i] = { ...copy[i], ticker: s.ticker, englishName: s.name };
+    setRows(copy);
+    setQuoteSource(s.quote_source);
+    setOpenSuggestRow(null);
   };
 
   const addRow = () => setRows([...rows, { ticker: "", units: "", value: "" }]);
@@ -647,11 +705,94 @@ export function AddHoldingsSheet({ open, onClose, onAdd }: AddHoldingsSheetProps
             </div>
             {rows.map((r, i) => (
               <div key={i} className="manual-row">
-                <input
-                  placeholder="K-USA-A(A)"
-                  value={r.ticker}
-                  onChange={(e) => updateRow(i, "ticker", e.target.value)}
-                />
+                <div style={{ position: "relative" }}>
+                  <input
+                    placeholder="K-USA-A(A)"
+                    value={r.ticker}
+                    onChange={(e) => updateRow(i, "ticker", e.target.value)}
+                    onFocus={() => setOpenSuggestRow(i)}
+                    // Delay clearing so a click on the dropdown lands before blur kills it.
+                    onBlur={() =>
+                      setTimeout(() => setOpenSuggestRow((cur) => (cur === i ? null : cur)), 120)
+                    }
+                    role="combobox"
+                    aria-autocomplete="list"
+                    aria-expanded={openSuggestRow === i && suggestions.length > 0}
+                    aria-controls={`ticker-suggest-${i}`}
+                    autoComplete="off"
+                  />
+                  {openSuggestRow === i && suggestions.length > 0 && (
+                    <div
+                      id={`ticker-suggest-${i}`}
+                      role="listbox"
+                      style={{
+                        position: "absolute",
+                        top: "calc(100% + 2px)",
+                        left: 0,
+                        right: 0,
+                        zIndex: 10,
+                        margin: 0,
+                        padding: 4,
+                        background: "var(--card)",
+                        border: "1px solid var(--line-soft)",
+                        borderRadius: 8,
+                        boxShadow: "0 6px 16px rgba(0,0,0,0.12)",
+                        maxHeight: 220,
+                        overflowY: "auto",
+                      }}
+                    >
+                      {suggestions.map((s) => (
+                        <div
+                          key={`${s.quote_source}:${s.ticker}`}
+                          role="option"
+                          aria-selected="false"
+                          tabIndex={-1}
+                        >
+                          <button
+                            type="button"
+                            onMouseDown={(e) => {
+                              // mousedown fires before blur — keeps the input from
+                              // losing focus and hiding the dropdown before we run.
+                              e.preventDefault();
+                              pickSuggestion(i, s);
+                            }}
+                            style={{
+                              display: "block",
+                              width: "100%",
+                              textAlign: "left",
+                              padding: "6px 8px",
+                              border: "none",
+                              background: "transparent",
+                              borderRadius: 6,
+                              cursor: "pointer",
+                              fontFamily: "var(--font-sans)",
+                              fontSize: 12.5,
+                              color: "var(--ink)",
+                              lineHeight: 1.3,
+                            }}
+                          >
+                            <div style={{ fontFamily: "var(--font-mono)", fontSize: 12 }}>
+                              {s.ticker}
+                              {s.fromHoldings && (
+                                <span
+                                  style={{
+                                    marginLeft: 6,
+                                    fontSize: 9.5,
+                                    color: "var(--muted)",
+                                    letterSpacing: "0.04em",
+                                  }}
+                                >
+                                  · YOURS
+                                </span>
+                              )}
+                            </div>
+                            <div style={{ fontSize: 11, color: "var(--muted)" }}>{s.name}</div>
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
                 <input
                   placeholder="8,945"
                   value={r.units}

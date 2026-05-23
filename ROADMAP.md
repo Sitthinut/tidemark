@@ -176,7 +176,7 @@ exposes the gaps that need polish; polishing on mock data risks rework.
 | 2.6 | Cleanup & chat persistence | ✅ Shipped 2026-05-22 | Chat history persists; plan-edit Apply wired; mock-import migration done. Thread-list sidebar deferred to a polish pass |
 | 3 | Market data | 🟡 Partial | SET/global indices live; funds + news in 3b |
 | 3b | Fund NAVs + news + NAV history | 🟡 Mostly shipped | Provider + v2 endpoints + holdings.quote_source + PortfolioScreen wiring all live; demo NAV history pre-seeded 2026-05-23 (chart fills instantly); RSS news still pending |
-| 4 | Portfolio import | 🟡 Partial | CSV done; Image OCR shipped 2026-05-23 as pure transcription (qianfan:free → paid fallback); manual-entry autocomplete pending; advisor-assist OCR (auto-handoff to chat with `propose_holding` cards) gated on Phase 6 |
+| 4 | Portfolio import | 🟡 Partial | CSV done; Image OCR shipped 2026-05-23 as pure transcription (qianfan:free → paid fallback); manual-entry ticker autocomplete shipped 2026-05-22 (`lib/data/known-funds.ts` seed + holdings dedupe); advisor-assist OCR (auto-handoff to chat with `propose_holding` cards) gated on Phase 6 |
 | 4b | Broker scraping / API integration | Out of scope | Revisit only if a clear personal need emerges |
 | 5 | Long-term memory + history compression | Pending | Per-user explicit-save preferences; chat compression to control OpenRouter cost. Research libraries first |
 | 5b | Scheduled jobs / digests / notifications | Pending | Depends on 3b and 6 |
@@ -950,8 +950,13 @@ seeded mock data.
    matching a small fixed schema (`ticker,name,units,avg_cost,acquired_on,account`).
 2. **Image OCR** — user pastes a screenshot of their broker app; Claude vision
    reads it and proposes rows for confirmation.
-3. **Manual entry** — ticker autocomplete (from fund-platform DB) + units +
-   avg cost.
+3. **Manual entry** — ticker autocomplete shipped 2026-05-22. Static seed
+   of ~30 publicly-known Thai funds + global indices/ETFs in
+   `lib/data/known-funds.ts`, merged with distinct tickers from the
+   user's existing holdings (those surface first, tagged · YOURS). Picking
+   a suggestion fills ticker + `englishName` + `quote_source`. Substring
+   match (case-insensitive) on ticker OR name; debounced 120 ms. No
+   fuzzy-match library — substring is fine for the seed size.
 
 Defer **broker scraping / API integration** — that's Phase 4b, only worth it
 once you have a clear personal need.
