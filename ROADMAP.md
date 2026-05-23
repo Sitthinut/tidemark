@@ -42,10 +42,10 @@ verification · ⏸️ needs a user decision before it can proceed.
 ### Wave 2 — Phase 6 fan-out (after 6a merges)
 | # | Task | Branch | Status | Notes |
 |---|------|--------|--------|-------|
-| 5 | 6b Identity — better-auth google/github (env-gated), `/login` buttons, post-OAuth passkey prompt | `team/6b-identity` | ⬜ | 🧪 register OAuth apps + 4 env vars + browser verify |
-| 6 | 6d Quotas + tier gating — model-chain by tier, daily cap, usage logging, limit UI | `team/6d-quotas` | ⬜ | Works on ROADMAP env defaults |
-| 7 | 6c Sign-up gate — Turnstile (dev-bypass when unset), wire `AUTH_RATE_LIMIT`, `tier=free` default, first-user bucket seed, `/legal/*` + checkbox | `team/6c-signup` | ⬜ | 🧪 Turnstile keys; review legal copy |
-| 8 | 6e Account page — `/account`: passkeys (revoke), linked providers, usage, sign-out-everywhere | `team/6e-account` | ⬜ | 🧪 browser verify |
+| 5 | 6b Identity — better-auth google/github (env-gated), `/login` buttons, post-OAuth passkey prompt | `team/6b-6c-auth` | 🔨 | combined w/ 6c (shared login page). 🧪 register OAuth apps + 4 env vars + browser verify |
+| 6 | 6d Quotas + tier gating — model-chain by tier, daily cap, usage logging, limit UI | `team/6d-quotas` | 🔨 | Works on ROADMAP env defaults |
+| 7 | 6c Sign-up gate — Turnstile (dev-bypass when unset), wire `AUTH_RATE_LIMIT`, `tier=free` default, first-user bucket seed, `/legal/*` + checkbox | `team/6b-6c-auth` | 🔨 | combined w/ 6b. 🧪 Turnstile keys; review legal copy |
+| 8 | 6e Account page — `/account`: passkeys (revoke), linked providers, usage, sign-out-everywhere | `team/6e-account` | 🔨 | 🧪 browser verify |
 
 ### Wave 3 — Advisor actions + UX (after 6a; reviews can start anytime)
 | # | Task | Branch | Status | Notes |
@@ -53,8 +53,8 @@ verification · ⏸️ needs a user decision before it can proceed.
 | 9 | Phase 2 tool-call execution — tools mutate state via `requireUser` + per-user queries | `team/tool-calls` | ⬜ | 🧪 browser verify |
 | 10 | Plan-edit proposal cards — accept/reject UI wired to apply path | `team/plan-edit-cards` | ⬜ | Depends on #9 |
 | 11 | ANALYSIS scores — replace `/api/analysis` placeholder with real computed scores | `team/analysis-scores` | ⬜ | Depends on #9 |
-| 12 | Charts — **adopt a charting library** (hover + tooltips required; user wants interactivity, not hand-drawn SVG); audit real-vs-mock (`DRIFT_SERIES`), migrate the meaningful charts, build new worthwhile ones | `team/charts` | ⬜ | Lib pick (Recharts default, pending research); user authorized "go for it" |
-| 13 | Plan & Health review + redesign — audit `PortfolioScreen`/`AppPanels`/`api/plan`, ship worthwhile signals | `team/plan-health` | ⬜ | User asked me to implement what's good |
+| 12 | Charts — **recharts** (3.8.1, installed) interactive charts w/ hover+tooltips; audit real-vs-mock (`DRIFT_SERIES`), migrate meaningful charts | `team/dashboard` | 🔨 | combined w/ #13 (shared PortfolioScreen). Running early in parallel (no Phase-6 dep) |
+| 13 | Plan & Health review + redesign — audit `PortfolioScreen`/`AppPanels`/`api/plan`, ship worthwhile signals | `team/dashboard` | 🔨 | combined w/ #12 |
 
 ### ⏳ Needs the user (collected — do these when you're back)
 - Apply migration `0007` to the real `data/app.db` (after backup) + set `OWNER_EMAIL`, then run `npx tsx --env-file=.env.local scripts/backfill-owner.ts`.
