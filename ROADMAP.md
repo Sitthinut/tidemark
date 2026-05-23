@@ -1016,6 +1016,24 @@ once you have a clear personal need.
      The current code does not enforce this — it's an operator
      responsibility. Track as a hard requirement before any public
      deployment under [Phase 6](#phase-6--multi-user).
+   - **Data hygiene / retention best practices.** Portfolio screenshots
+     are sensitive (tickers + unit counts identify accounts and net
+     worth). Industry baseline for this class of data:
+
+     | Principle | Current state | Future requirement |
+     | --- | --- | --- |
+     | **Don't persist what you don't need** | ✅ Image bytes never touch disk or DB — buffer goes browser → POST → OpenRouter → GC. Browser `imgPreview` clears on sheet close. | Hold this invariant. If we ever add server-side image caching (for retry / advisor re-processing / audit), require TTL ≤ 24h and per-user encryption. |
+     | **TTL anything that does persist** | ⚠️ OCR text in `chat_messages` persists indefinitely (manual thread-delete only). | Phase 6 `holding_proposals.source_text` should auto-purge when status moves to `accepted` / `rejected` + 7 days (audit window). Optional: thread-level TTL setting per user. |
+     | **User-controlled deletion** | ✅ Thread-delete cascades to messages. | Phase 6: deleting a user's account cascades to ALL their data (holdings, plans, chat, proposals). Right-to-be-forgotten if EU users ever apply. |
+     | **Encryption at rest** | ⚠️ SQLite is plaintext on disk. Disk-level encryption (LUKS / cloud-provider EBS encryption) is the operator's responsibility. | Document in [DEPLOY.md](./DEPLOY.md) for any prod deploy. Application-level encryption of sensitive columns (units, avg_cost) is overkill at personal scale. |
+     | **Encryption in transit** | ✅ HTTPS via Caddy in prod; localhost in dev. OpenRouter is TLS by default. | Hold. |
+     | **No-train upstream providers** | ⚠️ Default `qianfan:free` is operator-verified no-train per OpenRouter (2026-05-23); re-verify before any public deploy. | Phase 6 acceptance: `OCR_MODEL` must be a paid no-train model in prod. |
+     | **Audit metadata, not content** | ✅ Server logs `POST /api/import/image 200 in 8.7s` — no image bytes, no transcription text. | Hold. If we add structured audit logs later, log call counts / model / timestamp only — never the OCR text. |
+     | **Defaults minimize exposure** | ✅ Opt-in upload (user has to pick a file). Free-tier-training requires the operator to explicitly toggle a privacy setting. | Hold. |
+
+     Most of these are "ready today" for personal use; the action items
+     all cluster around **Phase 6** (multi-user opens the door to other
+     people's data → strict retention becomes required, not aspirational).
 3. **Manual entry**.
    - Build an autocomplete on `holdings` history + a small seed of common
      tickers (kept in `lib/data/known-funds.ts`, not the DB).
