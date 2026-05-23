@@ -511,3 +511,31 @@ from Zep (as two columns, not a graph), **visible/auditable provenance** as a
 reaction against opaque stores, and **model-driven hot-path writes** as the save
 trigger — implemented as a handful of typed tools over a single SQLite table
 rather than any external memory framework.
+
+## Build vs. adopt: the decision
+
+Before any code, the surveyed libraries were scored against macrotide's
+constraints — single-VM, SQLite, TypeScript, no Python sidecar, a small and
+structured memory surface. The verdict was to **hand-roll over a single SQLite
+table** rather than adopt a framework:
+
+| Library | Strength | Fit for macrotide |
+| --- | --- | --- |
+| **mem0** | Open-source memory layer that bolts onto existing chat. JS SDK. Vector + relational hybrid. | Strong fallback. Adopt only if the bespoke version starts duplicating significant infrastructure. |
+| **Letta (MemGPT)** | OS-inspired tiered memory (core / archival / recall). Self-editing via tool calls. | Heavier than needed; built for autonomous long-running agents, not a chat advisor. Skip unless the explicit-save model proves insufficient. |
+| **Zep** | Production-grade vector + graph; strong for long-running enterprise sessions. | Mostly Python, service-oriented. Wrong scale for a personal app. (We still borrow its bitemporal *idea* — see above.) |
+| **LangChain Memory** | Built-in summarization buffers, vector retrievers. | A heavy dependency for one feature. Prefer a ~50-line bespoke implementation over pulling in LangChain. |
+| **Cognee** | Deep knowledge-graph retrieval. | Overkill. |
+| **Hand-rolled** | Direct Drizzle + AI SDK. Full control. | **The chosen default.** Memory here is small — preferences + plan + journal already exist as structured tables. |
+
+**Long-term memory:** start hand-rolled (it's a few hundred lines), keep mem0 in
+reserve as the escape hatch if the bespoke store starts reinventing a framework.
+
+**Chat compression:** use the **summarize-and-replace pattern Claude Code itself
+uses** (the `<summary>` block at the start of a long conversation) as the proven
+baseline — a cheap model over the same OpenRouter key, no library. Only add
+semantic retrieval / a vector store over `chat_messages` if measurement shows it
+earns its keep.
+
+> These are the build-vs-adopt conclusions; *how* macrotide implements them
+> lives in the [memory feature guide](../features/memory.md).
