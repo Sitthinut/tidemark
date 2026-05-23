@@ -431,13 +431,13 @@ Sources:
 How the surveyed systems compare across the dimensions that mattered — store,
 write trigger, retrieval, pruning, and user visibility:
 
-| Dimension | Hermes | OpenHuman | OpenViking/OpenClaw | mem0 | Letta | Zep | Anthropic | Cognee |
-|---|---|---|---|---|---|---|---|---|
-| Store | Markdown files | SQLite + vault + workers | FS tree `viking://` | vector+graph+KV | core/recall/archival | bitemporal graph | files | graph+vector |
-| Write trigger | Agent tool | Auto + tool | Auto-extract @ session end | Background extract | Agent tool (hot) | Auto + ingest | Agent tool | Stage pipeline |
-| Retrieval | Frozen snapshot @ session start | Blended FTS+vec+freshness | L0/L1/L2 tiered | Hybrid query | Tool calls | Graph traversal | Tool CRUD | 14 modes |
-| Pruning | Hard char cap + consolidate | Bucket-seal + daily digest | Tier promotion | Background | Archival overflow | `t_invalid` edges | "Dreaming" | `memify` |
-| User visibility | Files | Obsidian vault | FS readable | Opaque | Inspectable | Mostly opaque | Files | Mixed |
+| Dimension | Hermes | OpenHuman | OpenViking/OpenClaw | mem0 | Letta | Zep | LangMem | Anthropic | Cognee |
+|---|---|---|---|---|---|---|---|---|---|
+| Store | Markdown files | SQLite + vault + workers | FS tree `viking://` | vector+graph+KV | core/recall/archival | bitemporal graph | storage-agnostic (BYO) | files | graph+vector |
+| Write trigger | Agent tool | Auto + tool | Auto-extract @ session end | Background extract | Agent tool (hot) | Auto + ingest | Both (hot + background) | Agent tool | Stage pipeline |
+| Retrieval | Frozen snapshot @ session start | Blended FTS+vec+freshness | L0/L1/L2 tiered | Hybrid query | Tool calls | Graph traversal | BYO backend | Tool CRUD | 14 modes |
+| Pruning | Hard char cap + consolidate | Bucket-seal + daily digest | Tier promotion | Background | Archival overflow | `t_invalid` edges | Manager consolidate/generalize | "Dreaming" | `memify` |
+| User visibility | Files | Obsidian vault | FS readable | Opaque | Inspectable | Mostly opaque | Backend-dependent | Files | Mixed |
 
 ---
 
