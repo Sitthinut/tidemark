@@ -6,7 +6,12 @@ import { describe, expect, it } from "vitest";
 import { runWithDbContext } from "../db/context";
 import { save } from "../db/queries/preferences";
 import * as schema from "../db/schema";
-import { buildMemoryBlock, memoryBlockHash } from "./inject";
+import {
+  buildMemoryBlock,
+  INJECT_CONFIDENCE_THRESHOLD,
+  memoryBlockHash,
+  stripInjectedMemory,
+} from "./inject";
 
 function freshDb() {
   const sqlite = new Database(":memory:");
@@ -160,5 +165,70 @@ describe("buildMemoryBlock", () => {
       ],
     });
     expect(block).toBe(["## Your stored preferences", "", "### Profile", "- stub"].join("\n"));
+  });
+
+  it("excludes low-confidence auto-extracted rows from the injected block", () => {
+    withFresh(() => {
+      save({
+        userId: null,
+        category: "profile",
+        content: "explicit fact",
+        source: "user_tool",
+      });
+      // High-confidence extracted → injected.
+      save({
+        userId: null,
+        category: "fact",
+        content: "high-conf extracted",
+        source: "extracted",
+        confidence: INJECT_CONFIDENCE_THRESHOLD,
+      });
+      // Low-confidence extracted → recall-only, must not appear.
+      save({
+        userId: null,
+        category: "fact",
+        content: "low-conf extracted",
+        source: "extracted",
+        confidence: INJECT_CONFIDENCE_THRESHOLD - 0.1,
+      });
+
+      const block = buildMemoryBlock(null);
+      expect(block).toContain("- explicit fact");
+      expect(block).toContain("- high-conf extracted");
+      expect(block).not.toContain("low-conf extracted");
+    });
+  });
+});
+
+describe("stripInjectedMemory", () => {
+  it("removes the injected block, leaving surrounding text intact", () => {
+    const block = [
+      "## Your stored preferences",
+      "",
+      "### Facts",
+      "- wife's name is Sarah",
+      "",
+      "### Profile",
+      "- risk tolerance: moderate",
+    ].join("\n");
+    const text = `${block}\n\nYou are Macrotide, an AI companion.`;
+    expect(stripInjectedMemory(text)).toBe("You are Macrotide, an AI companion.");
+  });
+
+  it("is a no-op on text without an injected block", () => {
+    const text = "User: what is an index fund?\n\nAdvisor: a basket of...";
+    expect(stripInjectedMemory(text)).toBe(text);
+  });
+
+  it("does not consume real content that follows the block", () => {
+    const text = [
+      "## Your stored preferences",
+      "",
+      "### Facts",
+      "- owns NVDA",
+      "",
+      "User: hi",
+    ].join("\n");
+    expect(stripInjectedMemory(text)).toBe("User: hi");
   });
 });

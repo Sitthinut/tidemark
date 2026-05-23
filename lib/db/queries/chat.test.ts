@@ -134,12 +134,21 @@ describe("session lifecycle queries", () => {
 });
 
 describe("archiveIdleSessions job", () => {
-  it("archives active threads idle longer than the window", () => {
-    withFresh(() => {
+  // No-op extractor stub so the lifecycle assertions don't depend on a live
+  // model. Extraction wiring is covered in lib/memory/extract.test.ts.
+  const noExtract = async (threadId: string) => ({
+    threadId,
+    summary: "",
+    saved: [],
+    provider: "stub",
+  });
+
+  it("archives active threads idle longer than the window", async () => {
+    await withFresh(async () => {
       const stale = threadAged(10);
       threadAged(1); // fresh — left active
 
-      const result = archiveIdleSessions();
+      const result = await archiveIdleSessions({ extract: noExtract });
       expect(result.archivedCount).toBe(1);
       expect(result.archivedThreadIds).toEqual([stale]);
 
@@ -149,24 +158,73 @@ describe("archiveIdleSessions job", () => {
     });
   });
 
-  it("respects a custom idleDays option", () => {
-    withFresh(() => {
+  it("respects a custom idleDays option", async () => {
+    await withFresh(async () => {
       const t = threadAged(3);
-      expect(archiveIdleSessions({ idleDays: 7 }).archivedCount).toBe(0);
-      expect(archiveIdleSessions({ idleDays: 2 }).archivedCount).toBe(1);
+      expect((await archiveIdleSessions({ idleDays: 7, extract: noExtract })).archivedCount).toBe(
+        0,
+      );
+      expect((await archiveIdleSessions({ idleDays: 2, extract: noExtract })).archivedCount).toBe(
+        1,
+      );
       expect(getThread(t)?.status).toBe("archived");
     });
   });
 
-  it("is idempotent — a second run archives nothing", () => {
-    withFresh(() => {
+  it("is idempotent — a second run archives nothing", async () => {
+    await withFresh(async () => {
       threadAged(10);
-      const first = archiveIdleSessions();
+      const first = await archiveIdleSessions({ extract: noExtract });
       expect(first.archivedCount).toBe(1);
 
-      const second = archiveIdleSessions();
+      const second = await archiveIdleSessions({ extract: noExtract });
       expect(second.archivedCount).toBe(0);
       expect(second.archivedThreadIds).toEqual([]);
+    });
+  });
+
+  it("runs the extractor before archiving and aggregates saved-fact counts", async () => {
+    await withFresh(async () => {
+      const a = threadAged(10);
+      const b = threadAged(10);
+      const seen: string[] = [];
+      const extract = async (threadId: string) => {
+        // At extraction time the thread must still be active (archive is last).
+        expect(getThread(threadId)?.status).toBe("active");
+        seen.push(threadId);
+        return {
+          threadId,
+          summary: `summary for ${threadId}`,
+          saved: [
+            {
+              id: 1,
+              category: "fact" as const,
+              content: "x",
+              confidence: 0.9,
+              injected: true,
+            },
+          ],
+          provider: "stub",
+        };
+      };
+      const result = await archiveIdleSessions({ extract });
+      expect(seen.sort()).toEqual([a, b].sort());
+      expect(result.archivedCount).toBe(2);
+      expect(result.extractedCount).toBe(2);
+      expect(result.notices).toHaveLength(2);
+      expect(getThread(a)?.status).toBe("archived");
+    });
+  });
+
+  it("archives even when the extractor throws (best-effort)", async () => {
+    await withFresh(async () => {
+      const t = threadAged(10);
+      const extract = async () => {
+        throw new Error("model exploded");
+      };
+      const result = await archiveIdleSessions({ extract });
+      expect(result.archivedCount).toBe(1);
+      expect(getThread(t)?.status).toBe("archived");
     });
   });
 });

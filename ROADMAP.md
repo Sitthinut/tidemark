@@ -1399,9 +1399,18 @@ enough archived-session data to need any of it.
    7-day idle-archive job skeleton at `lib/jobs/archive-idle-sessions.ts`.
    Summarization + fact-extraction are deferred to #2/#3 — the job leaves a
    marked TODO hook before the archive transition.
-7. **5b archive-time extractor** — cheap-model extraction prompt; writes
-   `source='extracted'` rows with confidence; surfaces a toast. Plugs into
-   the archive-job TODO hook from substep 6.
+7. **5b archive-time extractor** — ✅ **shipped 2026-05-23** —
+   `lib/memory/extract.ts`: cheap-model (`resolveExtractorProvider`,
+   `EXTRACT_MODEL` → `TITLE_MODEL` → `openrouter/free`) summarize + durable-
+   fact pass over an idle session, writing `source='extracted'` rows with
+   `confidence` + provenance (`sourceSessionId` / `sourceTurnIds`). Wired into
+   the archive job from substep 6 (runs before the archive transition;
+   best-effort — never blocks archival). Guards: injected memory is stripped
+   from the extraction input (`stripInjectedMemory`, recursive-pollution
+   guard), low-confidence rows (`confidence < 0.7`) are recall-only — excluded
+   from the injected block via `INJECT_CONFIDENCE_THRESHOLD`; near-noise
+   (`< 0.3`) dropped. The job returns per-session `notices` (summary +
+   saved-count) for a future toast/digest surface.
 8. **5b chat summarization** — summarize-and-replace older turns when a
    session crosses ~80% context (banner-suggested, not silent).
 9. **5b recall + search** — `recall_preferences` tool + sidebar FTS.

@@ -18,10 +18,14 @@ import type { LanguageModel } from "ai";
  *                `openrouter/free`. Explicitly *not* Claude / GPT — a 3–5-word
  *                title doesn't justify mainstream-model spend.
  *
+ * - **extract** — archive-time fact extraction (Phase 5b). Default
+ *                `openrouter/free`; same cheap-model posture as titling.
+ *
  * Configure via env (comma-separated, first is primary, rest are fallbacks):
  *   AI_MODELS=openrouter/free,openrouter/auto
  *   DEMO_AI_MODELS=openrouter/free
  *   TITLE_MODEL=openrouter/free
+ *   EXTRACT_MODEL=openrouter/free   # optional; falls back to TITLE_MODEL
  */
 
 export interface ResolvedProvider {
@@ -40,6 +44,12 @@ const DEMO_DEFAULT = ["openrouter/free"];
 // the `TITLE_MODEL` env var; pinning anything in the Claude or GPT family
 // would be an escalation per AGENTS.md § AI / model selection.
 const TITLE_DEFAULT = ["openrouter/free"];
+// Archive-time fact extraction (Phase 5b). Same posture as titling — a
+// background summarize-and-extract pass over an idle chat is an ancillary task
+// that doesn't justify Claude/GPT spend. Override with `EXTRACT_MODEL`; falls
+// back to `TITLE_MODEL` then `openrouter/free` so an operator who already
+// pinned a cheap title model gets the same model for extraction for free.
+const EXTRACT_DEFAULT = ["openrouter/free"];
 
 function parseModels(value: string | undefined): string[] | null {
   if (!value) return null;
@@ -112,4 +122,21 @@ export function resolveTitleProvider(): ResolvedProvider {
   if (!key) return { model: null, ready: false, label: "Title (no key)" };
   const models = parseModels(process.env.TITLE_MODEL) ?? TITLE_DEFAULT;
   return { model: openrouter(key, models), ready: true, label: chainLabel("Title", models) };
+}
+
+/**
+ * Cheap model for archive-time extraction (Phase 5b). Reads the shared
+ * `OPENROUTER_API_KEY`. Model resolution order: `EXTRACT_MODEL` →
+ * `TITLE_MODEL` → `openrouter/free`. Pinning a Claude/GPT-family model here
+ * would be an escalation per AGENTS.md § AI / model selection — extraction is
+ * a background, best-effort pass and should stay on cheap free models.
+ */
+export function resolveExtractorProvider(): ResolvedProvider {
+  const key = process.env.OPENROUTER_API_KEY;
+  if (!key) return { model: null, ready: false, label: "Extract (no key)" };
+  const models =
+    parseModels(process.env.EXTRACT_MODEL) ??
+    parseModels(process.env.TITLE_MODEL) ??
+    EXTRACT_DEFAULT;
+  return { model: openrouter(key, models), ready: true, label: chainLabel("Extract", models) };
 }
