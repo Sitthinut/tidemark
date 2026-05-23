@@ -53,11 +53,15 @@ export const auth = betterAuth({
   database: drizzleAdapter(ownerDb, { provider: "sqlite" }),
   secret: authSecret(),
   trustedOrigins: origins(),
-  // Email/password is disabled by default — passkey is the primary path.
-  // Email magic-link is a planned addition once we wire a transactional
-  // sender (Resend / Postmark / SES); leave off until then so users don't
-  // see a button that silently fails.
-  emailAndPassword: { enabled: false },
+  // Email/password is enabled ONLY to bootstrap passkey signup.
+  // createAccountWithPasskey() in app/(auth)/login/page.tsx calls
+  // authClient.signUp.email() to create the user record and obtain a session,
+  // then immediately calls authClient.passkey.addPasskey() — passkey remains
+  // the only real login method because no password sign-in UI is exposed and
+  // the signup flow sets a random unknowable password.
+  // This is a pre-Phase-6 stopgap: OAuth (Phase 6 / 6b) will replace this
+  // bootstrapping mechanism, at which point emailAndPassword can be disabled.
+  emailAndPassword: { enabled: true },
   session: {
     expiresIn: 60 * 60 * 24 * 30, // 30 days
     updateAge: 60 * 60 * 24, // refresh once per day
