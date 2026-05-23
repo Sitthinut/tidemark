@@ -140,6 +140,11 @@ export function ChatScreen({ persona = "advisor", seedPrompt, onPromptConsumed }
   const [msgFeedback, setMsgFeedback] = useState<Record<number, MsgFeedback>>({});
   const [showThreads, setShowThreads] = useState(false);
   const streamRef = useRef<HTMLDivElement>(null);
+  // Tracks which thread ids we've already tried to title in this session, so
+  // a slow title-endpoint response doesn't get re-fired while the user keeps
+  // chatting. The server is idempotent regardless, but this saves the round
+  // trip + the SWR invalidate churn.
+  const titledRef = useRef<Set<string>>(new Set());
 
   const loadThread = useCallback(
     async (id: string): Promise<boolean> => {
@@ -200,6 +205,49 @@ export function ChatScreen({ persona = "advisor", seedPrompt, onPromptConsumed }
     setMessages(initial);
     setMsgFeedback({});
   }, [initial]);
+
+  // Keyboard shortcut: ⌘/Ctrl+K opens a new chat. We swallow the event so the
+  // browser's "search bar" default (Firefox) doesn't also fire. Disabled
+  // while a turn is in flight — same constraint as the topbar's "New chat"
+  // button.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const handler = (e: KeyboardEvent) => {
+      const isMod = e.metaKey || e.ctrlKey;
+      if (!isMod || e.key.toLowerCase() !== "k") return;
+      if (loading) return;
+      e.preventDefault();
+      newChat();
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [newChat, loading]);
+
+  /**
+   * Fire-and-forget auto-title trigger. Called after the first turn pair
+   * completes on a brand-new thread. The server is idempotent so a duplicate
+   * POST is harmless; `titledRef` just avoids the redundant round trip.
+   */
+  const maybeAutoTitle = useCallback(async (id: string) => {
+    if (titledRef.current.has(id)) return;
+    titledRef.current.add(id);
+    try {
+      const res = await fetch(`/api/chat/threads/${encodeURIComponent(id)}/title`, {
+        method: "POST",
+      });
+      if (!res.ok) {
+        // Allow a retry on the next turn-pair completion — the server probably
+        // just didn't have the assistant message persisted yet.
+        titledRef.current.delete(id);
+        return;
+      }
+      // Refresh the sidebar so the new title surfaces next time the drawer
+      // opens. Matches the existing SWR pattern in this file.
+      void invalidate("/api/chat/threads");
+    } catch {
+      titledRef.current.delete(id);
+    }
+  }, []);
 
   // Auto-scroll to the bottom whenever messages grow or the streaming text
   // changes. We track the last message's text length so streamed deltas tick
@@ -294,6 +342,12 @@ export function ChatScreen({ persona = "advisor", seedPrompt, onPromptConsumed }
               : m,
           ),
         );
+      } else {
+        // First turn pair just completed on a thread we haven't titled yet —
+        // ask the server to auto-title it. Idempotent server-side; the ref
+        // dedup is just to avoid the round trip on subsequent turns.
+        const tid = returnedThread ?? threadId;
+        if (tid) void maybeAutoTitle(tid);
       }
     } catch (err) {
       setMessages((prev) =>
@@ -579,6 +633,24 @@ export function ChatScreen({ persona = "advisor", seedPrompt, onPromptConsumed }
           <Icon name="send" size={14} />
         </button>
       </form>
+
+      {/*
+        Persistent AI disclaimer. Verbatim project-wide string — see
+        AGENTS.md § Product copy & vocabulary. Plain muted text, not
+        dismissible, not a banner.
+      */}
+      <div
+        role="note"
+        style={{
+          textAlign: "center",
+          fontSize: 11,
+          color: "var(--muted)",
+          padding: "6px 12px 8px",
+          lineHeight: 1.4,
+        }}
+      >
+        Advisor is AI and can make mistakes.
+      </div>
     </div>
   );
 }

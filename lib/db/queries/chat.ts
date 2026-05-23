@@ -1,4 +1,4 @@
-import { and, desc, eq } from "drizzle-orm";
+import { and, asc, desc, eq, gt, isNotNull, isNull, lt } from "drizzle-orm";
 import { getDb } from "../context";
 import { chatMessages, chatThreads } from "../schema";
 
@@ -12,8 +12,31 @@ function randomId(): string {
   );
 }
 
-export function listThreads(): ChatThread[] {
-  return getDb().select().from(chatThreads).orderBy(desc(chatThreads.updatedAt)).all();
+/**
+ * List active (non-deleted) threads, newest activity first. Pass
+ * `includeDeleted: true` to bypass the soft-delete filter (admin / debug);
+ * UI listings should leave it false and use {@link listDeletedThreads} for
+ * the trash group.
+ */
+export function listThreads(opts: { includeDeleted?: boolean } = {}): ChatThread[] {
+  const q = getDb().select().from(chatThreads).orderBy(desc(chatThreads.updatedAt));
+  if (opts.includeDeleted) return q.all();
+  return q.where(isNull(chatThreads.deletedAt)).all();
+}
+
+/**
+ * List soft-deleted threads still within the restore window (default 30
+ * days). Older trash isn't shown; a maintenance job purges it later. Order
+ * is most-recently-deleted first.
+ */
+export function listDeletedThreads(daysAgo = 30): ChatThread[] {
+  const cutoff = new Date(Date.now() - daysAgo * 24 * 60 * 60_000).toISOString();
+  return getDb()
+    .select()
+    .from(chatThreads)
+    .where(and(isNotNull(chatThreads.deletedAt), gt(chatThreads.deletedAt, cutoff)))
+    .orderBy(desc(chatThreads.deletedAt))
+    .all();
 }
 
 export function getThread(id: string): ChatThread | undefined {
@@ -38,9 +61,61 @@ export function renameThread(id: string, title: string): ChatThread | undefined 
     .get();
 }
 
-export function deleteThread(id: string): void {
+/**
+ * Move a thread to the trash. Row stays in the table with
+ * `deletedAt = now()`; {@link listThreads} hides it,
+ * {@link listDeletedThreads} surfaces it for the 30-day restore window.
+ * Hard-removal is {@link purgeThread}.
+ */
+export function softDeleteThread(id: string): ChatThread | undefined {
+  return getDb()
+    .update(chatThreads)
+    .set({ deletedAt: new Date().toISOString() })
+    .where(eq(chatThreads.id, id))
+    .returning()
+    .get();
+}
+
+/** Undo {@link softDeleteThread} — clears `deleted_at`. */
+export function restoreThread(id: string): ChatThread | undefined {
+  return getDb()
+    .update(chatThreads)
+    .set({ deletedAt: null, updatedAt: new Date().toISOString() })
+    .where(eq(chatThreads.id, id))
+    .returning()
+    .get();
+}
+
+/**
+ * Hard-delete a thread and its messages (cascade). Use only for "Delete
+ * forever" from the trash; the regular delete button should call
+ * {@link softDeleteThread}.
+ */
+export function purgeThread(id: string): void {
   // chat_messages cascade-delete via foreign key.
   getDb().delete(chatThreads).where(eq(chatThreads.id, id)).run();
+}
+
+/**
+ * @deprecated Prefer {@link softDeleteThread} for user-initiated deletes or
+ * {@link purgeThread} for hard removal from the trash.
+ */
+export function deleteThread(id: string): void {
+  purgeThread(id);
+}
+
+/** Purge any soft-deleted threads older than `daysAgo` (default 30). */
+export function purgeExpiredDeletedThreads(daysAgo = 30): number {
+  const cutoff = new Date(Date.now() - daysAgo * 24 * 60 * 60_000).toISOString();
+  const rows = getDb()
+    .select({ id: chatThreads.id })
+    .from(chatThreads)
+    .where(and(isNotNull(chatThreads.deletedAt), lt(chatThreads.deletedAt, cutoff)))
+    .all();
+  for (const row of rows) {
+    getDb().delete(chatThreads).where(eq(chatThreads.id, row.id)).run();
+  }
+  return rows.length;
 }
 
 export function listMessages(threadId: string): ChatMessage[] {
@@ -48,7 +123,7 @@ export function listMessages(threadId: string): ChatMessage[] {
     .select()
     .from(chatMessages)
     .where(eq(chatMessages.threadId, threadId))
-    .orderBy(chatMessages.createdAt, chatMessages.id)
+    .orderBy(asc(chatMessages.createdAt), asc(chatMessages.id))
     .all();
 }
 

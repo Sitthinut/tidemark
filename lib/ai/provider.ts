@@ -3,7 +3,7 @@ import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import type { LanguageModel } from "ai";
 
 /**
- * AI provider routing. Two configurations, both via OpenRouter:
+ * AI provider routing. Three configurations, all via OpenRouter:
  *
  * - **owner**  — authenticated traffic. Default model chain
  *                `openrouter/free → openrouter/auto`: try free models first,
@@ -14,10 +14,14 @@ import type { LanguageModel } from "ai";
  *                fallback** — cost predictability matters more than uptime for
  *                demo traffic. If free is unavailable, demo errors cleanly
  *                rather than silently billing.
+ * - **title**  — auto-titling a chat after its first turn pair. Default
+ *                `openrouter/free`. Explicitly *not* Claude / GPT — a 3–5-word
+ *                title doesn't justify mainstream-model spend.
  *
  * Configure via env (comma-separated, first is primary, rest are fallbacks):
  *   AI_MODELS=openrouter/free,openrouter/auto
  *   DEMO_AI_MODELS=openrouter/free
+ *   TITLE_MODEL=openrouter/free
  */
 
 export interface ResolvedProvider {
@@ -30,6 +34,12 @@ export interface ResolvedProvider {
 
 const OWNER_DEFAULT = ["openrouter/free", "openrouter/auto"];
 const DEMO_DEFAULT = ["openrouter/free"];
+// Auto-titling a chat is a 3–5-word task. We deliberately don't burn
+// Claude/GPT capacity on it — `openrouter/free` is the meta-router that
+// fans out across cheap free models (DeepSeek, Qwen, etc.). Override with
+// the `TITLE_MODEL` env var; pinning anything in the Claude or GPT family
+// would be an escalation per AGENTS.md § AI / model selection.
+const TITLE_DEFAULT = ["openrouter/free"];
 
 function parseModels(value: string | undefined): string[] | null {
   if (!value) return null;
@@ -88,4 +98,18 @@ export function resolveDemoProvider(): ResolvedProvider {
   if (!key) return { model: null, ready: false, label: "Demo (no key configured)" };
   const models = parseModels(process.env.DEMO_AI_MODELS) ?? DEMO_DEFAULT;
   return { model: openrouter(key, models), ready: true, label: chainLabel("Demo", models) };
+}
+
+/**
+ * Tiny model used for ancillary tasks where Claude/GPT capacity is overkill
+ * — currently just auto-titling a chat after the first turn pair. Reads the
+ * same `OPENROUTER_API_KEY` as the chat path but uses a separate model var
+ * (`TITLE_MODEL`, default `openrouter/free`) so the operator can pin a
+ * cost-efficient small model without affecting chat quality.
+ */
+export function resolveTitleProvider(): ResolvedProvider {
+  const key = process.env.OPENROUTER_API_KEY;
+  if (!key) return { model: null, ready: false, label: "Title (no key)" };
+  const models = parseModels(process.env.TITLE_MODEL) ?? TITLE_DEFAULT;
+  return { model: openrouter(key, models), ready: true, label: chainLabel("Title", models) };
 }
