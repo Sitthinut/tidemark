@@ -27,6 +27,9 @@ interface Message {
   proposal?: PlanProposal;
   applied?: boolean;
   rejected?: boolean;
+  // Set on a failed/empty assistant turn so the UI can offer a "Try again"
+  // button that re-sends the preceding user message.
+  canRetry?: boolean;
 }
 
 function makeId(): string {
@@ -380,11 +383,16 @@ export function ChatScreen({ persona = "advisor", seedPrompt, onPromptConsumed }
       // than a scary "check server logs" message. The dashboard is unaffected
       // regardless of what the LLM did.
       if (!accumulated) {
-        const fallback = toolMessages.length
+        const hadTool = toolMessages.length > 0;
+        const fallback = hadTool
           ? toolMessages.join("\n\n")
-          : "I didn't have anything to add there. Your dashboard and notes are unaffected — try rephrasing if you expected a reply.";
+          : "I didn't have a reply for that — your dashboard and notes are unaffected.";
         setMessages((prev) =>
-          prev.map((m) => (m.id === placeholderId ? { ...m, text: fallback } : m)),
+          prev.map((m) =>
+            // Offer retry only on a genuinely empty turn (no tool ran). When a
+            // tool ran, the work succeeded — no point retrying.
+            m.id === placeholderId ? { ...m, text: fallback, canRetry: !hadTool } : m,
+          ),
         );
         // A tool ran even though no prose came back — refresh memory views and
         // still attempt the auto-title so the thread doesn't stay "Untitled".
@@ -407,6 +415,7 @@ export function ChatScreen({ persona = "advisor", seedPrompt, onPromptConsumed }
             ? {
                 ...m,
                 text: `Chat error: ${err instanceof Error ? err.message : "unknown"}. The dashboard still works; this just means AI hasn't been configured (or the demo turn cap was hit).`,
+                canRetry: true,
               }
             : m,
         ),
@@ -464,6 +473,18 @@ export function ChatScreen({ persona = "advisor", seedPrompt, onPromptConsumed }
     }
 
     void askLive(prompt, messages);
+  };
+
+  // Re-send the user message that produced a failed/empty assistant turn.
+  // Drops the failed placeholder, then replays the preceding user turn with
+  // the same prior history (askLive re-appends the prompt itself).
+  const retry = (failedId: string) => {
+    if (loading) return;
+    const withoutFailed = messages.filter((m) => m.id !== failedId);
+    const last = withoutFailed[withoutFailed.length - 1];
+    if (!last || last.role !== "user") return;
+    setMessages(withoutFailed);
+    void askLive(last.text, withoutFailed.slice(0, -1));
   };
 
   const suggestions = [
@@ -607,6 +628,17 @@ export function ChatScreen({ persona = "advisor", seedPrompt, onPromptConsumed }
               </div>
             ) : (
               <div style={{ whiteSpace: "pre-wrap" }}>{m.text}</div>
+            )}
+            {m.canRetry && (
+              <button
+                type="button"
+                className="btn ghost sm"
+                onClick={() => retry(m.id)}
+                disabled={loading}
+                style={{ marginTop: 6 }}
+              >
+                Try again
+              </button>
             )}
             {m.proposal && (
               <PlanProposalCard
