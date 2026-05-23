@@ -87,9 +87,48 @@ cache and graceful 429 fallback. News, digest, learn content, and Thai
 mutual-fund NAVs still mocked. Phase 3b adds Thai fund NAVs via the
 official Thai SEC Open API (free with a subscription key).
 
+**Phase 3b polish 2026-05-23:** demo seed now pre-generates synthetic
+6-month NAV history per holding (log-space Brownian bridge, deterministic
+per-ticker PRNG, weekday-only) so PerfChart renders instantly on first
+demo load instead of waiting ~45s for the Thai SEC API to populate the
+cache one ticker at a time. See [lib/mock/demo-seed.ts](./lib/mock/demo-seed.ts).
+
+**Phase 4 OCR shipped 2026-05-23** (raw-text transcription, not structured rows):
+
+- `lib/portfolio/ocr.ts` uses `generateText` (not `generateObject`) against
+  an OpenRouter vision model. Returns `{ text: string }` — the raw
+  transcription. Default chain: `baidu/qianfan-ocr-fast:free` → falls back
+  to paid `baidu/qianfan-ocr-fast` on quota / rate-limit. Both via
+  `OCR_MODEL` / `OCR_FALLBACK_MODEL` env.
+- `app/api/import/image/route.ts`: multipart POST, 5 MB cap, JPG/PNG/WebP,
+  10 RPM rate-limit. 503 when API key missing; 502 with the provider's
+  `error.metadata.raw` message when the OpenRouter call fails.
+- `AddHoldingsSheet` Image tab: shows the transcription with a Copy
+  button and a prompt directing the user to the Manual tab or chat. No
+  editable rows table; no save action on this tab.
+- v3 of three iterations — v1 (strict structured rows + units required) and
+  v2 (relaxed rows + optional units) both failed because cheap vision
+  models can't both OCR and produce structured output reliably. v3 splits
+  the labor.
+- Production caveat: free-tier providers train on submissions. The
+  qianfan `:free` variant is operator-verified no-train (per OpenRouter,
+  2026-05-23) but re-verify before any public deploy and override
+  `OCR_MODEL` to a paid no-train model for prod.
+- Advisor-assist follow-up (Phase 6 gated): the Image tab will auto-hand
+  the transcription to a chat thread and surface only `propose_holding`
+  cards to the user — the raw OCR text stays intermediate state. See
+  Phase 4 § "Follow-up: advisor-assist OCR".
+
+**Env-var documentation centralized 2026-05-23:** [AGENTS.md § Environment
+variables](./AGENTS.md) is now the canonical reference for every
+`process.env.*` the app reads (14 vars). Grouped by category with default,
+code location, and behavior notes. `.env.example` is the operator setup
+template; AGENTS.md is the authoritative reference.
+
 What's still mocked: ANALYSIS scores (need AI tool-calls — Phase 6),
-ANALYSIS chart series (need NAV history backfill — Phase 3b), market news
-(Phase 3b), benchmark + drift + contrib series on PortfolioScreen.
+ANALYSIS chart series (can be wired now — nav_history exists in demo;
+needs only the queries + adapter), market news (Phase 3b), benchmark +
+drift + contrib series on PortfolioScreen.
 
 The 7-screen UI is intact and responsive across mobile / tablet / desktop.
 
@@ -136,8 +175,8 @@ exposes the gaps that need polish; polishing on mock data risks rework.
 | 2.5 | Passkey + demo | ✅ Shipped 2026-05-21 | Single-owner auth + per-session in-memory demo DB |
 | 2.6 | Cleanup & chat persistence | ✅ Shipped 2026-05-22 | Chat history persists; plan-edit Apply wired; mock-import migration done. Thread-list sidebar deferred to a polish pass |
 | 3 | Market data | 🟡 Partial | SET/global indices live; funds + news in 3b |
-| 3b | Fund NAVs + news + NAV history | 🟡 Mostly shipped | Provider + v2 endpoints + holdings.quote_source + PortfolioScreen wiring all live; RSS news still pending |
-| 4 | Portfolio import | 🟡 Partial | CSV done; Image OCR shipped 2026-05-22 (free-tier OpenRouter vision via `/api/import/image`); manual-entry autocomplete pending |
+| 3b | Fund NAVs + news + NAV history | 🟡 Mostly shipped | Provider + v2 endpoints + holdings.quote_source + PortfolioScreen wiring all live; demo NAV history pre-seeded 2026-05-23 (chart fills instantly); RSS news still pending |
+| 4 | Portfolio import | 🟡 Partial | CSV done; Image OCR shipped 2026-05-23 as pure transcription (qianfan:free → paid fallback); manual-entry autocomplete pending; advisor-assist OCR (auto-handoff to chat with `propose_holding` cards) gated on Phase 6 |
 | 4b | Broker scraping / API integration | Out of scope | Revisit only if a clear personal need emerges |
 | 5 | Long-term memory + history compression | Pending | Per-user explicit-save preferences; chat compression to control OpenRouter cost. Research libraries first |
 | 5b | Scheduled jobs / digests / notifications | Pending | Depends on 3b and 6 |
@@ -1600,15 +1639,53 @@ that was edited.
 
 ## Next session pickup
 
-1. `cd macrotide` and re-read this file.
-2. **Where we are (2026-05-22):** Phase 3b in flight (provider refactor +
-   Thai SEC Open API integration), thread-list sidebar shipping in the
-   same pass. Phase 5 sketched but research-gated.
-3. **What to pick next:**
-   - **Phase 4 OCR import** — solid follow-on once 3b lands; needs no big
-     decisions, uses Claude vision via OpenRouter.
-   - **Phase 5a (memory)** — pick this if user appetite is "make chat
-     feel personal" before opening multi-user. Re-validate library
-     choices first.
-   - **Phase 6 (multi-user)** — when ready to share with family/friends.
-     One-way door on schema; only start when committed.
+1. `cd macrotide` and re-read this file. Also read
+   [AGENTS.md](./AGENTS.md) for project conventions (git rules, secrets
+   policy, browser tools, env-var reference).
+2. **Where we are (2026-05-23):** Phase 1 / 2.5 / 2.6 shipped. Phase 3b
+   mostly shipped (Thai SEC provider + holdings.quote_source + demo
+   pre-seed; RSS news still pending). Phase 4 OCR shipped as pure
+   transcription. Env-var docs centralized in AGENTS.md. Phase 5 sketched
+   but research-gated. Phase 6 untouched.
+3. **What to pick next** (ranked by impact/effort, ready to dispatch as
+   parallel worktree agents — see "Working in parallel" below):
+   - **ANALYSIS chart series (DRIFT / GEO / SECTOR / CONTRIB)** —
+     half-day, no AI dependency, concrete UI win. Currently mocked from
+     `lib/static/analysis.ts`. nav_history is now available in demo so
+     compute can be real. Touches PortfolioScreen + a new
+     `lib/portfolio/analytics.ts` + `/api/analysis` route (replace the
+     static-import path).
+   - **Phase 5a (long-term memory)** — one day, research-gated. Re-validate
+     mem0 vs. hand-rolled (<200 lines) first. Adds `user_preferences`
+     table + `save_preference` / `forget_preference` / `list_preferences`
+     chat tools + Settings UI. Makes chat feel personal across threads.
+   - **Phase 5b (chat compression)** — half-day, pairs with 5a. Per-turn
+     token logging + summarize-and-replace once threads exceed N turns.
+   - **Phase 4 manual-entry autocomplete** — half-day, closes Phase 4.
+   - **Phase 6 (multi-user)** — multi-day, one-way door. Only start when
+     committed to sharing with family/friends.
+4. **Don't pick yet:**
+   - Advisor-assist OCR — wait for Phase 6's `propose_plan_edit` tool to
+     land; same pattern, should reuse infrastructure.
+   - PerfChart library swap (visx) — wait until hover-to-inspect or
+     brush-to-zoom is actually needed.
+
+### Working in parallel (agent team approach)
+
+When dispatching multiple tasks at once, prefer Claude's `Agent` tool with
+`isolation: "worktree"` so each agent works on its own git worktree and
+local branch. Write self-contained briefs that include: file paths to read,
+acceptance criteria, what NOT to touch, and the conventions in
+[AGENTS.md](./AGENTS.md). Best ROI when the tasks touch non-overlapping
+files. Examples of independent pairs:
+
+- ANALYSIS charts + Phase 5b compression — different layers, no overlap.
+- Manual-entry autocomplete + RSS news (Phase 3c) — different domains.
+
+Don't parallelize work that touches the same files (e.g. two features both
+editing `PortfolioScreen.tsx` or `lib/portfolio/adapter.ts`) — merge
+conflict cost exceeds the parallelism gain.
+
+After agents finish, the main agent reviews each diff and merges (rebase
+preferred over merge per [AGENTS.md](./AGENTS.md) git rules — but never
+rebase main itself).
