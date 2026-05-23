@@ -869,8 +869,9 @@ sources. `Quote` and `Series` types are provider-agnostic
   so PortfolioScreen shows real value-vs-cost as soon as the refresh
   returns (cached/avg-cost fallback renders first).
 - ✅ **`npm run smoke:sec -- <FUND-CODE>`** for live verification.
-- ⏳ **News (RSS) — optional** — `lib/market/news.ts` aggregates Bangkok
-  Post and SET news RSS. May ship as Phase 3c instead.
+- ✅ **News (RSS) — shipped as Phase 3c** — long-term-investing editorial
+  feeds power the MarketsScreen news block via `/api/market/news`. See
+  [Phase 3c — RSS news aggregator](#phase-3c--rss-news-aggregator) below.
 
 ### Env vars added
 
@@ -936,6 +937,98 @@ SEC_API_KEY=...   # Thai SEC Open API subscription key (Ocp-Apim-Subscription-Ke
 
   Trigger to actually do this: when we add hover-to-inspect or
   brush-to-zoom. Until then, the stretched labels are tolerable.
+
+---
+
+## Phase 3c — RSS news aggregator
+
+> **Status:** ✅ Shipped 2026-05-23. Replaces the editorial mock news block
+> on MarketsScreen with a real RSS aggregator.
+
+**Goal:** the "From the long-term investing desk" block on MarketsScreen
+shows real, fresh headlines from a small curated set of editorial sources
+that match this app's index-investing / long-horizon advisor stance. No
+day-trader headline noise.
+
+### What shipped
+
+- [lib/market/news.ts](./lib/market/news.ts) — RSS 2.0 + Atom 1.0
+  aggregator. Fetches feeds in parallel with `Promise.allSettled` so one
+  bad feed never kills the response. Normalizes items to
+  `{ id, title, url, source, publishedAt }`, dedupes by URL, sorts
+  newest-first, caps at 30 items. 30-minute in-memory TTL keyed by the
+  feed list — no DB table. 8s per-feed fetch timeout.
+- [app/api/market/news/route.ts](./app/api/market/news/route.ts) — GET
+  handler wrapped in `withDb` for consistency with the rest of `/api/*`
+  (read-only; the wrapper is harmless). 30 RPM IP rate-limit.
+- [components/screens/MarketsScreen.tsx](./components/screens/MarketsScreen.tsx)
+  — news section consumes the new `useMarketNews()` SWR fetcher. Cards
+  link out to the source URL. Graceful empty state when all feeds fail.
+  Shows a "N sources down" hint when partial.
+- Vitest suite: 15 cases covering RSS / Atom parsing (with CDATA),
+  dedupe by URL, sort by date (undated items sort last), 30-item cap,
+  partial-failure resilience, all-fail empty state, cache hit + TTL
+  expiry. **No live network calls in tests** — all fixtures synthetic.
+
+### Feed list
+
+| Source | URL | Why |
+| --- | --- | --- |
+| Of Dollars and Data | `https://ofdollarsanddata.com/feed/` | Nick Maggiulli's long-form data-driven investing posts. |
+| A Wealth of Common Sense | `https://awealthofcommonsense.com/feed/` | Ben Carlson's index-investing commentary. |
+| Bangkok Post Business | `https://www.bangkokpost.com/rss/data/business.xml` | Thai macro lens (rates, baht, fiscal). |
+
+Sources audited and considered but **dropped:**
+
+- **Bogleheads forum** — high volume; "Re:" replies are thread-context
+  noise without summaries.
+- **MarketWatch top stories** — headline-driven mainstream finance; not
+  the long-horizon voice.
+- **Morningstar** — main domain `morningstar.com` returns HTTP 202 empty
+  bodies to non-browser UAs (anti-bot tarpit); the surviving feedburner
+  feed last updated October 2011. No working editorial RSS.
+
+When adding a new feed, audit it first against the bar above: HTTP 200,
+parseable RSS/Atom, ≥10 recent items, editorial-not-headline.
+
+### Dependencies
+
+- **`fast-xml-parser`** added as a runtime dep. MIT, zero-dep,
+  ~50KB. Approved for v1 (the obvious pick and there was no existing
+  XML parser available transitively).
+
+### Acceptance criteria
+
+- `npm run typecheck` + `npm run lint` + `npm test` + `npm run build`
+  all green.
+- `GET /api/market/news` returns `{ items, failures, fetchedAt }` with
+  at most 30 items, sorted newest-first.
+- MarketsScreen renders headlines from real feeds; click-through opens
+  the original article in a new tab.
+- When every feed is unreachable, the section renders a friendly
+  "temporarily unreachable" message — no crash, no empty card.
+- Cache hits inside the 30-min window do not hit the network.
+
+### Risk
+
+- **Feed shape drift:** RSS / Atom variants are messy. Parser is
+  defensive (skips bad items rather than throwing); ride out the
+  occasional missing field with empty `publishedAt`.
+- **Source decay:** any feed could die (paywall, abandonment). 30-min
+  cache plus partial-failure resilience means one dead source quietly
+  shows as "1 source down" in the UI. Replace dead feeds proactively
+  when the count stays > 0.
+- **No env-var override yet:** the feed list is a const in
+  `lib/market/news.ts`. If the user wants per-deploy customization,
+  that's a small follow-up — promote `NEWS_FEEDS` to read from env.
+
+### Out of scope (Phase 3c)
+
+- AI-generated `impact` / `relevance` per item — that's a Phase 6 tool-call
+  layer ("score this headline against my plan"), not a feed concern.
+- Article body text — feed metadata only. Following a link opens the
+  source.
+- Push notifications / digest emails — Phase 5b.
 
 ---
 

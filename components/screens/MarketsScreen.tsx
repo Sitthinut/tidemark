@@ -2,7 +2,12 @@
 
 import { useMemo, useState } from "react";
 import { Icon } from "@/components/Icon";
-import { type MarketIndexResponse, useMarketIndices } from "@/lib/fetchers/portfolio";
+import {
+  type MarketIndexResponse,
+  type MarketNewsItem,
+  useMarketIndices,
+  useMarketNews,
+} from "@/lib/fetchers/portfolio";
 import { LEARN_CONTENT } from "@/lib/static/learn";
 import { MARKETS } from "@/lib/static/markets";
 import type { LearnArticle, MarketIndex, Markets } from "@/lib/static/types";
@@ -181,39 +186,92 @@ function MarketsTodayInner({ markets, banner }: { markets: Markets; banner: stri
         </div>
       </div>
 
-      <div className="section">
-        <div className="section-header">
-          <h3>What matters for you</h3>
-          <span className="link">Show all</span>
-        </div>
-        <div className="card" style={{ padding: "4px 14px" }}>
-          {markets.news.map((n, i) => (
-            <div key={i} className="news-card">
-              <div className="head">
-                <span>
-                  {n.tag} · {n.time}
-                </span>
-                <span
-                  className={n.relevance === "high" ? "tag green" : "tag"}
-                  style={{ fontSize: 9 }}
-                >
-                  {n.relevance}
-                </span>
-              </div>
-              <div className="title">{n.title}</div>
-              <div className="summary">{n.summary}</div>
-              <div className="impact">
-                <Icon name="sparkle" size={13} />
-                <div>
-                  <strong>For you:</strong> {n.impact}
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
+      <MarketsNewsSection />
+    </div>
+  );
+}
+
+function MarketsNewsSection() {
+  const { data, isLoading, error } = useMarketNews();
+  const items = data?.items ?? [];
+  const allFailed = !isLoading && (error != null || (data != null && items.length === 0));
+
+  return (
+    <div className="section">
+      <div className="section-header">
+        <h3>From the long-term investing desk</h3>
+        <span className="link" style={{ color: "var(--muted)" }}>
+          {data?.failures ? `${data.failures} source${data.failures > 1 ? "s" : ""} down` : ""}
+        </span>
+      </div>
+      <div className="card" style={{ padding: "4px 14px" }}>
+        {isLoading && (
+          <div
+            style={{
+              padding: 12,
+              fontSize: 12,
+              color: "var(--muted)",
+              fontFamily: "var(--font-mono)",
+              letterSpacing: "0.02em",
+            }}
+          >
+            Loading headlines…
+          </div>
+        )}
+        {!isLoading && allFailed && (
+          <div
+            style={{
+              padding: 12,
+              fontSize: 12,
+              color: "var(--muted)",
+              fontFamily: "var(--font-mono)",
+              letterSpacing: "0.02em",
+            }}
+          >
+            News sources are temporarily unreachable. Try again in a few minutes.
+          </div>
+        )}
+        {!isLoading && !allFailed && items.map((n) => <NewsRow key={n.id} item={n} />)}
       </div>
     </div>
   );
+}
+
+function NewsRow({ item }: { item: MarketNewsItem }) {
+  const relative = relativeTime(item.publishedAt);
+  return (
+    <a
+      href={item.url}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="news-card"
+      style={{ display: "block", color: "inherit", textDecoration: "none" }}
+    >
+      <div className="head">
+        <span>
+          {item.source}
+          {relative ? ` · ${relative}` : ""}
+        </span>
+      </div>
+      <div className="title">{item.title}</div>
+    </a>
+  );
+}
+
+function relativeTime(iso: string): string {
+  if (!iso) return "";
+  const t = Date.parse(iso);
+  if (!Number.isFinite(t)) return "";
+  const diffMs = Date.now() - t;
+  const min = Math.round(diffMs / 60_000);
+  if (min < 1) return "just now";
+  if (min < 60) return `${min}m ago`;
+  const hr = Math.round(min / 60);
+  if (hr < 24) return `${hr}h ago`;
+  const d = Math.round(hr / 24);
+  if (d < 30) return `${d}d ago`;
+  const mo = Math.round(d / 30);
+  return `${mo}mo ago`;
 }
 
 function MarketsLearn() {

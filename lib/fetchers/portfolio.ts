@@ -96,3 +96,21 @@ export interface MarketIndexResponse {
 export function useMarketIndices() {
   return useResource<MarketIndexResponse[]>("/api/market/indices");
 }
+
+export interface MarketNewsItem {
+  id: string;
+  title: string;
+  url: string;
+  source: string;
+  publishedAt: string;
+}
+
+export interface MarketNewsResponse {
+  items: MarketNewsItem[];
+  failures: number;
+  fetchedAt: string;
+}
+
+export function useMarketNews() {
+  return useResource<MarketNewsResponse>("/api/market/news");
+}
