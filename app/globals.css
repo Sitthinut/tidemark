@@ -2204,6 +2204,15 @@ textarea.sheet-input {
   margin: 6px 12px 14px;
 }
 
+/* In-panel thread list (Option B view swap). Fills the panel body below the
+   panel header and scrolls independently. Mirrors the drawer's list spacing. */
+.ra-thread-panel {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 8px 0;
+}
+
 /* Portfolios panel */
 .ra-bucket-card {
   display: flex;

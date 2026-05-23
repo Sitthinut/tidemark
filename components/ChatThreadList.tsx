@@ -60,6 +60,14 @@ export interface ChatThreadListProps {
   activeThreadId: string | null;
   onSelect: (id: string) => void;
   onNewChat: () => void;
+  /**
+   * "drawer" (default) — full-viewport fixed left drawer with its own header +
+   * backdrop. Used by ChatScreen on mobile.
+   * "panel" — renders only the scrollable list body (no fixed positioning, no
+   * backdrop, no header). Meant to be dropped into the chat right-rail panel,
+   * which supplies its own panel header + back control.
+   */
+  variant?: "drawer" | "panel";
 }
 
 export function ChatThreadList({
@@ -68,6 +76,7 @@ export function ChatThreadList({
   activeThreadId,
   onSelect,
   onNewChat,
+  variant = "drawer",
 }: ChatThreadListProps) {
   // Active threads load eagerly when the drawer opens; the trash group loads
   // only after the user expands it (gated on `showDeleted`) so the common
@@ -184,6 +193,328 @@ export function ChatThreadList({
     await invalidate(/^\/api\/chat\/threads/);
   };
 
+  const listBody = (
+    <>
+      {isLoading && (
+        <div style={{ padding: "16px", fontSize: 13, color: "var(--muted)" }}>Loading…</div>
+      )}
+      {error && (
+        <div style={{ padding: "16px", fontSize: 13, color: "var(--danger, #c33)" }}>
+          Couldn't load threads.
+        </div>
+      )}
+      {!isLoading && !error && buckets.length === 0 && (
+        <div style={{ padding: "16px", fontSize: 13, color: "var(--muted)" }}>
+          No saved chats yet. Start a conversation and it'll appear here.
+        </div>
+      )}
+      {buckets.map((b) => (
+        <div key={b.bucket} style={{ marginBottom: 8 }}>
+          <div
+            style={{
+              fontFamily: "var(--font-mono)",
+              fontSize: 10,
+              letterSpacing: "0.08em",
+              color: "var(--muted)",
+              padding: "8px 16px 4px",
+              textTransform: "uppercase",
+            }}
+          >
+            {b.bucket}
+          </div>
+          {b.threads.map((t) => {
+            const isActive = t.id === activeThreadId;
+            const title = titleFor(t);
+            const isRenaming = renamingId === t.id;
+            const isMenuOpen = menuOpenId === t.id;
+            return (
+              <div
+                key={t.id}
+                className="chat-thread-row"
+                style={{
+                  position: "relative",
+                  display: "flex",
+                  alignItems: "center",
+                  padding: "6px 8px 6px 16px",
+                  background: isActive ? "var(--accent-soft)" : "transparent",
+                }}
+              >
+                {/* Active-session indicator: subtle dot. */}
+                <span
+                  aria-hidden
+                  style={{
+                    width: 6,
+                    height: 6,
+                    borderRadius: "50%",
+                    marginRight: 8,
+                    background: isActive ? "var(--accent-ink)" : "transparent",
+                    flexShrink: 0,
+                  }}
+                />
+                {isRenaming ? (
+                  <input
+                    ref={renameInputRef}
+                    value={renameDraft}
+                    onChange={(e) => setRenameDraft(e.target.value)}
+                    onBlur={() => commitRename(t.id)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        commitRename(t.id);
+                      } else if (e.key === "Escape") {
+                        e.preventDefault();
+                        setRenamingId(null);
+                      }
+                    }}
+                    aria-label={`Rename ${title}`}
+                    style={{
+                      flex: 1,
+                      background: "var(--bg)",
+                      border: "1px solid var(--line)",
+                      borderRadius: 4,
+                      color: "var(--ink)",
+                      fontSize: 13.5,
+                      padding: "3px 6px",
+                      outline: "none",
+                    }}
+                  />
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onSelect(t.id);
+                      onClose();
+                    }}
+                    style={{
+                      flex: 1,
+                      textAlign: "left",
+                      background: "transparent",
+                      border: 0,
+                      color: isActive ? "var(--accent-ink)" : "var(--ink)",
+                      fontSize: 13.5,
+                      fontWeight: isActive ? 600 : 400,
+                      lineHeight: 1.35,
+                      padding: "4px 4px",
+                      cursor: "pointer",
+                      whiteSpace: "nowrap",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                    }}
+                    title={title}
+                  >
+                    {title}
+                  </button>
+                )}
+                {!isRenaming && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setMenuOpenId(isMenuOpen ? null : t.id);
+                    }}
+                    aria-label={`Actions for ${title}`}
+                    aria-haspopup="menu"
+                    aria-expanded={isMenuOpen}
+                    title="More"
+                    className="chat-thread-kebab"
+                    style={{
+                      background: "transparent",
+                      border: 0,
+                      color: "var(--muted)",
+                      cursor: "pointer",
+                      padding: "4px 8px",
+                      fontSize: 16,
+                      lineHeight: 1,
+                      opacity: isMenuOpen ? 1 : undefined,
+                    }}
+                  >
+                    ⋯
+                  </button>
+                )}
+                {isMenuOpen && (
+                  <div
+                    role="menu"
+                    style={{
+                      position: "absolute",
+                      top: "100%",
+                      right: 8,
+                      marginTop: 2,
+                      background: "var(--bg)",
+                      border: "1px solid var(--line)",
+                      borderRadius: 6,
+                      boxShadow: "0 8px 24px rgba(0,0,0,0.12)",
+                      zIndex: 62,
+                      minWidth: 140,
+                      padding: "4px 0",
+                    }}
+                  >
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => startRename(t)}
+                      style={menuItemStyle}
+                    >
+                      Rename
+                    </button>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => softDelete(t.id)}
+                      style={{ ...menuItemStyle, color: "var(--danger, #c33)" }}
+                    >
+                      Delete
+                    </button>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      ))}
+
+      {/* Deleted chats (30-day restore). Collapsible, lazy-loaded. */}
+      <div
+        style={{
+          marginTop: 12,
+          borderTop: "1px solid var(--line)",
+          paddingTop: 8,
+        }}
+      >
+        <button
+          type="button"
+          onClick={() => setShowDeleted((s) => !s)}
+          aria-expanded={showDeleted}
+          style={{
+            background: "transparent",
+            border: 0,
+            width: "100%",
+            textAlign: "left",
+            padding: "6px 16px",
+            cursor: "pointer",
+            fontFamily: "var(--font-mono)",
+            fontSize: 10,
+            letterSpacing: "0.08em",
+            color: "var(--muted)",
+            textTransform: "uppercase",
+            display: "flex",
+            alignItems: "center",
+            gap: 6,
+          }}
+        >
+          <span style={{ width: 10, display: "inline-block" }}>{showDeleted ? "▾" : "▸"}</span>
+          Deleted chats (30 days)
+          {deletedData && deletedData.length > 0 && (
+            <span style={{ marginLeft: "auto", fontFamily: "var(--font-sans)" }}>
+              {deletedData.length}
+            </span>
+          )}
+        </button>
+        {showDeleted && (
+          <div>
+            {deletedLoading && (
+              <div style={{ padding: "8px 16px", fontSize: 12, color: "var(--muted)" }}>
+                Loading…
+              </div>
+            )}
+            {!deletedLoading && deletedData && deletedData.length === 0 && (
+              <div style={{ padding: "8px 16px", fontSize: 12, color: "var(--muted)" }}>
+                Nothing in the trash.
+              </div>
+            )}
+            {deletedData?.map((t) => {
+              const title = titleFor(t);
+              const daysLeft = daysLeftUntilPurge(t.deletedAt);
+              return (
+                <div
+                  key={t.id}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    padding: "6px 8px 6px 16px",
+                    gap: 4,
+                  }}
+                >
+                  <div
+                    style={{
+                      flex: 1,
+                      minWidth: 0,
+                      fontSize: 12.5,
+                      color: "var(--muted)",
+                    }}
+                  >
+                    <div
+                      style={{
+                        whiteSpace: "nowrap",
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                      }}
+                      title={title}
+                    >
+                      {title}
+                    </div>
+                    <div style={{ fontSize: 10.5, opacity: 0.8 }}>
+                      {daysLeft === 0 ? "Purges today" : `${daysLeft}d left`}
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => restore(t.id)}
+                    className="btn ghost sm"
+                    title="Restore"
+                    style={{ padding: "2px 6px", fontSize: 11 }}
+                  >
+                    Restore
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => purge(t.id, title)}
+                    aria-label={`Delete ${title} forever`}
+                    title="Delete forever"
+                    style={{
+                      background: "transparent",
+                      border: 0,
+                      color: "var(--muted)",
+                      cursor: "pointer",
+                      padding: "4px 6px",
+                      fontSize: 13,
+                    }}
+                  >
+                    ✕
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </>
+  );
+
+  const hoverStyles = (
+    <style jsx>{`
+      :global(.chat-thread-row) .chat-thread-kebab {
+        opacity: 0;
+        transition: opacity 80ms ease;
+      }
+      :global(.chat-thread-row):hover .chat-thread-kebab,
+      :global(.chat-thread-row):focus-within .chat-thread-kebab {
+        opacity: 0.85;
+      }
+    `}</style>
+  );
+
+  // In-panel variant: just the scrollable list body. The chat panel supplies
+  // its own header + back control, so there's no fixed positioning or backdrop.
+  if (variant === "panel") {
+    return (
+      <div className="ra-thread-panel">
+        {listBody}
+        {hoverStyles}
+      </div>
+    );
+  }
+
+  // Drawer variant (mobile): full-viewport fixed left drawer with backdrop.
   return (
     <>
       {/* Backdrop */}
@@ -259,311 +590,9 @@ export function ChatThreadList({
             ✕
           </button>
         </header>
-        <div style={{ flex: 1, overflowY: "auto", padding: "8px 0" }}>
-          {isLoading && (
-            <div style={{ padding: "16px", fontSize: 13, color: "var(--muted)" }}>Loading…</div>
-          )}
-          {error && (
-            <div style={{ padding: "16px", fontSize: 13, color: "var(--danger, #c33)" }}>
-              Couldn't load threads.
-            </div>
-          )}
-          {!isLoading && !error && buckets.length === 0 && (
-            <div style={{ padding: "16px", fontSize: 13, color: "var(--muted)" }}>
-              No saved chats yet. Start a conversation and it'll appear here.
-            </div>
-          )}
-          {buckets.map((b) => (
-            <div key={b.bucket} style={{ marginBottom: 8 }}>
-              <div
-                style={{
-                  fontFamily: "var(--font-mono)",
-                  fontSize: 10,
-                  letterSpacing: "0.08em",
-                  color: "var(--muted)",
-                  padding: "8px 16px 4px",
-                  textTransform: "uppercase",
-                }}
-              >
-                {b.bucket}
-              </div>
-              {b.threads.map((t) => {
-                const isActive = t.id === activeThreadId;
-                const title = titleFor(t);
-                const isRenaming = renamingId === t.id;
-                const isMenuOpen = menuOpenId === t.id;
-                return (
-                  <div
-                    key={t.id}
-                    className="chat-thread-row"
-                    style={{
-                      position: "relative",
-                      display: "flex",
-                      alignItems: "center",
-                      padding: "6px 8px 6px 16px",
-                      background: isActive ? "var(--accent-soft)" : "transparent",
-                    }}
-                  >
-                    {/* Active-session indicator: subtle dot. */}
-                    <span
-                      aria-hidden
-                      style={{
-                        width: 6,
-                        height: 6,
-                        borderRadius: "50%",
-                        marginRight: 8,
-                        background: isActive ? "var(--accent-ink)" : "transparent",
-                        flexShrink: 0,
-                      }}
-                    />
-                    {isRenaming ? (
-                      <input
-                        ref={renameInputRef}
-                        value={renameDraft}
-                        onChange={(e) => setRenameDraft(e.target.value)}
-                        onBlur={() => commitRename(t.id)}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") {
-                            e.preventDefault();
-                            commitRename(t.id);
-                          } else if (e.key === "Escape") {
-                            e.preventDefault();
-                            setRenamingId(null);
-                          }
-                        }}
-                        aria-label={`Rename ${title}`}
-                        style={{
-                          flex: 1,
-                          background: "var(--bg)",
-                          border: "1px solid var(--line)",
-                          borderRadius: 4,
-                          color: "var(--ink)",
-                          fontSize: 13.5,
-                          padding: "3px 6px",
-                          outline: "none",
-                        }}
-                      />
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          onSelect(t.id);
-                          onClose();
-                        }}
-                        style={{
-                          flex: 1,
-                          textAlign: "left",
-                          background: "transparent",
-                          border: 0,
-                          color: isActive ? "var(--accent-ink)" : "var(--ink)",
-                          fontSize: 13.5,
-                          fontWeight: isActive ? 600 : 400,
-                          lineHeight: 1.35,
-                          padding: "4px 4px",
-                          cursor: "pointer",
-                          whiteSpace: "nowrap",
-                          overflow: "hidden",
-                          textOverflow: "ellipsis",
-                        }}
-                        title={title}
-                      >
-                        {title}
-                      </button>
-                    )}
-                    {!isRenaming && (
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setMenuOpenId(isMenuOpen ? null : t.id);
-                        }}
-                        aria-label={`Actions for ${title}`}
-                        aria-haspopup="menu"
-                        aria-expanded={isMenuOpen}
-                        title="More"
-                        className="chat-thread-kebab"
-                        style={{
-                          background: "transparent",
-                          border: 0,
-                          color: "var(--muted)",
-                          cursor: "pointer",
-                          padding: "4px 8px",
-                          fontSize: 16,
-                          lineHeight: 1,
-                          opacity: isMenuOpen ? 1 : undefined,
-                        }}
-                      >
-                        ⋯
-                      </button>
-                    )}
-                    {isMenuOpen && (
-                      <div
-                        role="menu"
-                        style={{
-                          position: "absolute",
-                          top: "100%",
-                          right: 8,
-                          marginTop: 2,
-                          background: "var(--bg)",
-                          border: "1px solid var(--line)",
-                          borderRadius: 6,
-                          boxShadow: "0 8px 24px rgba(0,0,0,0.12)",
-                          zIndex: 62,
-                          minWidth: 140,
-                          padding: "4px 0",
-                        }}
-                      >
-                        <button
-                          type="button"
-                          role="menuitem"
-                          onClick={() => startRename(t)}
-                          style={menuItemStyle}
-                        >
-                          Rename
-                        </button>
-                        <button
-                          type="button"
-                          role="menuitem"
-                          onClick={() => softDelete(t.id)}
-                          style={{ ...menuItemStyle, color: "var(--danger, #c33)" }}
-                        >
-                          Delete
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          ))}
-
-          {/* Deleted chats (30-day restore). Collapsible, lazy-loaded. */}
-          <div
-            style={{
-              marginTop: 12,
-              borderTop: "1px solid var(--line)",
-              paddingTop: 8,
-            }}
-          >
-            <button
-              type="button"
-              onClick={() => setShowDeleted((s) => !s)}
-              aria-expanded={showDeleted}
-              style={{
-                background: "transparent",
-                border: 0,
-                width: "100%",
-                textAlign: "left",
-                padding: "6px 16px",
-                cursor: "pointer",
-                fontFamily: "var(--font-mono)",
-                fontSize: 10,
-                letterSpacing: "0.08em",
-                color: "var(--muted)",
-                textTransform: "uppercase",
-                display: "flex",
-                alignItems: "center",
-                gap: 6,
-              }}
-            >
-              <span style={{ width: 10, display: "inline-block" }}>{showDeleted ? "▾" : "▸"}</span>
-              Deleted chats (30 days)
-              {deletedData && deletedData.length > 0 && (
-                <span style={{ marginLeft: "auto", fontFamily: "var(--font-sans)" }}>
-                  {deletedData.length}
-                </span>
-              )}
-            </button>
-            {showDeleted && (
-              <div>
-                {deletedLoading && (
-                  <div style={{ padding: "8px 16px", fontSize: 12, color: "var(--muted)" }}>
-                    Loading…
-                  </div>
-                )}
-                {!deletedLoading && deletedData && deletedData.length === 0 && (
-                  <div style={{ padding: "8px 16px", fontSize: 12, color: "var(--muted)" }}>
-                    Nothing in the trash.
-                  </div>
-                )}
-                {deletedData?.map((t) => {
-                  const title = titleFor(t);
-                  const daysLeft = daysLeftUntilPurge(t.deletedAt);
-                  return (
-                    <div
-                      key={t.id}
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        padding: "6px 8px 6px 16px",
-                        gap: 4,
-                      }}
-                    >
-                      <div
-                        style={{
-                          flex: 1,
-                          minWidth: 0,
-                          fontSize: 12.5,
-                          color: "var(--muted)",
-                        }}
-                      >
-                        <div
-                          style={{
-                            whiteSpace: "nowrap",
-                            overflow: "hidden",
-                            textOverflow: "ellipsis",
-                          }}
-                          title={title}
-                        >
-                          {title}
-                        </div>
-                        <div style={{ fontSize: 10.5, opacity: 0.8 }}>
-                          {daysLeft === 0 ? "Purges today" : `${daysLeft}d left`}
-                        </div>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => restore(t.id)}
-                        className="btn ghost sm"
-                        title="Restore"
-                        style={{ padding: "2px 6px", fontSize: 11 }}
-                      >
-                        Restore
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => purge(t.id, title)}
-                        aria-label={`Delete ${title} forever`}
-                        title="Delete forever"
-                        style={{
-                          background: "transparent",
-                          border: 0,
-                          color: "var(--muted)",
-                          cursor: "pointer",
-                          padding: "4px 6px",
-                          fontSize: 13,
-                        }}
-                      >
-                        ✕
-                      </button>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        </div>
+        <div style={{ flex: 1, overflowY: "auto", padding: "8px 0" }}>{listBody}</div>
       </aside>
-      <style jsx>{`
-        :global(.chat-thread-row) .chat-thread-kebab {
-          opacity: 0;
-          transition: opacity 80ms ease;
-        }
-        :global(.chat-thread-row):hover .chat-thread-kebab,
-        :global(.chat-thread-row):focus-within .chat-thread-kebab {
-          opacity: 0.85;
-        }
-      `}</style>
+      {hoverStyles}
     </>
   );
 }

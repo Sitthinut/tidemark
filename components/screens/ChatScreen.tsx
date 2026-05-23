@@ -223,6 +223,37 @@ export function ChatScreen({ persona = "advisor", seedPrompt, onPromptConsumed }
     return () => window.removeEventListener("keydown", handler);
   }, [newChat, loading]);
 
+  // Cross-component bus for the in-panel thread list (desktop/tablet right
+  // rail). The list lives in ChatPanel, which can't reach this component's
+  // threadId/loadThread/newChat directly without prop-drilling — so we use the
+  // same window-CustomEvent pattern the portfolio panel uses. Mobile keeps
+  // driving the drawer through props and ignores this entirely.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const onLoad = (e: Event) => {
+      const id = (e as CustomEvent<string>).detail;
+      if (id && id !== threadId) void loadThread(id);
+    };
+    const onNew = () => newChat();
+    const onRequest = () => {
+      window.dispatchEvent(new CustomEvent("chat-active-changed", { detail: threadId }));
+    };
+    window.addEventListener("chat-load-thread", onLoad);
+    window.addEventListener("chat-new", onNew);
+    window.addEventListener("chat-active-request", onRequest);
+    return () => {
+      window.removeEventListener("chat-load-thread", onLoad);
+      window.removeEventListener("chat-new", onNew);
+      window.removeEventListener("chat-active-request", onRequest);
+    };
+  }, [threadId, loadThread, newChat]);
+
+  // Broadcast the active thread so the in-panel list highlights the right row.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.dispatchEvent(new CustomEvent("chat-active-changed", { detail: threadId }));
+  }, [threadId]);
+
   /**
    * Fire-and-forget auto-title trigger. Called after the first turn pair
    * completes on a brand-new thread. The server is idempotent so a duplicate

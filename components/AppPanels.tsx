@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { ChatThreadList } from "@/components/ChatThreadList";
 import { Icon } from "@/components/Icon";
 import { ChatScreen } from "@/components/screens/ChatScreen";
 import { useJournalView, usePortfolioView } from "@/lib/fetchers/legacy";
@@ -36,12 +37,95 @@ export function ChatPanel({
   onPromptConsumed: () => void;
   onClose: () => void;
 }) {
+  // In-panel view swap (Option B): the chat body and the thread list share one
+  // panel. "All chats" swaps to the list; the back arrow returns to chat.
+  const [view, setView] = useState<"chat" | "threads">("chat");
+  // Mirror ChatScreen's active thread so the list can highlight it. ChatScreen
+  // owns threadId/loadThread/newChat and stays mounted across the swap; we drive
+  // it through the same window-CustomEvent bus the portfolio panel already uses,
+  // which keeps ChatScreen's public prop signature untouched.
+  const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
+  useEffect(() => {
+    const onSync = (e: Event) =>
+      setActiveThreadId((e as CustomEvent<string | null>).detail ?? null);
+    window.addEventListener("chat-active-changed", onSync);
+    // Ask ChatScreen to broadcast its current thread on mount.
+    window.dispatchEvent(new CustomEvent("chat-active-request"));
+    return () => window.removeEventListener("chat-active-changed", onSync);
+  }, []);
+
+  const selectThread = (id: string) => {
+    window.dispatchEvent(new CustomEvent("chat-load-thread", { detail: id }));
+    setView("chat");
+  };
+  const startNewChat = () => {
+    window.dispatchEvent(new CustomEvent("chat-new"));
+    setView("chat");
+  };
+
   return (
     <>
-      <PanelHeader title="Chat" showDot onClose={onClose} />
-      <div className="ra-panel-body ra-chat-body">
+      {view === "chat" ? (
+        <div className="ra-panel-head">
+          <div className="ra-panel-title">
+            <button
+              type="button"
+              className="icon-btn"
+              onClick={() => setView("threads")}
+              aria-label="All chats"
+              title="All chats"
+            >
+              <Icon name="menu" size={15} />
+            </button>
+            <span className="ra-dot"></span> Chat
+          </div>
+          <button className="icon-btn" onClick={onClose} aria-label="Close">
+            <Icon name="close" size={14} />
+          </button>
+        </div>
+      ) : (
+        <div className="ra-panel-head">
+          <div className="ra-panel-title">
+            <button
+              type="button"
+              className="icon-btn"
+              onClick={() => setView("chat")}
+              aria-label="Back to chat"
+              title="Back to chat"
+            >
+              <Icon name="arrow-left" size={16} />
+            </button>
+            Chats
+          </div>
+          <button
+            type="button"
+            className="btn ghost sm"
+            onClick={startNewChat}
+            title="Start a new conversation (⌘K)"
+            style={{ gap: 4 }}
+          >
+            <Icon name="sparkle" size={12} /> New
+          </button>
+        </div>
+      )}
+      {/* ChatScreen stays mounted across the swap so in-flight turns and the
+          active thread survive — just hidden while the list is showing. */}
+      <div
+        className="ra-panel-body ra-chat-body"
+        style={view === "chat" ? undefined : { display: "none" }}
+      >
         <ChatScreen persona="advisor" seedPrompt={seedPrompt} onPromptConsumed={onPromptConsumed} />
       </div>
+      {view === "threads" && (
+        <ChatThreadList
+          variant="panel"
+          open
+          onClose={() => setView("chat")}
+          activeThreadId={activeThreadId}
+          onSelect={selectThread}
+          onNewChat={startNewChat}
+        />
+      )}
     </>
   );
 }
