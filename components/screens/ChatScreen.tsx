@@ -153,9 +153,48 @@ export function ChatScreen({ persona = "advisor", seedPrompt, onPromptConsumed }
   // chatting. The server is idempotent regardless, but this saves the round
   // trip + the SWR invalidate churn.
   const titledRef = useRef<Set<string>>(new Set());
+  // Mirror of threadId for callbacks that must not re-bind on every switch
+  // (e.g. newChat reads it without taking threadId as a dep).
+  const threadIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    threadIdRef.current = threadId;
+  }, [threadId]);
+  // True once the user has sent a message into the current thread that hasn't
+  // been closed yet. Gates the close beacon so we never spend an extraction
+  // model call on a session with no NEW activity — a refresh, or reopening a
+  // thread just to read it. Token-efficiency: extract only when there's
+  // something new to extract, and only once per session.
+  const dirtyRef = useRef(false);
+
+  // Real-time session close for the OUTGOING thread — on New Chat, thread
+  // switch, or the page going away (pagehide). The server extracts durable
+  // facts + marks the thread idle (lib/memory/session-close.ts), once per
+  // session. Fire-and-forget: idempotent + best-effort server-side, so we
+  // ignore the response. Prefers `sendBeacon` (survives unload) with a
+  // keepalive `fetch` fallback. No-ops unless the session is dirty.
+  const closeOutgoing = useCallback((id: string | null) => {
+    if (!id || !dirtyRef.current || typeof navigator === "undefined") return;
+    dirtyRef.current = false;
+    const url = `/api/chat/threads/${encodeURIComponent(id)}/close`;
+    if (typeof navigator.sendBeacon === "function" && navigator.sendBeacon(url)) return;
+    void fetch(url, { method: "POST", keepalive: true }).catch(() => {});
+  }, []);
+
+  // Close the active session when the page goes away (tab/window close,
+  // navigation, bfcache). `pagehide` is the reliable unload signal;
+  // `beforeunload` is not. This is what catches "user closed the window
+  // without clicking New Chat".
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const onHide = () => closeOutgoing(threadIdRef.current);
+    window.addEventListener("pagehide", onHide);
+    return () => window.removeEventListener("pagehide", onHide);
+  }, [closeOutgoing]);
 
   const loadThread = useCallback(
     async (id: string): Promise<boolean> => {
+      // Close the thread we're leaving (no-op on first load / same thread).
+      if (id !== threadIdRef.current) closeOutgoing(threadIdRef.current);
       try {
         const res = await fetch(`/api/chat/threads/${encodeURIComponent(id)}`);
         if (!res.ok) return false;
@@ -183,7 +222,7 @@ export function ChatScreen({ persona = "advisor", seedPrompt, onPromptConsumed }
         return false;
       }
     },
-    [initial],
+    [initial, closeOutgoing],
   );
 
   // Hydrate the most recently active thread on mount. If the server doesn't
@@ -207,6 +246,8 @@ export function ChatScreen({ persona = "advisor", seedPrompt, onPromptConsumed }
   }, [loadThread]);
 
   const newChat = useCallback(() => {
+    // Close the session we're leaving before clearing it (real-time extraction).
+    closeOutgoing(threadIdRef.current);
     if (typeof window !== "undefined") {
       window.localStorage.removeItem(ACTIVE_THREAD_KEY);
     }
@@ -214,7 +255,7 @@ export function ChatScreen({ persona = "advisor", seedPrompt, onPromptConsumed }
     setMessages(initial);
     setMsgFeedback({});
     setContextNotice(false);
-  }, [initial]);
+  }, [initial, closeOutgoing]);
 
   // Keyboard shortcut: ⌘/Ctrl+K opens a new chat. We swallow the event so the
   // browser's "search bar" default (Firefox) doesn't also fire. Disabled
@@ -302,6 +343,9 @@ export function ChatScreen({ persona = "advisor", seedPrompt, onPromptConsumed }
 
   const askLive = async (prompt: string, history: Message[]) => {
     setLoading(true);
+    // New user turn → this session now has content worth extracting when it
+    // closes (gates the close beacon; see closeOutgoing).
+    dirtyRef.current = true;
     // Build the model conversation from prior turns + this new prompt.
     const model = [
       ...history

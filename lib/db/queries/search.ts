@@ -24,6 +24,7 @@ interface ThreadRowRaw {
   created_at: string;
   updated_at: string;
   archived_at: string | null;
+  extracted_through_id: number | null;
   deleted_at: string | null;
 }
 
@@ -35,6 +36,7 @@ function hydrateThread(r: ThreadRowRaw): ChatThread {
     createdAt: r.created_at,
     updatedAt: r.updated_at,
     archivedAt: r.archived_at,
+    extractedThroughId: r.extracted_through_id,
     deletedAt: r.deleted_at,
   };
 }

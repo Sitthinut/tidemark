@@ -1,0 +1,1 @@
+ALTER TABLE `chat_threads` ADD `extracted_through_id` integer;

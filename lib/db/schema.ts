@@ -144,6 +144,12 @@ export const chatThreads = sqliteTable("chat_threads", {
   updatedAt: text("updated_at").notNull(),
   // Set when the archive job moves a thread to 'archived'; ISO-8601 UTC.
   archivedAt: text("archived_at"),
+  // Watermark for incremental backstop extraction (Phase 5b): the highest
+  // chat_messages.id already folded into a `source='extracted'` pass. On
+  // session close we extract only turns newer than this (plus the running
+  // summary as context), then advance it — so re-extracting a resumed chat
+  // never re-processes old turns. NULL = nothing extracted yet.
+  extractedThroughId: integer("extracted_through_id"),
   // Soft-delete: NULL = active, ISO-8601 UTC = trashed at that moment.
   // 30-day grace period for restore; UI hides past that. Hard purge is manual.
   deletedAt: text("deleted_at"),

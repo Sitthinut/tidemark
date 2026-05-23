@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, gt, isNotNull, isNull, lt, lte } from "drizzle-orm";
+import { and, asc, desc, eq, gt, isNotNull, isNull, lt, lte, ne } from "drizzle-orm";
 import { getDb } from "../context";
 import { chatMessages, chatThreads } from "../schema";
 
@@ -134,9 +134,10 @@ export function purgeExpiredDeletedThreads(daysAgo = 30): number {
 }
 
 // ───────────────────────────────────────────────────────────────────────────
-// Session lifecycle (Phase 5b). `status` tracks active → idle → archived based
-// on `updatedAt` age; the archive job (lib/jobs/archive-idle-sessions.ts) drives
-// the transitions. Deletion stays orthogonal on `deletedAt`.
+// Session lifecycle (Phase 5b). `status`: active → idle on session close
+// (lib/memory/session-close.ts), idle → active on resume (reactivateThread).
+// The lib/jobs/close-stale-sessions.ts backstop closes active threads that
+// never got an explicit close. Deletion stays orthogonal on `deletedAt`.
 // ───────────────────────────────────────────────────────────────────────────
 
 /** Mark a thread idle. No-op timestamp bump — does not touch `updatedAt`. */
@@ -161,6 +162,31 @@ export function archiveThread(threadId: string): ChatThread | undefined {
     .where(eq(chatThreads.id, threadId))
     .returning()
     .get();
+}
+
+/**
+ * Resume a session: flip `idle`/`archived` back to `active` (and clear
+ * `archivedAt`). Called when a new message lands on an existing thread, so a
+ * reopened chat becomes eligible to close + extract again. No-op on a thread
+ * already `active`. The extraction watermark is intentionally left intact so
+ * the next close extracts only the resumed turns.
+ */
+export function reactivateThread(threadId: string): ChatThread | undefined {
+  return getDb()
+    .update(chatThreads)
+    .set({ status: "active", archivedAt: null })
+    .where(and(eq(chatThreads.id, threadId), ne(chatThreads.status, "active")))
+    .returning()
+    .get();
+}
+
+/** Advance the incremental-extraction watermark to `turnId`. */
+export function setExtractedThrough(threadId: string, turnId: number): void {
+  getDb()
+    .update(chatThreads)
+    .set({ extractedThroughId: turnId })
+    .where(eq(chatThreads.id, threadId))
+    .run();
 }
 
 /**

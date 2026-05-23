@@ -1,8 +1,8 @@
-// Archive-time fact extraction (Phase 5b, task #2).
+// Session-close fact extraction (Phase 5b).
 //
-// When the idle-archive job (lib/jobs/archive-idle-sessions.ts) is about to
-// archive a session, it calls extractSessionPreferences() to summarize the
-// chat and pull durable facts about the user into `user_preferences` with
+// On session close (lib/memory/session-close.ts — primary, real-time; or the
+// lib/jobs/close-stale-sessions.ts backstop) this summarizes the new turns and
+// pulls durable facts about the user into `user_preferences` with
 // `source = 'extracted'` + a confidence score. Provenance (sourceSessionId,
 // sourceTurnIds) is recorded so the Memory page can show which chat a note
 // came from and the user can correct false extractions.
@@ -63,26 +63,45 @@ export interface ExtractionResult {
   skipped?: "no_provider" | "no_messages" | "model_error" | "no_facts";
   /** Provider label for telemetry. */
   provider: string;
+  /**
+   * Highest chat_messages.id covered by this pass (the new extraction
+   * watermark). Present whenever there were turns to process — the caller
+   * advances `chat_threads.extracted_through_id` to it. Undefined when there
+   * were no new turns / no provider.
+   */
+  lastTurnId?: number;
 }
 
 /** Build a clean transcript string from user/assistant turns, memory stripped. */
-function buildTranscript(messages: ChatMessage[]): { text: string; turnIds: number[] } {
+function buildTranscript(
+  messages: ChatMessage[],
+  opts: { sinceTurnId?: number; priorSummary?: string } = {},
+): { text: string; turnIds: number[]; lastTurnId: number } {
+  const since = opts.sinceTurnId ?? 0;
   const turnIds: number[] = [];
   const parts: string[] = [];
   for (const m of messages) {
-    if (m.role !== "user" && m.role !== "assistant") continue; // skip tool turns
+    if (m.id <= since) continue; // incremental: only turns newer than the watermark
+    if (m.role !== "user" && m.role !== "assistant") continue; // skip tool/summary turns
     const cleaned = stripInjectedMemory(m.content).trim();
     if (!cleaned) continue;
     turnIds.push(m.id);
     const speaker = m.role === "user" ? "User" : "Advisor";
     parts.push(`${speaker}: ${cleaned}`);
   }
+  const lastTurnId = turnIds.length > 0 ? Math.max(...turnIds) : since;
   let text = parts.join("\n\n");
   if (text.length > MAX_TRANSCRIPT_CHARS) {
     // Keep the tail — most recent turns carry the freshest durable facts.
     text = text.slice(text.length - MAX_TRANSCRIPT_CHARS);
   }
-  return { text, turnIds };
+  // Prepend the running summary as compressed context for the new turns, so the
+  // extractor understands them without re-reading the whole prior transcript.
+  const summary = opts.priorSummary?.trim();
+  if (text && summary) {
+    text = `Conversation so far (summary of earlier turns):\n${summary}\n\n--- New turns ---\n\n${text}`;
+  }
+  return { text, turnIds, lastTurnId };
 }
 
 /** Tolerantly pull the first JSON object out of a model response. */
@@ -116,13 +135,25 @@ function normalizeFact(raw: unknown): ExtractedFact | null {
 
 export interface ExtractSessionOptions {
   userId?: string | null;
+  /**
+   * Incremental watermark: only extract turns with id greater than this.
+   * Defaults to 0 (the whole thread). The caller passes the thread's
+   * `extracted_through_id` so a resumed chat re-extracts only its new turns.
+   */
+  sinceTurnId?: number;
+  /**
+   * The running session summary, prepended as compressed context for the new
+   * turns so the extractor understands them without re-reading old transcript.
+   */
+  priorSummary?: string;
 }
 
 /**
- * Summarize an archived session and persist durable facts to user_preferences.
- * Best-effort and side-effect-tolerant: any failure (no API key, model error,
- * unparseable output) returns a `skipped` result rather than throwing, so the
- * archive job can still archive the thread.
+ * Summarize a session's new turns and persist durable facts to
+ * user_preferences. Incremental: with `sinceTurnId`, processes only turns newer
+ * than the watermark (plus `priorSummary` as context). Best-effort and
+ * side-effect-tolerant: any failure (no API key, model error, unparseable
+ * output) returns a `skipped` result rather than throwing.
  */
 export async function extractSessionPreferences(
   threadId: string,
@@ -134,7 +165,10 @@ export async function extractSessionPreferences(
 
   if (!provider.ready || !provider.model) return { ...base, skipped: "no_provider" };
 
-  const { text, turnIds } = buildTranscript(listMessages(threadId));
+  const { text, turnIds, lastTurnId } = buildTranscript(listMessages(threadId), {
+    sinceTurnId: opts.sinceTurnId,
+    priorSummary: opts.priorSummary,
+  });
   if (!text) return { ...base, skipped: "no_messages" };
 
   let rawText: string;
@@ -168,7 +202,9 @@ export async function extractSessionPreferences(
     facts.push(fact);
   }
 
-  if (facts.length === 0) return { ...base, summary, skipped: "no_facts" };
+  // `no_facts` still advances the watermark — we processed these turns and
+  // found nothing durable; no reason to re-read them next close.
+  if (facts.length === 0) return { ...base, summary, skipped: "no_facts", lastTurnId };
 
   const saved: SavedExtraction[] = facts.map((fact) => {
     const row = save({
@@ -187,5 +223,5 @@ export async function extractSessionPreferences(
     };
   });
 
-  return { ...base, summary, saved };
+  return { ...base, summary, saved, lastTurnId };
 }

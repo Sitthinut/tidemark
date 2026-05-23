@@ -43,6 +43,13 @@
       "when": 1779522721346,
       "tag": "0005_chat_fts",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1779528254592,
+      "tag": "0006_panoramic_sprite",
+      "breakpoints": true
     }
   ]
 }

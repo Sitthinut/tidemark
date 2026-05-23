@@ -7,7 +7,13 @@ import { CHAT_RATE_LIMIT, clientIp, rateLimit } from "@/lib/api/rate-limit";
 import { DEMO_COOKIE, withDb } from "@/lib/api/with-db";
 import { runWithDbContext } from "@/lib/db/context";
 import { DEMO_CHAT_TURN_CAP, getDemoSession, incrementChatTurn } from "@/lib/db/demo";
-import { appendMessage, createThread, getThread, upsertSummary } from "@/lib/db/queries/chat";
+import {
+  appendMessage,
+  createThread,
+  getThread,
+  reactivateThread,
+  upsertSummary,
+} from "@/lib/db/queries/chat";
 import { buildMemoryBlock } from "@/lib/memory/inject";
 import { createMemoryTools } from "@/lib/memory/tools";
 
@@ -155,6 +161,9 @@ export async function POST(req: Request) {
     const lastRole = (lastMsg as { role?: string } | undefined)?.role;
     if (lastRole === "user" && lastUserText) {
       appendMessage({ threadId, role: "user", content: lastUserText });
+      // Resume: a new user turn on an idle/archived thread flips it back to
+      // active so it's eligible to close + extract again (no-op if active).
+      reactivateThread(threadId);
     }
 
     // Pre-Phase-6: single owner. userId is null everywhere; demo sessions
