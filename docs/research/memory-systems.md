@@ -431,6 +431,16 @@ Sources:
 Reading across the systems, a few things had clearly converged by 2026, and a
 few were still genuinely contested.
 
+### At a glance
+
+| Dimension | Hermes | OpenHuman | OpenViking/OpenClaw | mem0 | Letta | Zep | Anthropic | Cognee |
+|---|---|---|---|---|---|---|---|---|
+| Store | Markdown files | SQLite + vault + workers | FS tree `viking://` | vector+graph+KV | core/recall/archival | bitemporal graph | files | graph+vector |
+| Write trigger | Agent tool | Auto + tool | Auto-extract @ session end | Background extract | Agent tool (hot) | Auto + ingest | Agent tool | Stage pipeline |
+| Retrieval | Frozen snapshot @ session start | Blended FTS+vec+freshness | L0/L1/L2 tiered | Hybrid query | Tool calls | Graph traversal | Tool CRUD | 14 modes |
+| Pruning | Hard char cap + consolidate | Bucket-seal + daily digest | Tier promotion | Background | Archival overflow | `t_invalid` edges | "Dreaming" | `memify` |
+| User visibility | Files | Obsidian vault | FS readable | Opaque | Inspectable | Mostly opaque | Files | Mixed |
+
 **Where the field agreed:**
 
 - **Hybrid stores won.** The vector-vs-graph argument is largely settled in
@@ -467,6 +477,15 @@ macrotide is a single-VM, SQLite, TypeScript personal finance advisor — no
 Python sidecar, no vector service, a small and structured memory surface. That
 constraint set, plus the survey above, pointed to a deliberately small design
 that borrows specific ideas rather than adopting any one framework wholesale.
+
+The four genuine splits in the field, and how each was called for macrotide:
+
+| Split | Option A | Option B | Call for macrotide |
+|---|---|---|---|
+| Who writes? | Agent tool (Letta/Hermes) | Background extractor (mem0) | **Agent tool.** mem0's invisible writes are slick but un-auditable for finance. |
+| Auto-inject vs tool-recall? | Inject (Hermes/mem0) | Recall tool (Letta) | **Inject** a bounded, frozen snapshot; recall tool added later as the long tail grows. |
+| Bitemporal? | Single `created_at` (most) | `valid_from`/`valid_until` (Zep, OpenHuman drop-state) | **Adopt — two columns.** "Risk tolerance was conservative until 2026-01-15" is a real query in this product. |
+| One store vs hybrid? | SQLite rows (Hermes/Letta core) | Vector+graph+KV (mem0/Cognee/OpenHuman) | **SQLite rows.** Hybrid is overkill for ~hundreds of preferences. |
 
 **1. Inject hot, recall cold.** The active set of durable facts loads into the
 chat system prompt at session start (always-on), and a recall tool covers the
