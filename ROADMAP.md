@@ -50,9 +50,9 @@ verification · ⏸️ needs a user decision before it can proceed.
 ### Wave 3 — Advisor actions + UX (after 6a; reviews can start anytime)
 | # | Task | Branch | Status | Notes |
 |---|------|--------|--------|-------|
-| 9 | Phase 2 tool-call execution — tools mutate state via `requireUser` + per-user queries | `team/tool-calls` | ⬜ | 🧪 browser verify |
-| 10 | Plan-edit proposal cards — accept/reject UI wired to apply path | `team/plan-edit-cards` | ⬜ | Depends on #9 |
-| 11 | ANALYSIS scores — replace `/api/analysis` placeholder with real computed scores | `team/analysis-scores` | ⬜ | Depends on #9 |
+| 9 | Phase 2 tool-call execution — read_portfolio/plan/journal, write_journal, propose_plan_edit; per-user scoped | `team/advisor-actions` | 🔨 | combined w/ #10 (one propose→card→apply loop). Proposals ride in chat-message metadata (no migration) |
+| 10 | Plan-edit proposal cards — accept/reject wired to `applyPlanEdit` + PUT /api/plan | `team/advisor-actions` | 🔨 | combined w/ #9. Reuses existing `PlanProposalCard` scaffold |
+| 11 | ANALYSIS composite score — transparent 0-100 from `health.ts` (drift/TER/concentration/cash), +breakdown | `team/analysis-scores` | 🔨 | Decoupled from #9 — deterministic off `health.ts`, no LLM. Running in parallel |
 | 12 | Charts — **recharts** interactive charts w/ hover+tooltips (`InteractiveCharts.tsx`, `'use client'`) | merged→`main` | ✅ | ✅ merged (8b00b79). 🧪 eyeball the new charts in-browser |
 | 13 | Plan & Health redesign — real signals in `lib/portfolio/health.ts` (drift, blended TER, concentration, cash drag, rebalance hint w/ good/watch/action tone) | merged→`main` | ✅ | ✅ merged (8b00b79). 21 health tests. 🧪 eyeball PortfolioScreen + Plan&Health panel |
 
