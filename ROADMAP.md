@@ -1,8 +1,9 @@
 # Roadmap
 
 > **Status:** Active. The working plan for turning the static-data prototype
-> into real software. Last updated 2026-05-23 (Phase 5a shipped — long-term
-> memory foundation + chat sidebar; Phase 5b pending. Memory design in
+> into real software. Last updated 2026-05-23 (Phase 5 shipped — 5a memory
+> foundation + chat sidebar; 5b session lifecycle + archive-time extraction +
+> chat summarization + recall/FTS. Memory design in
 > [docs/features/memory.md](./docs/features/memory.md)).
 
 ## How to read this doc
@@ -218,10 +219,10 @@ exposes the gaps that need polish; polishing on mock data risks rework.
 | 2.5 | Passkey + demo | ✅ Shipped 2026-05-21 | Single-owner auth + per-session in-memory demo DB |
 | 2.6 | Cleanup & chat persistence | ✅ Shipped 2026-05-22 | Chat history persists; plan-edit Apply wired; mock-import migration done. Thread-list sidebar deferred to a polish pass |
 | 3 | Market data | 🟡 Partial | SET/global indices live; funds + news in 3b |
-| 3b | Fund NAVs + news + NAV history | 🟡 Mostly shipped | Provider + v2 endpoints + holdings.quote_source + PortfolioScreen wiring all live; demo NAV history pre-seeded 2026-05-23 (chart fills instantly); RSS news still pending |
+| 3b | Fund NAVs + news + NAV history | ✅ Shipped 2026-05-23 | Provider + v2 endpoints + holdings.quote_source + PortfolioScreen wiring all live; demo NAV history pre-seeded (chart fills instantly); RSS news shipped as Phase 3c |
 | 4 | Portfolio import | 🟡 Partial | CSV done; Image OCR shipped 2026-05-23 as pure transcription (qianfan:free → paid fallback); manual-entry ticker autocomplete shipped 2026-05-22 (`lib/data/known-funds.ts` seed + holdings dedupe); advisor-assist OCR (auto-handoff to chat with `propose_holding` cards) gated on Phase 6 |
 | 4b | Broker scraping / API integration | Out of scope | Revisit only if a clear personal need emerges |
-| 5 | Long-term memory + chat archival | 🟡 Partial | **5a shipped 2026-05-23** — bitemporal `user_preferences` + 4-tool surface + always-on injection + Settings → Memory + chat sidebar (auto-title, 30-day trash, in-panel list) + empty-turn fail-safe. **5b pending** — session lifecycle + archive-time extraction + chat summarization + recall. Design in [docs/features/memory.md](./docs/features/memory.md) |
+| 5 | Long-term memory + chat archival | ✅ 5a+5b shipped 2026-05-23 | **5a** — bitemporal `user_preferences` + 4-tool surface + always-on injection + Settings → Memory + chat sidebar (auto-title, 30-day trash, in-panel list) + empty-turn fail-safe. **5b** — session lifecycle (status state machine + idle-archive job), archive-time fact extraction (`source='extracted'` + confidence floor), chat summarization at ~80% context (migration-free `role='summary'`, banner), `recall_preferences` tool + sidebar FTS. **5c+** (vector recall / offline consolidation) future. Design in [docs/features/memory.md](./docs/features/memory.md) |
 | 5b | Scheduled jobs / digests / notifications | Pending | Depends on 3b and 6 |
 | 6 | Multi-user (Google + GitHub SSO + passkey, public-discoverable) | Pending | Data-layer migration to per-user, OAuth, Turnstile, quotas, account page |
 
