@@ -1,10 +1,16 @@
-import { and, asc, desc, eq, gt, isNotNull, isNull, lt } from "drizzle-orm";
+import { and, asc, desc, eq, gt, isNotNull, isNull, lt, lte } from "drizzle-orm";
 import { getDb } from "../context";
 import { chatMessages, chatThreads } from "../schema";
 
 export type ChatThread = typeof chatThreads.$inferSelect;
 export type ChatMessage = typeof chatMessages.$inferSelect;
 export type ChatRole = "user" | "assistant" | "tool";
+/**
+ * Session lifecycle states (Phase 5b). Deletion is intentionally NOT a status —
+ * it lives on `deletedAt` (30-day trash) so a thread can be e.g. archived AND
+ * trashed independently.
+ */
+export type ThreadStatus = "active" | "idle" | "archived";
 
 function randomId(): string {
   return (
@@ -116,6 +122,71 @@ export function purgeExpiredDeletedThreads(daysAgo = 30): number {
     getDb().delete(chatThreads).where(eq(chatThreads.id, row.id)).run();
   }
   return rows.length;
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// Session lifecycle (Phase 5b). `status` tracks active → idle → archived based
+// on `updatedAt` age; the archive job (lib/jobs/archive-idle-sessions.ts) drives
+// the transitions. Deletion stays orthogonal on `deletedAt`.
+// ───────────────────────────────────────────────────────────────────────────
+
+/** Mark a thread idle. No-op timestamp bump — does not touch `updatedAt`. */
+export function markIdle(threadId: string): ChatThread | undefined {
+  return getDb()
+    .update(chatThreads)
+    .set({ status: "idle" })
+    .where(eq(chatThreads.id, threadId))
+    .returning()
+    .get();
+}
+
+/**
+ * Archive a thread: set `status = 'archived'` and stamp `archivedAt`. Leaves
+ * `updatedAt` untouched so idle-age computation reflects real activity, not
+ * the archival write.
+ */
+export function archiveThread(threadId: string): ChatThread | undefined {
+  return getDb()
+    .update(chatThreads)
+    .set({ status: "archived", archivedAt: new Date().toISOString() })
+    .where(eq(chatThreads.id, threadId))
+    .returning()
+    .get();
+}
+
+/**
+ * List threads in a given lifecycle status, newest activity first. Excludes
+ * soft-deleted threads (trash is orthogonal to lifecycle).
+ */
+export function listByStatus(status: ThreadStatus): ChatThread[] {
+  return getDb()
+    .select()
+    .from(chatThreads)
+    .where(and(eq(chatThreads.status, status), isNull(chatThreads.deletedAt)))
+    .orderBy(desc(chatThreads.updatedAt))
+    .all();
+}
+
+/**
+ * Find `status = 'active'` threads whose last activity (`updatedAt`) is older
+ * than `olderThanDays` days — i.e. archival candidates. The boundary is
+ * inclusive: a thread updated exactly `olderThanDays` ago (or earlier) is
+ * returned. Soft-deleted threads are excluded.
+ */
+export function findIdleThreads(olderThanDays: number): ChatThread[] {
+  const cutoff = new Date(Date.now() - olderThanDays * 24 * 60 * 60_000).toISOString();
+  return getDb()
+    .select()
+    .from(chatThreads)
+    .where(
+      and(
+        eq(chatThreads.status, "active"),
+        isNull(chatThreads.deletedAt),
+        lte(chatThreads.updatedAt, cutoff),
+      ),
+    )
+    .orderBy(asc(chatThreads.updatedAt))
+    .all();
 }
 
 export function listMessages(threadId: string): ChatMessage[] {

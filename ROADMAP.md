@@ -1391,9 +1391,17 @@ enough archived-session data to need any of it.
 5. **5a chat sidebar** — Today/Yesterday/Previous-N-days grouping,
    auto-titling via a cheap OpenRouter model (DeepSeek/Qwen-class —
    *not* Claude/GPT for this), kebab actions, keyboard shortcuts.
-6. **5b session lifecycle** — state machine + 7-day idle archive job.
+6. **5b session lifecycle** — ✅ **shipped 2026-05-23** — state machine
+   (`active` / `idle` / `archived`, default `active`; deletion stays on
+   `deletedAt`) + `archivedAt` column (migration `0004_swift_hobgoblin`),
+   lifecycle queries (`markIdle` / `archiveThread` / `listByStatus` /
+   `findIdleThreads`) in `lib/db/queries/chat.ts`, and an idempotent
+   7-day idle-archive job skeleton at `lib/jobs/archive-idle-sessions.ts`.
+   Summarization + fact-extraction are deferred to #2/#3 — the job leaves a
+   marked TODO hook before the archive transition.
 7. **5b archive-time extractor** — cheap-model extraction prompt; writes
-   `source='extracted'` rows with confidence; surfaces a toast.
+   `source='extracted'` rows with confidence; surfaces a toast. Plugs into
+   the archive-job TODO hook from substep 6.
 8. **5b chat summarization** — summarize-and-replace older turns when a
    session crosses ~80% context (banner-suggested, not silent).
 9. **5b recall + search** — `recall_preferences` tool + sidebar FTS.

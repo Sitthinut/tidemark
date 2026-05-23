@@ -133,8 +133,17 @@ export const modelPortfolios = sqliteTable("model_portfolios", {
 export const chatThreads = sqliteTable("chat_threads", {
   id: text("id").primaryKey(),
   title: text("title"),
+  // Lifecycle state machine (Phase 5b): 'active' on creation; the idle-archive
+  // job promotes 'active' → 'idle' → 'archived' based on `updatedAt` age.
+  // Deletion is orthogonal — it stays on `deletedAt` (30-day trash), so there
+  // is deliberately no 'deleted' status here.
+  status: text("status", { enum: ["active", "idle", "archived"] })
+    .notNull()
+    .default("active"),
   createdAt: text("created_at").notNull(),
   updatedAt: text("updated_at").notNull(),
+  // Set when the archive job moves a thread to 'archived'; ISO-8601 UTC.
+  archivedAt: text("archived_at"),
   // Soft-delete: NULL = active, ISO-8601 UTC = trashed at that moment.
   // 30-day grace period for restore; UI hides past that. Hard purge is manual.
   deletedAt: text("deleted_at"),
