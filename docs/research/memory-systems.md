@@ -498,7 +498,7 @@ The libraries were scored against those constraints. The verdict was to
 | **mem0** | Open-source memory layer that bolts onto existing chat. JS SDK. Vector + relational hybrid. | Strong fallback. Adopt only if the bespoke version starts duplicating significant infrastructure. |
 | **Letta (MemGPT)** | OS-inspired tiered memory (core / archival / recall). Self-editing via tool calls. | Heavier than needed; built for autonomous long-running agents, not a chat advisor. Skip unless the explicit-save model proves insufficient. |
 | **Zep** | Production-grade vector + graph; strong for long-running enterprise sessions. | Mostly Python, service-oriented. Wrong scale for a personal app. (We still borrow its bitemporal *idea* — see below.) |
-| **LangChain Memory** | Built-in summarization buffers, vector retrievers. | A heavy dependency for one feature. Prefer a ~50-line bespoke implementation over pulling in LangChain. |
+| **LangChain Memory** (the legacy conversation buffers/summarizers — distinct from the [LangMem](#langmem) SDK above) | Built-in summarization buffers, vector retrievers. | A heavy dependency for one feature. Prefer a ~50-line bespoke implementation over pulling in LangChain. |
 | **Cognee** | Deep knowledge-graph retrieval. | Overkill. |
 | **Hand-rolled** | Direct Drizzle + AI SDK. Full control. | **The chosen default.** Memory here is small — preferences + plan + journal already exist as structured tables. |
 
