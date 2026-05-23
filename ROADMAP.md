@@ -2,7 +2,7 @@
 
 > **Status:** Active. The working plan for turning the static-data prototype
 > into real software. Last updated 2026-05-23 (Phase 5 shipped — 5a memory
-> foundation + chat sidebar; 5b session lifecycle + archive-time extraction +
+> foundation + chat sidebar; 5b session lifecycle + real-time session-close extraction +
 > chat summarization + recall/FTS. Memory design in
 > [docs/features/memory.md](./docs/features/memory.md)).
 
@@ -222,7 +222,7 @@ exposes the gaps that need polish; polishing on mock data risks rework.
 | 3b | Fund NAVs + news + NAV history | ✅ Shipped 2026-05-23 | Provider + v2 endpoints + holdings.quote_source + PortfolioScreen wiring all live; demo NAV history pre-seeded (chart fills instantly); RSS news shipped as Phase 3c |
 | 4 | Portfolio import | 🟡 Partial | CSV done; Image OCR shipped 2026-05-23 as pure transcription (qianfan:free → paid fallback); manual-entry ticker autocomplete shipped 2026-05-22 (`lib/data/known-funds.ts` seed + holdings dedupe); advisor-assist OCR (auto-handoff to chat with `propose_holding` cards) gated on Phase 6 |
 | 4b | Broker scraping / API integration | Out of scope | Revisit only if a clear personal need emerges |
-| 5 | Long-term memory + chat archival | ✅ 5a+5b shipped 2026-05-23 | **5a** — bitemporal `user_preferences` + 4-tool surface + always-on injection + Settings → Memory + chat sidebar (auto-title, 30-day trash, in-panel list) + empty-turn fail-safe. **5b** — session lifecycle (status state machine + idle-archive job), archive-time fact extraction (`source='extracted'` + confidence floor), chat summarization at ~80% context (migration-free `role='summary'`, banner), `recall_preferences` tool + sidebar FTS. **5c+** (vector recall / offline consolidation) future. Design in [docs/features/memory.md](./docs/features/memory.md) |
+| 5 | Long-term memory + chat archival | ✅ 5a+5b shipped 2026-05-23 | **5a** — bitemporal `user_preferences` + 4-tool surface + always-on injection + Settings → Memory + chat sidebar (auto-title, 30-day trash, in-panel list) + empty-turn fail-safe. **5b** — session lifecycle (active/idle/archived); **real-time session-close extraction** (incremental, watermark `extracted_through_id` migration `0006`, running-summary context; `closeStaleSessions` backstop) writing `source='extracted'` + confidence floor; chat summarization at ~80% context (migration-free `role='summary'`, banner); `recall_preferences` tool + sidebar FTS. **5c+** (vector recall / offline consolidation) future. Guide: [docs/features/memory.md](./docs/features/memory.md); prior-art: [docs/research/memory-systems.md](./docs/research/memory-systems.md) |
 | 5b | Scheduled jobs / digests / notifications | Pending | Depends on 3b and 6 |
 | 6 | Multi-user (Google + GitHub SSO + passkey, public-discoverable) | Pending | Data-layer migration to per-user, OAuth, Turnstile, quotas, account page |
 
@@ -1359,13 +1359,24 @@ Shipped:
 from day one even though only 5b writes non-NULL values — no migration
 between phases.
 
-### 5b — Session lifecycle + archive-time extraction + chat summarization
+### 5b — Session lifecycle + real-time extraction + chat summarization
 
-Adds the session state machine (`active` / `idle` / `archived` /
-`deleted`), a 7-day-idle archive job that summarizes the chat and
-extracts durable facts to `user_preferences` with `source='extracted'`,
-chat-history summarization to keep long sessions affordable, a
-`recall_preferences` tool, and sidebar FTS search.
+Adds the session state machine (`active` / `idle` / `archived`; deletion
+orthogonal on `deletedAt`), **real-time session-close extraction** of durable
+facts to `user_preferences` with `source='extracted'`, chat-history
+summarization to keep long sessions affordable, a `recall_preferences` tool,
+and sidebar FTS search.
+
+> **Design revised 2026-05-23 (post-#1–#4).** The original plan extracted on a
+> 7-day-idle *timer*. It now extracts on **real session close** (New Chat /
+> thread switch / window `pagehide`), **incrementally** — only turns past a
+> per-thread watermark (`extracted_through_id`, migration `0006`), with the
+> running summary as context — so resumed chats never re-process old turns and
+> cost stays flat. The timer job became a `closeStaleSessions` backstop for
+> abandoned sessions. The archive *digest* idea was dropped (resume context is
+> handled by the mid-chat summarizer). Substeps 6–7 below describe the original
+> landings; this note supersedes their trigger/wiring. Full current behavior:
+> [docs/features/memory.md](./docs/features/memory.md).
 
 User-facing copy: **"Archived"** (state), **"Summarizing…"** (in-progress),
 **"notes"** (extracted preferences), **"Advisor"** (never "agent" or "bot"
@@ -1397,9 +1408,9 @@ enough archived-session data to need any of it.
    `deletedAt`) + `archivedAt` column (migration `0004_swift_hobgoblin`),
    lifecycle queries (`markIdle` / `archiveThread` / `listByStatus` /
    `findIdleThreads`) in `lib/db/queries/chat.ts`, and an idempotent
-   7-day idle-archive job skeleton at `lib/jobs/archive-idle-sessions.ts`.
-   Summarization + fact-extraction are deferred to #2/#3 — the job leaves a
-   marked TODO hook before the archive transition.
+   7-day idle-archive job skeleton (later renamed
+   `lib/jobs/close-stale-sessions.ts` and repurposed as the backstop — see the
+   revision note above). Summarization + fact-extraction deferred to #2/#3.
 7. **5b archive-time extractor** — ✅ **shipped 2026-05-23** —
    `lib/memory/extract.ts`: cheap-model (`resolveExtractorProvider`,
    `EXTRACT_MODEL` → `TITLE_MODEL` → `openrouter/free`) summarize + durable-
@@ -1459,10 +1470,11 @@ enough archived-session data to need any of it.
 
 **5b:**
 
-- Chat idle for 7 days → archive job runs: stores summary, marks
-  `archived`, writes 0–N extracted preference rows with provenance.
-- Resuming an archived chat shows a banner; new turns don't re-archive
-  until idle again.
+- Closing a session (New Chat / switch / window `pagehide`) runs extraction:
+  marks the chat `idle`, writes 0–N extracted rows with provenance. Idempotent
+  (once per close); a dirty-flag skips closes with no new turns.
+- Resuming a chat reactivates it (`idle → active`); the next close extracts
+  only the new turns (watermark + running-summary context), not the whole thread.
 - `recall_preferences("retirement")` returns relevant active rows.
 - A 50-turn session runs at <2× the input-token cost of a 5-turn one.
 - Summarization never drops messages from the persisted DB — only from
@@ -1864,12 +1876,11 @@ that was edited.
      compute can be real. Touches PortfolioScreen + a new
      `lib/portfolio/analytics.ts` + `/api/analysis` route (replace the
      static-import path).
-   - **Phase 5b (session lifecycle + extraction + summarization + recall)**
-     — ~1 day, additive on the 5a schema. Session state machine
-     (active/idle/archived/deleted) + 7-day archive job + extraction
-     prompt (writes `source='extracted'` rows) + chat-history
-     summarization + `recall_preferences` tool + sidebar FTS. Needs a job
-     runner (also unblocks the parked "scheduled jobs" phase).
+   - **Phase 5b** — ✅ **shipped 2026-05-23** (session lifecycle + real-time
+     session-close extraction + summarization + recall + FTS). The only
+     remaining piece is scheduling the `closeStaleSessions` backstop sweep,
+     which is parked with the "scheduled jobs" phase (the primary close path
+     is real-time and needs no job runner).
    - **Phase 6 (multi-user)** — multi-day, one-way door. Only start when
      committed to sharing with family/friends.
 4. **Don't pick yet:**
