@@ -932,9 +932,11 @@ once you have a clear personal need.
 2. **Image OCR** (shipped 2026-05-22, redesigned to pure transcription 2026-05-23).
    - `lib/portfolio/ocr.ts`: `generateText` (not `generateObject`) call to
      an OpenRouter vision model → returns `{ text: string }` only — the
-     raw transcription the model read from the image. Defaults to
-     `baidu/qianfan-ocr-fast` (~$0.004 per call, no-train, verified
-     working at ~8s for a dense screenshot); override with `OCR_MODEL`.
+     raw transcription the model read from the image. Default model chain:
+     `baidu/qianfan-ocr-fast:free` (zero cost, 27.2M tokens/week, operator-
+     verified no-train) → falls back to `baidu/qianfan-ocr-fast` (paid,
+     ~$0.004/call) on provider-unavailable errors (quota / rate limit /
+     guardrail). Override either via `OCR_MODEL` / `OCR_FALLBACK_MODEL`.
    - **Why pure transcription, not structured rows.** Iteration history:
      v1 used `generateObject` with a strict Zod schema (`rows: ProposedRow[]`)
      and required units → returned zero rows on screenshots that hid units.

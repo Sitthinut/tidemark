@@ -9,8 +9,18 @@ const mockImpl = {
   throw: null as Error | null,
 };
 
+// Per-call mock so tests can stage a sequence of responses (primary fails →
+// fallback succeeds). Each call shifts the queue; falls back to `text` /
+// `throw` when the queue is empty.
+const callQueue: Array<{ text?: string; throw?: Error }> = [];
+
 vi.mock("ai", () => ({
   generateText: vi.fn(async () => {
+    const next = callQueue.shift();
+    if (next) {
+      if (next.throw) throw next.throw;
+      return { text: next.text ?? "" };
+    }
     if (mockImpl.throw) throw mockImpl.throw;
     return { text: mockImpl.text };
   }),
@@ -35,11 +45,13 @@ beforeEach(() => {
   process.env.OPENROUTER_API_KEY = FAKE_KEY;
   mockImpl.text = "";
   mockImpl.throw = null;
+  callQueue.length = 0;
 });
 
 afterEach(() => {
   delete process.env.OPENROUTER_API_KEY;
   delete process.env.OCR_MODEL;
+  delete process.env.OCR_FALLBACK_MODEL;
 });
 
 describe("inferQuoteSource", () => {
@@ -129,5 +141,59 @@ describe("extractHoldingsFromImage", () => {
   it("throws when OPENROUTER_API_KEY is missing (caller decides 503 vs stub)", async () => {
     delete process.env.OPENROUTER_API_KEY;
     await expect(extractHoldingsFromImage(fakeImage)).rejects.toThrow(/OPENROUTER_API_KEY/);
+  });
+});
+
+describe("extractHoldingsFromImage — primary/fallback chain", () => {
+  const fakeImage = { data: Buffer.from([0xff, 0xd8, 0xff]), mimeType: "image/jpeg" };
+  const providerErr = () =>
+    Object.assign(new Error("Failed after 3 attempts"), {
+      name: "AI_RetryError",
+      lastError: Object.assign(new Error("Provider returned error"), {
+        name: "AI_APICallError",
+        responseBody: JSON.stringify({
+          error: {
+            message: "Provider returned error",
+            metadata: { raw: "qianfan-ocr-fast:free is rate-limited upstream." },
+          },
+        }),
+      }),
+    });
+
+  it("uses the fallback when the default primary (qianfan free) hits a provider error", async () => {
+    // No OCR_MODEL pinned → default primary kicks in, default fallback (paid
+    // qianfan) applies. Queue: primary fails, fallback succeeds.
+    callQueue.push({ throw: providerErr() });
+    callQueue.push({ text: "K-WORLDX 12485 units" });
+    const result = await extractHoldingsFromImage(fakeImage);
+    expect(result.text).toBe("K-WORLDX 12485 units");
+  });
+
+  it("does NOT auto-fallback when the operator has pinned OCR_MODEL (respects intent)", async () => {
+    process.env.OCR_MODEL = "openai/gpt-5-nano";
+    callQueue.push({ throw: providerErr() });
+    await expect(extractHoldingsFromImage(fakeImage)).rejects.toBeInstanceOf(
+      OcrProviderUnavailableError,
+    );
+  });
+
+  it("honors an explicit OCR_FALLBACK_MODEL even when the primary is pinned", async () => {
+    process.env.OCR_MODEL = "openai/gpt-5-nano";
+    process.env.OCR_FALLBACK_MODEL = "anthropic/claude-haiku-4.5";
+    callQueue.push({ throw: providerErr() });
+    callQueue.push({ text: "AAPL 10 shares" });
+    const result = await extractHoldingsFromImage(fakeImage);
+    expect(result.text).toBe("AAPL 10 shares");
+  });
+
+  it("surfaces the FALLBACK's error when both attempts fail (operator needs to see the no-train safety net broke)", async () => {
+    callQueue.push({ throw: providerErr() });
+    callQueue.push({
+      throw: Object.assign(new Error("Insufficient credits"), {
+        name: "AI_APICallError",
+        responseBody: JSON.stringify({ error: { message: "Insufficient credits" } }),
+      }),
+    });
+    await expect(extractHoldingsFromImage(fakeImage)).rejects.toThrow(/Insufficient credits/);
   });
 });

@@ -59,16 +59,21 @@ export interface ProposedRow {
   quoteSource: QuoteSource;
 }
 
-// Default to `baidu/qianfan-ocr-fast` — verified-working purpose-built OCR
-// model on OpenRouter. ~$0.004 per call, no-train (suitable for production).
-// Chose this over `openrouter/free` because OpenRouter's free vision pool
-// repeatedly fast-fails with "No endpoints found that support image input"
-// and the few free vision models that DO route (Gemma 4) hit upstream rate
-// limits. A few mills per call is the right tradeoff for "actually works".
+// Default model chain: free tier first (zero cost when it works), paid
+// version as the automatic fallback when the free endpoint rate-limits or
+// quota-caps. Both are `baidu/qianfan-ocr-fast` variants — same model,
+// same transcription quality, just different metering.
 //
-// To stay strictly free at the cost of reliability, set `OCR_MODEL=openrouter/free`
-// (requires OpenRouter privacy setting to allow training-enabled providers).
-const DEFAULT_OCR_MODEL = "baidu/qianfan-ocr-fast";
+// Operator-verified: per Sid (2026-05-23), the `:free` variant of qianfan
+// is no-train despite living behind OpenRouter's "Free endpoints that may
+// train on request data" toggle. Re-verify this before any public deploy.
+//
+// 27.2M tokens/week free quota — generous for personal use. When that's
+// exhausted (HTTP 429 / "rate-limited upstream"), the route catches
+// OcrProviderUnavailableError, retries once against OCR_FALLBACK_MODEL,
+// and only surfaces the error if both fail.
+const DEFAULT_OCR_MODEL = "baidu/qianfan-ocr-fast:free";
+const DEFAULT_OCR_FALLBACK_MODEL = "baidu/qianfan-ocr-fast";
 
 const SYSTEM_PROMPT = `You are an OCR transcription engine. Read the image and return EVERY line of visible text, in reading order. Preserve numbers, currency symbols, percent signs, and column structure exactly as they appear. Use newlines between rows of a table. Do not summarize, interpret, or add commentary — just transcribe.
 
@@ -108,12 +113,18 @@ function openrouterVisionModel(apiKey: string, modelId: string) {
 /**
  * Transcribe a broker screenshot to plain text.
  *
- * Returns `{ text: "" }` (not an error) when the model can't read the image —
- * the route handler treats an empty string as a successful "nothing recognized"
- * so the UI can show a friendly empty state.
+ * Tries `OCR_MODEL` (defaults to qianfan free) first. If that fails with a
+ * provider-unavailable error (rate limit, quota exhausted, no endpoint), and
+ * `OCR_FALLBACK_MODEL` is set (defaults to paid qianfan), retries once on
+ * the fallback. Only throws if both fail.
  *
- * Throws `OcrProviderUnavailableError` on transport / auth / guardrail errors
- * so the route can surface a 502 with the provider's actual message.
+ * Returns `{ text: "" }` (not an error) when a model runs successfully but
+ * can't extract anything from the image — the route handler treats an empty
+ * string as "nothing recognized" so the UI can show a friendly empty state.
+ *
+ * Throws `OcrProviderUnavailableError` only on transport / auth / guardrail
+ * errors that ALL attempts hit, so the route can surface a 502 with the
+ * last provider's actual message.
  */
 export async function extractHoldingsFromImage(input: OcrInput): Promise<OcrResult> {
   const apiKey = process.env.OPENROUTER_API_KEY;
@@ -121,9 +132,32 @@ export async function extractHoldingsFromImage(input: OcrInput): Promise<OcrResu
     throw new Error("OPENROUTER_API_KEY is not set");
   }
 
-  const modelId = process.env.OCR_MODEL?.trim() || DEFAULT_OCR_MODEL;
-  const model = openrouterVisionModel(apiKey, modelId);
+  const primary = process.env.OCR_MODEL?.trim() || DEFAULT_OCR_MODEL;
+  const fallbackEnv = process.env.OCR_FALLBACK_MODEL?.trim();
+  // Only apply the default fallback when the user hasn't pinned an override
+  // primary — if they explicitly chose a model, don't surprise them by
+  // falling back to qianfan-paid. They can opt back in via OCR_FALLBACK_MODEL.
+  const fallback = fallbackEnv ?? (process.env.OCR_MODEL ? null : DEFAULT_OCR_FALLBACK_MODEL);
 
+  try {
+    return await transcribe(apiKey, primary, input);
+  } catch (err) {
+    if (err instanceof OcrProviderUnavailableError && fallback && fallback !== primary) {
+      try {
+        return await transcribe(apiKey, fallback, input);
+      } catch (fallbackErr) {
+        // Surface the FALLBACK's error — the operator already knew the primary
+        // was free/quota-bound; they need to see why their no-train safety net
+        // also failed.
+        throw fallbackErr;
+      }
+    }
+    throw err;
+  }
+}
+
+async function transcribe(apiKey: string, modelId: string, input: OcrInput): Promise<OcrResult> {
+  const model = openrouterVisionModel(apiKey, modelId);
   try {
     const result = await generateText({
       model,
@@ -147,7 +181,6 @@ export async function extractHoldingsFromImage(input: OcrInput): Promise<OcrResu
         },
       ],
     });
-
     return { text: (result.text ?? "").trim() };
   } catch (err) {
     if (isProviderError(err)) {
