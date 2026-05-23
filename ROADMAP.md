@@ -1,8 +1,9 @@
 # Roadmap
 
 > **Status:** Active. The working plan for turning the static-data prototype
-> into real software. Last updated 2026-05-22 (Phase 3b detailed, Phase 5
-> sketched, thread-list sidebar landed).
+> into real software. Last updated 2026-05-23 (Phase 5 designed end-to-end;
+> docs conventions added; detailed memory design moved to
+> [docs/features/memory.md](./docs/features/memory.md)).
 
 ## How to read this doc
 
@@ -16,6 +17,48 @@
 
 See [AGENTS.md](./AGENTS.md) for project conventions an AI agent needs before
 touching code (DB routing, demo mode, where things live).
+
+## Documentation conventions
+
+The roadmap is the **what** and **when**; detailed feature designs live
+under `docs/`. We keep the layout flat and one-file-per-feature so
+visitors (and future-you) can find anything in one click.
+
+```text
+README.md                       front door; value prop, quick start
+ROADMAP.md                      phase plan + status (this doc)
+AGENTS.md                       agent conventions (DB routing, demo, env)
+docs/
+  overview.md                   what Macrotide is, who it's for
+  architecture.md               system diagram + data flow
+  features/                     one file per shipped or in-design feature
+    memory.md                   long-term memory + chat sessions
+    chat.md                     chat panel + streaming + tools
+    portfolio-analysis.md
+    advisor-assist.md
+    ...
+  decisions/                    optional ADRs for genuinely contentious calls
+  reference/                    schema + API once stable enough to publish
+```
+
+**Rules of thumb:**
+
+- A feature gets its own file once it has a real implementation; rationale
+  goes inside the feature doc, not as a separate ADR (unless the decision
+  is contentious enough to warrant a permanent record).
+- Cap each feature doc around 600 lines. Past that, split into a folder
+  (`features/memory/overview.md`, `features/memory/schema.md`).
+- Research notes (library surveys, etc.) stay local — they age fast and
+  dilute the durable record.
+- Existing top-level docs (`AUTH.md`, `DEPLOY.md`, `SECURITY.md`) will
+  migrate into `docs/` during a later polish pass; not blocking.
+- Publishing layer (GitBook / MkDocs) gets added once we have ~5+ feature
+  docs worth surfacing publicly. Until then, GitHub's markdown renderer
+  is fine.
+
+**Update cadence:** docs change with the code that touches them, same PR.
+A polish-pass phase will eventually do the comprehensive rewrite, but the
+running rule is "if you ship a behavior change, update the feature doc."
 
 ---
 
@@ -178,7 +221,7 @@ exposes the gaps that need polish; polishing on mock data risks rework.
 | 3b | Fund NAVs + news + NAV history | 🟡 Mostly shipped | Provider + v2 endpoints + holdings.quote_source + PortfolioScreen wiring all live; demo NAV history pre-seeded 2026-05-23 (chart fills instantly); RSS news still pending |
 | 4 | Portfolio import | 🟡 Partial | CSV done; Image OCR shipped 2026-05-23 as pure transcription (qianfan:free → paid fallback); manual-entry ticker autocomplete shipped 2026-05-22 (`lib/data/known-funds.ts` seed + holdings dedupe); advisor-assist OCR (auto-handoff to chat with `propose_holding` cards) gated on Phase 6 |
 | 4b | Broker scraping / API integration | Out of scope | Revisit only if a clear personal need emerges |
-| 5 | Long-term memory + history compression | Pending | Per-user explicit-save preferences; chat compression to control OpenRouter cost. Research libraries first |
+| 5 | Long-term memory + chat archival | Designed, pending impl | Hand-rolled bitemporal `user_preferences` + 4-tool surface + always-on injection + Settings → Memory + chat sidebar (5a). Session lifecycle + archive-time extraction + chat summarization + recall (5b). Design in [docs/features/memory.md](./docs/features/memory.md) |
 | 5b | Scheduled jobs / digests / notifications | Pending | Depends on 3b and 6 |
 | 6 | Multi-user (Google + GitHub SSO + passkey, public-discoverable) | Pending | Data-layer migration to per-user, OAuth, Turnstile, quotas, account page |
 
@@ -1263,160 +1306,127 @@ infrastructure.
 
 ---
 
-## Phase 5 — Long-term memory + history compression
+## Phase 5 — Long-term memory + chat archival
 
 **Goal:** the chat advisor remembers what the user has told it across
-threads (preferences, risk tolerance, constraints) AND long threads stay
-affordable on OpenRouter. Two related concerns, one phase, because both
-center on "what we send to the model on every turn."
+sessions (preferences, risk tolerance, constraints), long sessions stay
+affordable on OpenRouter, and the chat sidebar gives discrete sessions
+real persistence + lifecycle.
 
-> **Status:** Pending. Specifies the design and the libraries to research
-> before any code lands. Do not start implementation without re-validating
-> the recommendations below — the AI agent memory space is moving fast.
+> **Status:** Designed, pending implementation. Full design (schema, tool
+> surface, injection format, session lifecycle, sidebar UX, design
+> rationale) lives in **[docs/features/memory.md](./docs/features/memory.md)**.
+> This roadmap entry covers phase scope, sequencing, and acceptance.
 
-### 5a — Long-term per-user memory (explicit save)
+**Design summary** (see the feature doc for the full reasoning):
 
-**Approach:** Option A from the planning discussion — the model has an
-explicit tool the user (implicitly or explicitly) triggers. No silent
-auto-summarization of the conversation behind the user's back.
+- **Discrete chat sessions + persistent memory across them** — not one
+  infinite thread. Each session ends; durable facts survive in memory;
+  next session starts fresh with memory loaded.
+- **Visible memory.** Settings → Memory shows every entry with source,
+  validity window, and delete. No opaque inference.
+- **Bitemporal validity.** `valid_from` / `valid_until` columns. Updates
+  add a new row + supersede; nothing is mutated in place. Borrowed from
+  Zep's bitemporal model — two columns instead of a full graph.
+- **Inject hot, recall cold.** Active preferences load into the system
+  prompt at session start (frozen for the session — Hermes cache
+  discipline). A `recall` tool covers the long tail; ships in 5b once
+  there's a long tail to recall.
 
-```ts
-// model tool definition (sketch — Vercel AI SDK shape)
-save_preference: {
-  description: "Save a durable fact about the user (preference, constraint, goal).",
-  parameters: z.object({
-    key: z.string(),           // e.g. "max-single-stock-pct"
-    value: z.string(),         // e.g. "15"
-    rationale: z.string(),     // why we're saving this; goes in the audit row
-  }),
-}
-forget_preference: { parameters: z.object({ key: z.string() }) }
-list_preferences: { parameters: z.object({}) }
-```
+### 5a — Memory foundation (explicit save + injection + sidebar)
 
-Triggered by phrases like *"remember that I never want >15% in any single
-stock"* or *"forget what I said about retirement age"*. Stored in a new
-`user_preferences` table, surfaced as a system-message section on every
-chat turn, editable in the Settings page.
+Schema, four tools (`save_preference` / `update_preference` /
+`forget_preference` / `list_preferences`), always-on injection at
+session start, Settings → Memory page (with 30-day trash bin), and
+the chat sidebar with auto-titling + delete.
 
-**Schema sketch:**
+**5b is purely additive on this schema.** The provenance columns
+(`source`, `source_session_id`, `source_turn_ids`, `confidence`) exist
+from day one even though only 5b writes non-NULL values — no migration
+between phases.
 
-```sql
-CREATE TABLE user_preferences (
-  id         INTEGER PRIMARY KEY AUTOINCREMENT,
-  user_id    TEXT,                     -- NULL pre-Phase-6; FK after
-  key        TEXT NOT NULL,
-  value      TEXT NOT NULL,
-  rationale  TEXT,
-  created_at TEXT NOT NULL,
-  updated_at TEXT NOT NULL,
-  UNIQUE(user_id, key)
-);
-```
+### 5b — Session lifecycle + archive-time extraction + chat summarization
 
-### 5b — Chat history compression
+Adds the session state machine (`active` / `idle` / `archived` /
+`deleted`), a 7-day-idle archive job that summarizes the chat and
+extracts durable facts to `user_preferences` with `source='extracted'`,
+chat-history summarization to keep long sessions affordable, a
+`recall_preferences` tool, and sidebar FTS search.
 
-**Approach:** hierarchical summarization paired with a sliding window.
-When a thread exceeds N tokens (or M turns), summarize the older half
-into a single system-message block, drop the originals from the model
-input. Original messages stay in `chat_messages` for display; only the
-**model input** is compressed.
+User-facing copy: **"Archived"** (state), **"Summarizing…"** (in-progress),
+**"notes"** (extracted preferences), **"Advisor"** (never "agent" or "bot"
+in product copy). Persistent disclaimer under the chat input: *"Advisor
+is AI and can make mistakes."* See feature doc for the full vocabulary
+table.
 
-Trigger options (TBD during implementation):
+### 5c+ — Recall depth + offline consolidation
 
-- Turn-count threshold (e.g. >30 turns)
-- Token-count threshold (e.g. >40% of model context)
-- Cost threshold (input tokens × current price > $X)
-
-### Research before coding
-
-The agent-memory space has matured fast. Before starting 5a/5b, evaluate
-these libraries against macrotide's constraints (single-VM, SQLite,
-TypeScript, no Python sidecar):
-
-| Library | Strength | Fit for macrotide |
-| --- | --- | --- |
-| **mem0** | Open-source memory layer that bolts onto existing chat. JS SDK. Vector + relational hybrid. | Strong candidate for 5a. Validate the JS SDK shape against the AI SDK tool-call pattern. |
-| **Letta (MemGPT)** | OS-inspired tiered memory (core / archival / recall). Self-editing memory via tool calls. | Heavier than we need; designed for autonomous long-running agents, not chat advisors. Skip unless 5a's explicit-save model proves insufficient. |
-| **Zep** | Production-grade vector + graph; strong for long-running enterprise sessions. | Mostly Python; service-oriented. Wrong scale for a personal app. |
-| **LangChain Memory** | Built-in summarization buffers, vector retrievers. | Adds a heavy dependency for one feature. Prefer a 50-line bespoke implementation over pulling in LangChain. |
-| **Cognee** | Deep knowledge graph retrieval. | Overkill. |
-| **Hand-rolled** | Direct Drizzle + AI SDK. Full control. | The honest default. Memory in macrotide is small (preferences + plan + journal already exist as structured tables). |
-
-**Recommendation entering implementation:** start hand-rolled for 5a
-(it's <200 lines), and only adopt mem0 if the bespoke version starts
-duplicating significant infrastructure. For 5b, prototype summarization
-with a cheap model (Haiku 4.5) using the same OpenRouter key, no library
-required.
-
-**Recommendation update for compression:** the summarize-and-replace
-pattern Claude Code itself uses (the `<summary>` block at the start of
-this conversation) is the proven baseline. Implement that first, then
-measure whether semantic retrieval over `chat_messages` adds enough
-value to justify a vector store.
-
-### File layout (sketch)
-
-```text
-lib/
-  memory/
-    preferences.ts          # CRUD over user_preferences
-    inject.ts               # build the system-message memory block per turn
-    compression.ts          # turn ChatMessage[] -> (summary, recentWindow)
-  db/
-    queries/
-      preferences.ts        # typed wrappers
-```
+Vector recall over archived sessions, cross-session @-references,
+offline consolidation (dedup / supersede / decay). Gated on having
+enough archived-session data to need any of it.
 
 ### Implementation order
 
-1. **Re-validate library choices** — read the latest docs for mem0,
-   Letta, LangChain Memory; check JS SDK shapes; benchmark prompt
-   sizes; decide.
-2. **5a schema + queries** — `user_preferences` table, Drizzle migration.
-3. **5a tool definitions** — `save_preference` / `forget_preference` /
-   `list_preferences` in the chat tools surface. Persist tool-call rows
-   in `chat_messages`.
-4. **5a system-message injection** — every chat turn loads preferences,
-   formats as a small markdown block, prepends to the system prompt.
-5. **5a Settings UI** — list / edit / delete preferences. Cards with
-   rationale visible.
-6. **5b token measurement** — log per-turn input/output tokens in the
-   existing `usage` table (defined in Phase 6 schema, materialize early
-   if needed).
-7. **5b summarizer** — when thread exceeds threshold, call cheap model
-   to produce a summary; store as a `chat_messages` row with
-   `role='system'` and a marker; drop summarized rows from the next
-   turn's input.
-8. **5b sanity** — make sure compression is idempotent and a re-summary
-   doesn't drift the meaning.
+1. **5a schema + queries** — `user_preferences` table, Drizzle migration,
+   bitemporal helpers (active-filter).
+2. **5a tool definitions** — four tools in the chat tools surface.
+   Substring matching for `update` / `forget`.
+3. **5a system-message injection** — load active rows at session start,
+   render compact markdown, deterministic ordering, frozen for session.
+4. **5a Settings → Memory page** — grouped by category, supersession
+   indicator, per-row delete (soft → 30-day trash).
+5. **5a chat sidebar** — Today/Yesterday/Previous-N-days grouping,
+   auto-titling via a cheap OpenRouter model (DeepSeek/Qwen-class —
+   *not* Claude/GPT for this), kebab actions, keyboard shortcuts.
+6. **5b session lifecycle** — state machine + 7-day idle archive job.
+7. **5b archive-time extractor** — cheap-model extraction prompt; writes
+   `source='extracted'` rows with confidence; surfaces a toast.
+8. **5b chat summarization** — summarize-and-replace older turns when a
+   session crosses ~80% context (banner-suggested, not silent).
+9. **5b recall + search** — `recall_preferences` tool + sidebar FTS.
 
 ### Acceptance criteria
 
-- User says *"remember I'm targeting retirement at 50"* → model calls
-  `save_preference` → next chat turn (even in a new thread) the model
-  shows it knows.
-- Settings page lists preferences with delete buttons; deleting them
-  removes them from future chat context within one turn.
-- A 50-turn thread runs at <2× the input-token cost of a 5-turn thread
-  (compression working).
-- Compression never drops messages from the persisted DB — only from
+**5a:**
+
+- User: *"remember I'm targeting retirement at 50"* → model calls
+  `save_preference` → next new chat shows the model knows.
+- Settings → Memory lists active rows grouped by category, with per-row
+  delete (→ 30-day trash + restore) and supersession indicator.
+- The injected system-prompt block is byte-identical across turns 2..N
+  of the same session (prefix-cache verified by logging hash).
+- "Actually change that to age 55" triggers `update_preference`; old row
+  shown as superseded.
+- Demo path: preferences persist for the session and disappear with the
+  per-session in-memory SQLite.
+
+**5b:**
+
+- Chat idle for 7 days → archive job runs: stores summary, marks
+  `archived`, writes 0–N extracted preference rows with provenance.
+- Resuming an archived chat shows a banner; new turns don't re-archive
+  until idle again.
+- `recall_preferences("retirement")` returns relevant active rows.
+- A 50-turn session runs at <2× the input-token cost of a 5-turn one.
+- Summarization never drops messages from the persisted DB — only from
   the model's input view.
-- Demo path: preferences persist for the session and disappear on
-  idle-sweep.
 
 ### Risk
 
-- **Library churn**: mem0/Letta/Zep all moved versions in the last 6
-  months. Recheck before committing to a dep.
-- **Preference rot**: stale "remember I'm 28" becomes wrong over time.
-  Surface an `updated_at` and let the user audit. Don't auto-prune.
-- **Summarization drift**: hierarchical summaries lose nuance. Mitigation:
-  cap depth (one summary per thread, re-generated rather than
-  re-summarized).
-- **Privacy**: preferences are sensitive. Once Phase 6 ships, never
-  surface another user's preferences via tool calls — `user_id` filter
-  is invariant.
+- **Auto-extraction quality** (5b). Cheap-model extraction will produce
+  some false positives. Mitigation: confidence column, low-confidence
+  rows are recall-only (not injected), Memory page shows source chat
+  for audit, user can delete.
+- **Recursive memory pollution** (5b). Extracting from a session whose
+  context already contained injected memory feeds the model's own
+  prior memory back into the next extraction pass. Mitigation:
+  strip the injected memory block from the extraction input
+  (Supermemory's pattern).
+- **Preference rot.** Bitemporal columns mean stale facts stay
+  retrievable but expire from injection — handles this by design. Memory
+  page shows valid windows.
+- **Privacy (Phase 6).** `user_id` filter is invariant on every memory
+  query. Add a test that runs as user A and asserts zero rows for B.
 
 ---
 
@@ -1785,8 +1795,9 @@ that was edited.
 2. **Where we are (2026-05-23):** Phase 1 / 2.5 / 2.6 shipped. Phase 3b
    mostly shipped (Thai SEC provider + holdings.quote_source + demo
    pre-seed; RSS news still pending). Phase 4 OCR shipped as pure
-   transcription. Env-var docs centralized in AGENTS.md. Phase 5 sketched
-   but research-gated. Phase 6 untouched.
+   transcription. Env-var docs centralized in AGENTS.md. **Phase 5
+   design complete** ([docs/features/memory.md](./docs/features/memory.md)),
+   implementation pending. Phase 6 untouched.
 3. **What to pick next** (ranked by impact/effort, ready to dispatch as
    parallel worktree agents — see "Working in parallel" below):
    - **ANALYSIS chart series (DRIFT / GEO / SECTOR / CONTRIB)** —
@@ -1795,12 +1806,15 @@ that was edited.
      compute can be real. Touches PortfolioScreen + a new
      `lib/portfolio/analytics.ts` + `/api/analysis` route (replace the
      static-import path).
-   - **Phase 5a (long-term memory)** — one day, research-gated. Re-validate
-     mem0 vs. hand-rolled (<200 lines) first. Adds `user_preferences`
-     table + `save_preference` / `forget_preference` / `list_preferences`
-     chat tools + Settings UI. Makes chat feel personal across threads.
-   - **Phase 5b (chat compression)** — half-day, pairs with 5a. Per-turn
-     token logging + summarize-and-replace once threads exceed N turns.
+   - **Phase 5a (memory foundation)** — ~1.5 days. Bitemporal
+     `user_preferences` schema + 4 tools (save/update/forget/list) +
+     always-on injection + Settings → Memory page + chat sidebar with
+     auto-titling. Design in [docs/features/memory.md](./docs/features/memory.md).
+     Makes chat feel personal across sessions.
+   - **Phase 5b (session lifecycle + extraction + summarization + recall)**
+     — ~1 day, pairs with 5a (purely additive on the same schema).
+     Archive job, extraction prompt, chat-history summarization, recall
+     tool, sidebar FTS.
    - **Phase 4 manual-entry autocomplete** — half-day, closes Phase 4.
    - **Phase 6 (multi-user)** — multi-day, one-way door. Only start when
      committed to sharing with family/friends.
@@ -1819,7 +1833,7 @@ acceptance criteria, what NOT to touch, and the conventions in
 [AGENTS.md](./AGENTS.md). Best ROI when the tasks touch non-overlapping
 files. Examples of independent pairs:
 
-- ANALYSIS charts + Phase 5b compression — different layers, no overlap.
+- ANALYSIS charts + Phase 5b chat summarization — different layers, no overlap.
 - Manual-entry autocomplete + RSS news (Phase 3c) — different domains.
 
 Don't parallelize work that touches the same files (e.g. two features both

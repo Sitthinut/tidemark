@@ -236,6 +236,43 @@ GitHub Actions CI runs typecheck + lint + build. The build step needs
 - Adding a column to an app table? Remember Phase 6 will eventually add
   `user_id` to most of them; design with that in mind.
 
+## Product copy & vocabulary
+
+These are durable rules for user-facing copy in macrotide. Apply them
+when writing UI strings, toasts, banners, page titles, button labels, or
+chat-system prompts — anywhere a user sees words.
+
+**Voice:** formal and friendly. Plain English over jargon. No emojis in
+product copy unless the user explicitly asks.
+
+**The AI is "Advisor".** Never "agent", "bot", "assistant", or "AI" in
+running copy. Page titles, system prompts, marketing pages all use
+"Advisor". Internal/code identifiers (variable names, DB enum values
+like `source = 'advisor_tool'`, log lines) follow the same convention.
+
+**Persistent disclaimer.** Below the chat input on every session, a
+single muted line:
+
+> *Advisor is AI and can make mistakes.*
+
+That exact phrasing — not paraphrased — is the project-wide AI-warning
+copy. Reuse it verbatim anywhere else a similar disclaimer is needed.
+Not dismissible; not a banner.
+
+**Memory / chat-session vocabulary** (full table in
+[docs/features/memory.md](./docs/features/memory.md)):
+
+| Concept | Use | Don't use |
+|---|---|---|
+| Session state after 7-day idle | "Archived" | "Wrapped up", "Compressed" |
+| In-progress chat summarization | "Summarizing…" | "Compressing…" |
+| Auto-extracted preferences | "notes" | "facts", "memories" |
+| Soft-deleted chat | "Deleted chats" (with 30-day restore) | "Trash" alone |
+
+**Timestamps:** store UTC, render in the user's IANA timezone. Timezone
+itself is a `profile`-category preference in `user_preferences` (set
+default from the browser; let the user override on the Settings page).
+
 ## When in doubt
 
 - For "where do I put X?" — check the table above.
