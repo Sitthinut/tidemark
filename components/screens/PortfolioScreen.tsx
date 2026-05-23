@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { ModelDonut } from "@/components/charts";
+import { ModelDonut, ScoreCircle } from "@/components/charts";
 import { FeedbackRow } from "@/components/FeedbackRow";
 import { type HoldingFormValues, HoldingSheet } from "@/components/HoldingSheet";
 import { Icon } from "@/components/Icon";
@@ -16,6 +16,7 @@ import { invalidate } from "@/lib/fetchers/swr";
 import { fmtPct } from "@/lib/format";
 import { DEFAULT_QUOTE_SOURCE, isQuoteSource } from "@/lib/market/sources";
 import { computeHealth, rebalanceHint, summarizeHealth } from "@/lib/portfolio/health";
+import { scorePortfolio } from "@/lib/portfolio/score";
 import { BENCHMARKS } from "@/lib/static/analysis";
 import type { AssetClass, BenchmarkKey, Holding, Portfolio } from "@/lib/static/types";
 
@@ -229,7 +230,7 @@ export function PortfolioScreen({
   }, [models, activePf, planSelectedModelId]);
 
   // Real, computed health signals — drift vs target, blended fee, concentration,
-  // cash drag. No mock fixtures. (Subjective 0–100 scores stay out — task #11.)
+  // cash drag. No mock fixtures.
   const health = useMemo(
     () =>
       view
@@ -241,6 +242,13 @@ export function PortfolioScreen({
           )
         : null,
     [view, targetModel],
+  );
+
+  // Composite 0-100 score derived transparently from health signals.
+  // Each component rule is documented in lib/portfolio/score.ts.
+  const score = useMemo(
+    () => (health ? scorePortfolio(health, targetModel !== null) : null),
+    [health, targetModel],
   );
 
   if (isLoading || !view || !portfolios) {
@@ -332,6 +340,30 @@ export function PortfolioScreen({
     good: "var(--gain)",
     watch: "var(--amber)",
     action: "var(--loss)",
+  };
+
+  // Score display helpers
+  const scoreColor = score
+    ? score.total >= 80
+      ? "var(--gain)"
+      : score.total >= 60
+        ? "var(--amber)"
+        : "var(--loss)"
+    : "var(--muted)";
+  const scoreLabel = score
+    ? score.total >= 80
+      ? "Great shape"
+      : score.total >= 60
+        ? "Doing well"
+        : score.total >= 40
+          ? "Needs attention"
+          : "Action needed"
+    : "";
+  const COMPONENT_ICONS: Record<string, string> = {
+    drift: "◎",
+    fees: "€",
+    concentration: "◈",
+    cash: "⊙",
   };
 
   return (
@@ -632,6 +664,158 @@ export function PortfolioScreen({
               Target: {targetModel.name} →
             </span>
           </div>
+
+          {/* ── Composite health score ─────────────────────────────── */}
+          {score && hasHoldings && (
+            <div
+              className="card"
+              style={{
+                marginBottom: 10,
+                padding: "12px 14px",
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 10 }}>
+                <ScoreCircle value={score.total} max={100} size={58} color={scoreColor} />
+                <div style={{ flex: 1 }}>
+                  <div
+                    style={{
+                      fontSize: 10,
+                      fontFamily: "var(--font-mono)",
+                      color: "var(--muted)",
+                      letterSpacing: "0.04em",
+                      marginBottom: 2,
+                    }}
+                  >
+                    PORTFOLIO SCORE
+                  </div>
+                  <div
+                    style={{
+                      fontSize: 22,
+                      fontWeight: 700,
+                      color: scoreColor,
+                      letterSpacing: "-0.02em",
+                      lineHeight: 1,
+                    }}
+                  >
+                    {score.total}
+                    <span
+                      style={{
+                        fontSize: 12,
+                        fontWeight: 400,
+                        color: "var(--muted)",
+                        marginLeft: 2,
+                      }}
+                    >
+                      /100
+                    </span>
+                  </div>
+                  <div style={{ fontSize: 12, color: "var(--ink-soft)", marginTop: 3 }}>
+                    {scoreLabel}
+                  </div>
+                </div>
+              </div>
+
+              {/* Score breakdown — why this score */}
+              <div
+                style={{
+                  fontSize: 10,
+                  fontFamily: "var(--font-mono)",
+                  color: "var(--muted)",
+                  letterSpacing: "0.04em",
+                  marginBottom: 6,
+                }}
+              >
+                ● WHY THIS SCORE
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+                {score.components.map((c) => {
+                  const pct = c.score / c.max;
+                  const barColor =
+                    pct >= 0.8 ? "var(--gain)" : pct >= 0.5 ? "var(--amber)" : "var(--loss)";
+                  return (
+                    <div key={c.key}>
+                      <div
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 6,
+                          marginBottom: 2,
+                        }}
+                      >
+                        <span
+                          style={{
+                            width: 14,
+                            textAlign: "center",
+                            fontSize: 10,
+                            color: "var(--muted)",
+                          }}
+                        >
+                          {COMPONENT_ICONS[c.key]}
+                        </span>
+                        <span style={{ flex: 1, fontSize: 11.5, color: "var(--ink-soft)" }}>
+                          {c.label}
+                        </span>
+                        <span
+                          style={{
+                            fontSize: 11,
+                            fontFamily: "var(--font-mono)",
+                            color: barColor,
+                            minWidth: 36,
+                            textAlign: "right",
+                          }}
+                        >
+                          {c.score}/{c.max}
+                        </span>
+                      </div>
+                      {/* Mini progress bar */}
+                      <div
+                        style={{
+                          marginLeft: 20,
+                          height: 3,
+                          background: "var(--line-soft)",
+                          borderRadius: 2,
+                          overflow: "hidden",
+                        }}
+                      >
+                        <div
+                          style={{
+                            width: `${pct * 100}%`,
+                            height: "100%",
+                            background: barColor,
+                            borderRadius: 2,
+                          }}
+                        />
+                      </div>
+                      <div
+                        style={{
+                          marginLeft: 20,
+                          fontSize: 10.5,
+                          color: "var(--muted)",
+                          marginTop: 2,
+                          lineHeight: 1.35,
+                        }}
+                      >
+                        {c.detail}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              <div
+                style={{
+                  fontSize: 10,
+                  color: "var(--muted)",
+                  marginTop: 8,
+                  lineHeight: 1.4,
+                  borderTop: "1px solid var(--line-soft)",
+                  paddingTop: 6,
+                }}
+              >
+                Score = drift (30) + fees (25) + diversification (25) + cash (20). Deterministic, no
+                AI — each rule is documented in lib/portfolio/score.ts.
+              </div>
+            </div>
+          )}
 
           <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 6 }}>
             {(
