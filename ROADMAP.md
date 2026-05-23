@@ -37,7 +37,7 @@ verification · ⏸️ needs a user decision before it can proceed.
 ### Wave 1 — FOUNDATION (solo, merges before Wave 2)
 | # | Task | Branch | Status | Notes |
 |---|------|--------|--------|-------|
-| 4 | 6a Data layer — migration `0007` (user_id + `usage` + `account_tier`), `OWNER_EMAIL` backfill, per-user query filter, `userId` in AsyncLocalStorage, `requireUser()` | `team/6a-dataplane` | 🔨 | 🧪 user applies migration to real DB + sets `OWNER_EMAIL` |
+| 4 | 6a Data layer — migration `0007` (user_id + `usage` + `account_tier`), `OWNER_EMAIL` backfill, per-user query filter, `userId` in AsyncLocalStorage, `requireUser()` | merged→`main` | ✅ | ✅ merged (8ad9157). 156/156 tests, build-clean. Backward-compatible (`ownedBy()` collapses to `user_id IS NULL` with no user). 🧪 you: apply migration `0007` to real DB + set `OWNER_EMAIL` + run `npx tsx --env-file=.env.local scripts/backfill-owner.ts` |
 
 ### Wave 2 — Phase 6 fan-out (after 6a merges)
 | # | Task | Branch | Status | Notes |
@@ -57,7 +57,8 @@ verification · ⏸️ needs a user decision before it can proceed.
 | 13 | Plan & Health review + redesign — audit `PortfolioScreen`/`AppPanels`/`api/plan`, ship worthwhile signals | `team/plan-health` | ⬜ | User asked me to implement what's good |
 
 ### ⏳ Needs the user (collected — do these when you're back)
-- Apply migration `0007` to the real `data/app.db` (after backup) + set `OWNER_EMAIL`.
+- Apply migration `0007` to the real `data/app.db` (after backup) + set `OWNER_EMAIL`, then run `npx tsx --env-file=.env.local scripts/backfill-owner.ts`.
+- **Set `AUTH_SECRET` in `.env.local`** (`openssl rand -base64 32`). Discovered during this run: `npm run build` (production mode) currently FAILS without it — pre-existing since Phase 2.5, not new. Dev (`npm run dev`) works via the fallback secret; production build/deploy needs a real one.
 - Register Google + GitHub OAuth apps → set `GOOGLE_CLIENT_ID/SECRET`, `GITHUB_CLIENT_ID/SECRET`.
 - Get Cloudflare Turnstile keys → `TURNSTILE_SITE_KEY/SECRET_KEY`.
 - Browser/WebAuthn verification of: passkey signup (#1), OAuth sign-in (#5), account page passkey revoke (#8), tool-call actions (#9).
