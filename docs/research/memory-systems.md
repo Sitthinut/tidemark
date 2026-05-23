@@ -426,12 +426,10 @@ Sources:
 
 ---
 
-## Cross-cutting: consensus and live disagreements
+## At a glance: the pattern matrix
 
-Reading across the systems, a few things had clearly converged by 2026, and a
-few were still genuinely contested.
-
-### At a glance
+How the surveyed systems compare across the dimensions that mattered — store,
+write trigger, retrieval, pruning, and user visibility:
 
 | Dimension | Hermes | OpenHuman | OpenViking/OpenClaw | mem0 | Letta | Zep | Anthropic | Cognee |
 |---|---|---|---|---|---|---|---|---|
@@ -441,33 +439,44 @@ few were still genuinely contested.
 | Pruning | Hard char cap + consolidate | Bucket-seal + daily digest | Tier promotion | Background | Archival overflow | `t_invalid` edges | "Dreaming" | `memify` |
 | User visibility | Files | Obsidian vault | FS readable | Opaque | Inspectable | Mostly opaque | Files | Mixed |
 
-**Where the field agreed:**
+---
 
-- **Hybrid stores won.** The vector-vs-graph argument is largely settled in
-  favour of "both": vectors for semantic entry-point retrieval, a graph for
-  multi-hop relational depth, plus a short-term episodic buffer. mem0, Cognee,
-  OpenHuman, and OpenClaw all ship some flavour of this. (One nuance from the
-  research: on single-hop factual lookup, GraphRAG can *under*-perform vanilla
-  RAG — graphs pay off as query complexity rises, at ~2–3× the retrieval latency.)
+## Consensus and the genuine splits
+
+By 2026 a few things had clearly converged across these systems; four were still
+genuinely contested. The matrix above shows the per-system mechanics — this
+section reads the verdicts off it, and the unique findings the columns can't
+carry.
+
+**Where the field had converged:**
+
+- **Hybrid stores won.** The vector-vs-graph argument settled in favour of
+  "both" — vectors for semantic entry points, a graph for multi-hop relational
+  depth, a short-term episodic buffer (see the Store column). Nuance the matrix
+  can't show: on *single-hop* factual lookup, GraphRAG can *under*-perform
+  vanilla RAG; graphs pay off only as query complexity rises, at ~2–3× the
+  retrieval latency.
 - **Retrieval matters more than write strategy.** On the LoCoMo benchmark,
   accuracy spanned ~20 points across *retrieval* methods but only 3–8 points
-  across *write* strategies — i.e. how you read back matters more than how you
-  wrote.
+  across *write* strategies — how you read back matters more than how you wrote.
 - **Bounded hot context + on-demand cold recall** is the recurring shape:
   Hermes (core files + `session_search`), Letta (core + archival), Anthropic
   (lean memory + external docs), OpenHuman (always-on recall + tree drill-down).
 
-**Where they still disagreed:**
+**Where they still split.** Four live tensions — the ones macrotide had to
+actively decide; the next section resolves each:
 
-- **Hot-path vs background writes.** Letta and the Hermes/Anthropic tool models
-  write on the hot path (the agent decides inline); mem0 and "enterprise-grade"
-  architectures push extraction to async background jobs to keep conversational
-  latency at zero. LangMem refuses to choose and ships both. The trade is
-  latency-and-control vs simplicity-and-recall-quality.
-- **User-visible vs opaque memory.** Hermes/Anthropic/OpenHuman expose memory as
+- **Who writes — hot path vs background.** Letta and the Hermes/Anthropic tool
+  models write on the hot path (the agent decides inline); mem0 and
+  "enterprise-grade" architectures push extraction to async background jobs to
+  keep conversational latency at zero. LangMem refuses to choose and ships both.
+  The trade is latency-and-control vs simplicity-and-recall-quality.
+- **How memory enters context** — tool-call recall vs implicit injection.
+- **User-visible vs opaque.** Hermes/Anthropic/OpenHuman expose memory as
   files/vaults a human can read and edit; mem0 and Letta's stores are largely
   opaque to the end user (you query them, you don't browse them).
-- **Tool-call vs implicit injection** as the way memory enters context.
+- **Storage shape** — single `created_at` vs bitemporal validity windows, and a
+  single store vs a vector+graph+KV hybrid.
 
 ---
 
@@ -475,10 +484,34 @@ few were still genuinely contested.
 
 macrotide is a single-VM, SQLite, TypeScript personal finance advisor — no
 Python sidecar, no vector service, a small and structured memory surface. That
-constraint set, plus the survey above, pointed to a deliberately small design
-that borrows specific ideas rather than adopting any one framework wholesale.
+constraint set scored the surveyed libraries against a hand-rolled store, then
+resolved each of the four field splits above. It borrows specific ideas rather
+than adopting any one framework wholesale.
 
-The four genuine splits in the field, and how each was called for macrotide:
+### Build vs. adopt
+
+The libraries were scored against those constraints. The verdict was to
+**hand-roll over a single SQLite table** rather than adopt a framework:
+
+| Library | Strength | Fit for macrotide |
+| --- | --- | --- |
+| **mem0** | Open-source memory layer that bolts onto existing chat. JS SDK. Vector + relational hybrid. | Strong fallback. Adopt only if the bespoke version starts duplicating significant infrastructure. |
+| **Letta (MemGPT)** | OS-inspired tiered memory (core / archival / recall). Self-editing via tool calls. | Heavier than needed; built for autonomous long-running agents, not a chat advisor. Skip unless the explicit-save model proves insufficient. |
+| **Zep** | Production-grade vector + graph; strong for long-running enterprise sessions. | Mostly Python, service-oriented. Wrong scale for a personal app. (We still borrow its bitemporal *idea* — see below.) |
+| **LangChain Memory** | Built-in summarization buffers, vector retrievers. | A heavy dependency for one feature. Prefer a ~50-line bespoke implementation over pulling in LangChain. |
+| **Cognee** | Deep knowledge-graph retrieval. | Overkill. |
+| **Hand-rolled** | Direct Drizzle + AI SDK. Full control. | **The chosen default.** Memory here is small — preferences + plan + journal already exist as structured tables. |
+
+- **Long-term memory:** start hand-rolled (it's a few hundred lines), keep mem0
+  in reserve as the escape hatch if the bespoke store starts reinventing a
+  framework.
+- **Chat compression:** use the **summarize-and-replace pattern Claude Code
+  itself uses** (the `<summary>` block at the start of a long conversation) as
+  the proven baseline — a cheap model over the same OpenRouter key, no library.
+  Only add semantic retrieval / a vector store over `chat_messages` if
+  measurement shows it earns its keep.
+
+### The four splits, called for macrotide
 
 | Split | Option A | Option B | Call for macrotide |
 |---|---|---|---|
@@ -487,74 +520,29 @@ The four genuine splits in the field, and how each was called for macrotide:
 | Bitemporal? | Single `created_at` (most) | `valid_from`/`valid_until` (Zep, OpenHuman drop-state) | **Adopt — two columns.** "Risk tolerance was conservative until 2026-01-15" is a real query in this product. |
 | One store vs hybrid? | SQLite rows (Hermes/Letta core) | Vector+graph+KV (mem0/Cognee/OpenHuman) | **SQLite rows.** Hybrid is overkill for ~hundreds of preferences. |
 
-**1. Inject hot, recall cold.** The active set of durable facts loads into the
-chat system prompt at session start (always-on), and a recall tool covers the
-long tail of older or archived-chat notes. This is the cross-framework consensus
-shape — Hermes's core-files + `session_search`, Letta's core + archival,
-Anthropic's lean memory + external docs — adapted to a small bounded prompt plus
-on-demand recall. The injected block follows **Hermes's frozen-snapshot cache
-discipline**: it is built once per session and held identical across turns to
-preserve the prefix cache, accepting that within-session writes won't be visible
-until the next session.
+The reasoning the table can't carry — the implementation nuance behind each
+call:
 
-**2. Bitemporal validity — two columns, not a graph.** Durable facts live in a
-`user_preferences` table with `valid_from` / `valid_until` columns. **Updates add
-a new row and supersede the old one; nothing is mutated in place**, and
-`valid_until IS NULL` is the active set. This is **Zep's bitemporal model
-deliberately simplified** — the value of "what was true when, and what
-superseded it" without the cost of a full temporal knowledge graph. It matters
-in a finance context specifically: "I switched from aggressive to moderate risk
-tolerance" should supersede the old fact with a validity window, not erase it.
+- **Inject hot, recall cold** follows **Hermes's frozen-snapshot cache
+  discipline**: the injected block is built once per session and held identical
+  across turns to preserve the prefix cache, accepting that within-session
+  writes won't be visible until the next session.
+- **Bitemporal validity** lives in a `user_preferences` table where **updates
+  add a new row and supersede the old one — nothing is mutated in place** — and
+  `valid_until IS NULL` marks the active set. It is Zep's model without the
+  temporal-knowledge-graph cost: "I switched from aggressive to moderate risk
+  tolerance" supersedes the old fact with a validity window rather than erasing
+  it.
+- **Visible, auditable writes** are surfaced on a Settings → Memory page —
+  content, category, source, validity window, delete control, supersession shown
+  rather than hidden. Each row records provenance: who saved it (`user_tool` /
+  `advisor_tool`, with `extracted` reserved for any later background extraction),
+  the originating session, the source turns, and a nullable `confidence` (NULL
+  for explicit tool calls, which are always trusted).
+- **Model-driven, real-time saves** are an explicit tool call the model makes in
+  the moment — "remember I'm targeting retirement at 50" → the advisor calls a
+  save tool → the next session knows it. Edits use **substring matching**
+  (Hermes's ergonomic touch) rather than requiring exact full text.
 
-**3. Visible, auditable writes.** Every entry is shown to the user — content,
-category, source, validity window, and a delete control — on a Settings → Memory
-page, with supersession surfaced rather than hidden. This is the
-files/vault-visible side of the field (Hermes, Anthropic, OpenHuman's Obsidian
-vault) and a conscious rejection of the **opaque** write path in mem0 and Letta.
-Each row also records its provenance: who saved it (`user_tool` / `advisor_tool`,
-with `extracted` reserved for any later background extraction), the originating
-session, the source turns, and a nullable `confidence` (NULL for explicit tool
-calls, which are always trusted).
-
-**4. Model-driven, real-time saves.** Saving is an explicit **tool call the model
-makes in the moment** — "remember I'm targeting retirement at 50" → the advisor
-calls a save tool → the next session knows it. This follows the
-Hermes/Letta/Anthropic "agent decides what to remember" pattern (a hot-path
-write) rather than mem0-style opaque background extraction, keeping the write
-both auditable and immediate. Edits use **substring matching** (Hermes's
-ergonomic touch) rather than requiring exact full text.
-
-In short: macrotide took **inject-hot/recall-cold** and **frozen-snapshot cache
-discipline** from the Hermes/Letta/Anthropic consensus, **bitemporal validity**
-from Zep (as two columns, not a graph), **visible/auditable provenance** as a
-reaction against opaque stores, and **model-driven hot-path writes** as the save
-trigger — implemented as a handful of typed tools over a single SQLite table
-rather than any external memory framework.
-
-## Build vs. adopt: the decision
-
-Before any code, the surveyed libraries were scored against macrotide's
-constraints — single-VM, SQLite, TypeScript, no Python sidecar, a small and
-structured memory surface. The verdict was to **hand-roll over a single SQLite
-table** rather than adopt a framework:
-
-| Library | Strength | Fit for macrotide |
-| --- | --- | --- |
-| **mem0** | Open-source memory layer that bolts onto existing chat. JS SDK. Vector + relational hybrid. | Strong fallback. Adopt only if the bespoke version starts duplicating significant infrastructure. |
-| **Letta (MemGPT)** | OS-inspired tiered memory (core / archival / recall). Self-editing via tool calls. | Heavier than needed; built for autonomous long-running agents, not a chat advisor. Skip unless the explicit-save model proves insufficient. |
-| **Zep** | Production-grade vector + graph; strong for long-running enterprise sessions. | Mostly Python, service-oriented. Wrong scale for a personal app. (We still borrow its bitemporal *idea* — see above.) |
-| **LangChain Memory** | Built-in summarization buffers, vector retrievers. | A heavy dependency for one feature. Prefer a ~50-line bespoke implementation over pulling in LangChain. |
-| **Cognee** | Deep knowledge-graph retrieval. | Overkill. |
-| **Hand-rolled** | Direct Drizzle + AI SDK. Full control. | **The chosen default.** Memory here is small — preferences + plan + journal already exist as structured tables. |
-
-**Long-term memory:** start hand-rolled (it's a few hundred lines), keep mem0 in
-reserve as the escape hatch if the bespoke store starts reinventing a framework.
-
-**Chat compression:** use the **summarize-and-replace pattern Claude Code itself
-uses** (the `<summary>` block at the start of a long conversation) as the proven
-baseline — a cheap model over the same OpenRouter key, no library. Only add
-semantic retrieval / a vector store over `chat_messages` if measurement shows it
-earns its keep.
-
-> These are the build-vs-adopt conclusions; *how* macrotide implements them
-> lives in the [memory feature guide](../features/memory.md).
+> *How* macrotide implements these lives in the
+> [memory feature guide](../features/memory.md).
