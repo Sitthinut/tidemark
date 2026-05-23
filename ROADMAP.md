@@ -32,7 +32,7 @@ verification · ⏸️ needs a user decision before it can proceed.
 |---|------|--------|--------|-------|
 | 1 | Passkey signup fix (enable `emailAndPassword` bootstrap) | merged→`main` | 🧪 | ✅ merged (414d37a); typecheck/build green. 🧪 you do the final WebAuthn signup click to confirm |
 | 2 | Session close-cycle integration tests | merged→`main` | ✅ | ✅ merged (d125352); 5/5 tests green on main. Done, no user action |
-| 3 | `closeStaleSessions` runnable CLI (`tsx` + `npm run`) | `team/close-stale-cli` | 🔨 | No scheduler pick (parked) |
+| 3 | `closeStaleSessions` runnable CLI (`tsx` + `npm run`) | merged→`main` | ✅ | ✅ merged (f56f773). Run: `npm run jobs:close-stale -- --dry-run` (or `--idle-days=N`). 11/11 tests green. Lead fixed a global-tsconfig `server-only` alias → scoped `tsconfig.scripts.json`. No scheduler (parked) |
 
 ### Wave 1 — FOUNDATION (solo, merges before Wave 2)
 | # | Task | Branch | Status | Notes |
