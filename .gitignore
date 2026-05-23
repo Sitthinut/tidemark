@@ -35,3 +35,6 @@ next-env.d.ts.bak
 # out of git. Useful for AI provider variants, scratch scripts, etc.
 *.local.ts
 *.local.test.ts
+
+# browser-automation screenshots (agent-browser / playwright-cli) — throwaway
+/.playwright-cli/
