@@ -50,6 +50,13 @@
       "when": 1779528254592,
       "tag": "0006_panoramic_sprite",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1779531598215,
+      "tag": "0007_typical_purifiers",
+      "breakpoints": true
     }
   ]
 }

@@ -1,6 +1,7 @@
 import { and, asc, desc, eq, gt, isNotNull, isNull, lt, lte, ne } from "drizzle-orm";
 import { getDb } from "../context";
 import { chatMessages, chatThreads } from "../schema";
+import { ownedBy, ownerId } from "./scope";
 
 export type ChatThread = typeof chatThreads.$inferSelect;
 export type ChatMessage = typeof chatMessages.$inferSelect;
@@ -34,9 +35,9 @@ function randomId(): string {
  * the trash group.
  */
 export function listThreads(opts: { includeDeleted?: boolean } = {}): ChatThread[] {
-  const q = getDb().select().from(chatThreads).orderBy(desc(chatThreads.updatedAt));
-  if (opts.includeDeleted) return q.all();
-  return q.where(isNull(chatThreads.deletedAt)).all();
+  const owner = ownedBy(chatThreads.userId);
+  const where = opts.includeDeleted ? owner : and(owner, isNull(chatThreads.deletedAt));
+  return getDb().select().from(chatThreads).where(where).orderBy(desc(chatThreads.updatedAt)).all();
 }
 
 /**
@@ -49,20 +50,36 @@ export function listDeletedThreads(daysAgo = 30): ChatThread[] {
   return getDb()
     .select()
     .from(chatThreads)
-    .where(and(isNotNull(chatThreads.deletedAt), gt(chatThreads.deletedAt, cutoff)))
+    .where(
+      and(
+        ownedBy(chatThreads.userId),
+        isNotNull(chatThreads.deletedAt),
+        gt(chatThreads.deletedAt, cutoff),
+      ),
+    )
     .orderBy(desc(chatThreads.deletedAt))
     .all();
 }
 
 export function getThread(id: string): ChatThread | undefined {
-  return getDb().select().from(chatThreads).where(eq(chatThreads.id, id)).get();
+  return getDb()
+    .select()
+    .from(chatThreads)
+    .where(and(eq(chatThreads.id, id), ownedBy(chatThreads.userId)))
+    .get();
 }
 
 export function createThread(input: { title?: string | null } = {}): ChatThread {
   const now = new Date().toISOString();
   return getDb()
     .insert(chatThreads)
-    .values({ id: randomId(), title: input.title ?? null, createdAt: now, updatedAt: now })
+    .values({
+      id: randomId(),
+      userId: ownerId(),
+      title: input.title ?? null,
+      createdAt: now,
+      updatedAt: now,
+    })
     .returning()
     .get();
 }
@@ -71,7 +88,7 @@ export function renameThread(id: string, title: string): ChatThread | undefined 
   return getDb()
     .update(chatThreads)
     .set({ title, updatedAt: new Date().toISOString() })
-    .where(eq(chatThreads.id, id))
+    .where(and(eq(chatThreads.id, id), ownedBy(chatThreads.userId)))
     .returning()
     .get();
 }
@@ -86,7 +103,7 @@ export function softDeleteThread(id: string): ChatThread | undefined {
   return getDb()
     .update(chatThreads)
     .set({ deletedAt: new Date().toISOString() })
-    .where(eq(chatThreads.id, id))
+    .where(and(eq(chatThreads.id, id), ownedBy(chatThreads.userId)))
     .returning()
     .get();
 }
@@ -96,7 +113,7 @@ export function restoreThread(id: string): ChatThread | undefined {
   return getDb()
     .update(chatThreads)
     .set({ deletedAt: null, updatedAt: new Date().toISOString() })
-    .where(eq(chatThreads.id, id))
+    .where(and(eq(chatThreads.id, id), ownedBy(chatThreads.userId)))
     .returning()
     .get();
 }
@@ -108,7 +125,10 @@ export function restoreThread(id: string): ChatThread | undefined {
  */
 export function purgeThread(id: string): void {
   // chat_messages cascade-delete via foreign key.
-  getDb().delete(chatThreads).where(eq(chatThreads.id, id)).run();
+  getDb()
+    .delete(chatThreads)
+    .where(and(eq(chatThreads.id, id), ownedBy(chatThreads.userId)))
+    .run();
 }
 
 /**
@@ -125,10 +145,19 @@ export function purgeExpiredDeletedThreads(daysAgo = 30): number {
   const rows = getDb()
     .select({ id: chatThreads.id })
     .from(chatThreads)
-    .where(and(isNotNull(chatThreads.deletedAt), lt(chatThreads.deletedAt, cutoff)))
+    .where(
+      and(
+        ownedBy(chatThreads.userId),
+        isNotNull(chatThreads.deletedAt),
+        lt(chatThreads.deletedAt, cutoff),
+      ),
+    )
     .all();
   for (const row of rows) {
-    getDb().delete(chatThreads).where(eq(chatThreads.id, row.id)).run();
+    getDb()
+      .delete(chatThreads)
+      .where(and(eq(chatThreads.id, row.id), ownedBy(chatThreads.userId)))
+      .run();
   }
   return rows.length;
 }
@@ -145,7 +174,7 @@ export function markIdle(threadId: string): ChatThread | undefined {
   return getDb()
     .update(chatThreads)
     .set({ status: "idle" })
-    .where(eq(chatThreads.id, threadId))
+    .where(and(eq(chatThreads.id, threadId), ownedBy(chatThreads.userId)))
     .returning()
     .get();
 }
@@ -159,7 +188,7 @@ export function archiveThread(threadId: string): ChatThread | undefined {
   return getDb()
     .update(chatThreads)
     .set({ status: "archived", archivedAt: new Date().toISOString() })
-    .where(eq(chatThreads.id, threadId))
+    .where(and(eq(chatThreads.id, threadId), ownedBy(chatThreads.userId)))
     .returning()
     .get();
 }
@@ -175,7 +204,13 @@ export function reactivateThread(threadId: string): ChatThread | undefined {
   return getDb()
     .update(chatThreads)
     .set({ status: "active", archivedAt: null })
-    .where(and(eq(chatThreads.id, threadId), ne(chatThreads.status, "active")))
+    .where(
+      and(
+        eq(chatThreads.id, threadId),
+        ne(chatThreads.status, "active"),
+        ownedBy(chatThreads.userId),
+      ),
+    )
     .returning()
     .get();
 }
@@ -185,7 +220,7 @@ export function setExtractedThrough(threadId: string, turnId: number): void {
   getDb()
     .update(chatThreads)
     .set({ extractedThroughId: turnId })
-    .where(eq(chatThreads.id, threadId))
+    .where(and(eq(chatThreads.id, threadId), ownedBy(chatThreads.userId)))
     .run();
 }
 
@@ -197,7 +232,13 @@ export function listByStatus(status: ThreadStatus): ChatThread[] {
   return getDb()
     .select()
     .from(chatThreads)
-    .where(and(eq(chatThreads.status, status), isNull(chatThreads.deletedAt)))
+    .where(
+      and(
+        ownedBy(chatThreads.userId),
+        eq(chatThreads.status, status),
+        isNull(chatThreads.deletedAt),
+      ),
+    )
     .orderBy(desc(chatThreads.updatedAt))
     .all();
 }
@@ -215,6 +256,7 @@ export function findIdleThreads(olderThanDays: number): ChatThread[] {
     .from(chatThreads)
     .where(
       and(
+        ownedBy(chatThreads.userId),
         eq(chatThreads.status, "active"),
         isNull(chatThreads.deletedAt),
         lte(chatThreads.updatedAt, cutoff),
@@ -223,6 +265,11 @@ export function findIdleThreads(olderThanDays: number): ChatThread[] {
     .orderBy(asc(chatThreads.updatedAt))
     .all();
 }
+
+// chat_messages has no own `user_id` — message access rides on thread
+// ownership. Callers reach these only after resolving a threadId through a
+// user-scoped thread read (getThread / listThreads), and route-level
+// enforcement (Phase 6c) gates the rest. In single-owner mode this is a no-op.
 
 /**
  * List a thread's messages oldest-first. By default the internal
@@ -300,7 +347,7 @@ export function appendMessage(input: {
   getDb()
     .update(chatThreads)
     .set({ updatedAt: now })
-    .where(eq(chatThreads.id, input.threadId))
+    .where(and(eq(chatThreads.id, input.threadId), ownedBy(chatThreads.userId)))
     .run();
   return row;
 }

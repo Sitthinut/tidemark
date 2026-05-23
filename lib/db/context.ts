@@ -14,6 +14,13 @@ export type DbContext = {
   isDemo: boolean;
   /** Stable identifier for the active session (owner uses "owner"). */
   sessionId: string;
+  /**
+   * Authenticated user id for per-user row scoping (Phase 6). `null` in
+   * single-owner / pre-auth / demo mode — query scoping then collapses to the
+   * legacy `user_id IS NULL` set, so behavior is identical to pre-Phase-6.
+   * Optional so existing callers (tests, jobs) that omit it default to null.
+   */
+  userId?: string | null;
 };
 
 const storage = new AsyncLocalStorage<DbContext>();
@@ -38,4 +45,12 @@ export function getDb(): Db {
 
 export function isDemoRequest(): boolean {
   return getDbContext().isDemo;
+}
+
+/**
+ * Current request's authenticated user id, or `null` in single-owner / pre-auth
+ * / demo mode. Per-user query scoping reads this (see lib/db/queries/scope.ts).
+ */
+export function getUserId(): string | null {
+  return getDbContext().userId ?? null;
 }

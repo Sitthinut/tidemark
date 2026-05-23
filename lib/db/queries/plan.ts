@@ -1,13 +1,23 @@
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { getDb } from "../context";
 import { plans } from "../schema";
+import { ownedBy, ownerId } from "./scope";
 
 export type Plan = typeof plans.$inferSelect;
 
-const PLAN_ID = 1; // single-row table for v1
+// Single-row table for v1 (one plan, id=1). NOTE (Phase 6): `user_id` is now
+// scoped on reads, but the fixed `id=1` PK still means there is one plan row
+// shared across users. In single-owner mode (userId null) this is unchanged
+// from pre-Phase-6. A true per-user plan needs a (user_id)-keyed redesign —
+// deferred to a later wave; out of scope for the 6a data-layer foundation.
+const PLAN_ID = 1;
 
 export function getPlan(): Plan | undefined {
-  return getDb().select().from(plans).where(eq(plans.id, PLAN_ID)).get();
+  return getDb()
+    .select()
+    .from(plans)
+    .where(and(eq(plans.id, PLAN_ID), ownedBy(plans.userId)))
+    .get();
 }
 
 export function upsertPlan(input: { markdown: string; selectedModelId?: string | null }): Plan {
@@ -16,6 +26,7 @@ export function upsertPlan(input: { markdown: string; selectedModelId?: string |
     .insert(plans)
     .values({
       id: PLAN_ID,
+      userId: ownerId(),
       markdown: input.markdown,
       selectedModelId: input.selectedModelId ?? null,
       updatedAt: now,

@@ -4,6 +4,8 @@ import { index, integer, primaryKey, real, sqliteTable, text } from "drizzle-orm
 // Investment buckets — a "bucket" is a portfolio slice (Core, SSF, experiment, etc.).
 export const buckets = sqliteTable("buckets", {
   id: text("id").primaryKey(),
+  // Owner (Phase 6). NULL pre-backfill / single-owner mode → visible to everyone.
+  userId: text("user_id").references(() => user.id),
   name: text("name").notNull(),
   typeLabel: text("type_label"),
   icon: text("icon"),
@@ -83,6 +85,8 @@ export const navHistory = sqliteTable(
 // Investment plan — single-row table in v1.
 export const plans = sqliteTable("plans", {
   id: integer("id").primaryKey(),
+  // Owner (Phase 6). NULL pre-backfill / single-owner mode → visible to everyone.
+  userId: text("user_id").references(() => user.id),
   markdown: text("markdown").notNull(),
   selectedModelId: text("selected_model_id"),
   updatedAt: text("updated_at").notNull(),
@@ -93,6 +97,8 @@ export const journalEntries = sqliteTable(
   "journal_entries",
   {
     id: integer("id").primaryKey({ autoIncrement: true }),
+    // Owner (Phase 6). NULL pre-backfill / single-owner mode → visible to everyone.
+    userId: text("user_id").references(() => user.id),
     kind: text("kind").notNull(),
     title: text("title"),
     body: text("body"),
@@ -114,6 +120,8 @@ export type ModelMixSlice = { label: string; pct: number; ticker?: string; color
 
 export const modelPortfolios = sqliteTable("model_portfolios", {
   id: text("id").primaryKey(),
+  // Owner (Phase 6). NULL = built-in / single-owner → visible to everyone.
+  userId: text("user_id").references(() => user.id),
   name: text("name").notNull(),
   tagline: text("tagline"),
   blurb: text("blurb"),
@@ -132,6 +140,8 @@ export const modelPortfolios = sqliteTable("model_portfolios", {
 // Chat threads — one per conversation.
 export const chatThreads = sqliteTable("chat_threads", {
   id: text("id").primaryKey(),
+  // Owner (Phase 6). NULL pre-backfill / single-owner mode → visible to everyone.
+  userId: text("user_id").references(() => user.id),
   title: text("title"),
   // Lifecycle state machine (Phase 5b): 'active' on creation; the idle-archive
   // job promotes 'active' → 'idle' → 'archived' based on `updatedAt` age.
@@ -279,4 +289,36 @@ export const passkey = sqliteTable("passkey", {
   transports: text("transports"),
   createdAt: integer("created_at", { mode: "timestamp_ms" }),
   aaguid: text("aaguid"),
+});
+
+// ───────────────────────────────────────────────────────────────────────────
+// Phase 6 multi-user: per-user token accounting + tier gating.
+// ───────────────────────────────────────────────────────────────────────────
+
+// Per-user daily token usage. One row per (user, UTC date).
+export const usage = sqliteTable(
+  "usage",
+  {
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id),
+    date: text("date").notNull(), // 'YYYY-MM-DD' UTC
+    inputTokens: integer("input_tokens").notNull().default(0),
+    outputTokens: integer("output_tokens").notNull().default(0),
+  },
+  (table) => [primaryKey({ columns: [table.userId, table.date] })],
+);
+
+// Tier gating: which OpenRouter model chain a user can hit.
+//   'free'    = openrouter free router only (zero cost to owner)
+//   'trusted' = full owner model chain (AI_MODELS env)
+// Owner promotes via SQL: UPDATE account_tier SET tier='trusted' WHERE user_id=?
+export const accountTier = sqliteTable("account_tier", {
+  userId: text("user_id")
+    .primaryKey()
+    .references(() => user.id),
+  tier: text("tier", { enum: ["free", "trusted"] })
+    .notNull()
+    .default("free"),
+  grantedAt: text("granted_at").notNull(), // ISO-8601 UTC
 });

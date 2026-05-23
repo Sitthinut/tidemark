@@ -5,7 +5,7 @@
 // plain LIKE rather than a second virtual table. A search returns one hit per
 // matching thread (newest activity first), preferring a message snippet when
 // the body matched, falling back to a title-only match.
-import { getDbContext } from "../context";
+import { getDbContext, getUserId } from "../context";
 import type { ChatThread } from "./chat";
 
 export interface ThreadSearchHit {
@@ -19,6 +19,7 @@ export interface ThreadSearchHit {
 // Raw shape coming back from better-sqlite3 (snake_case column names).
 interface ThreadRowRaw {
   id: string;
+  user_id: string | null;
   title: string | null;
   status: "active" | "idle" | "archived";
   created_at: string;
@@ -31,6 +32,7 @@ interface ThreadRowRaw {
 function hydrateThread(r: ThreadRowRaw): ChatThread {
   return {
     id: r.id,
+    userId: r.user_id,
     title: r.title,
     status: r.status,
     createdAt: r.created_at,
@@ -39,6 +41,17 @@ function hydrateThread(r: ThreadRowRaw): ChatThread {
     extractedThroughId: r.extracted_through_id,
     deletedAt: r.deleted_at,
   };
+}
+
+/**
+ * SQL fragment + bind params scoping `chat_threads` (aliased `t`) to the
+ * current user, plus shared NULL-owned rows. In single-owner mode (no user in
+ * context) this collapses to `t.user_id IS NULL` — the pre-Phase-6 row set.
+ */
+function ownerScope(): { clause: string; params: string[] } {
+  const userId = getUserId();
+  if (userId === null) return { clause: "AND t.user_id IS NULL", params: [] };
+  return { clause: "AND (t.user_id = ? OR t.user_id IS NULL)", params: [userId] };
 }
 
 /**
@@ -75,6 +88,7 @@ export function searchThreads(query: string, opts: SearchThreadsOptions = {}): T
 
   const sqlite = getDbContext().sqlite;
   const deletedClause = opts.includeDeleted ? "" : "AND t.deleted_at IS NULL";
+  const owner = ownerScope();
 
   // Message-body matches, one row per matching message ordered best-first by
   // bm25 (lower = more relevant). FTS5 auxiliary functions (bm25/snippet) can't
@@ -87,10 +101,10 @@ export function searchThreads(query: string, opts: SearchThreadsOptions = {}): T
        FROM chat_messages_fts
        JOIN chat_messages m ON m.id = chat_messages_fts.rowid
        JOIN chat_threads t ON t.id = m.thread_id
-       WHERE chat_messages_fts MATCH ? AND m.role != 'summary' ${deletedClause}
+       WHERE chat_messages_fts MATCH ? AND m.role != 'summary' ${deletedClause} ${owner.clause}
        ORDER BY bm25(chat_messages_fts)`,
     )
-    .all(match) as Array<ThreadRowRaw & { snippet: string | null }>;
+    .all(match, ...owner.params) as Array<ThreadRowRaw & { snippet: string | null }>;
 
   // Title matches: one LIKE per token, all required (AND).
   const titleTokens = trimmed.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? [];
@@ -100,9 +114,9 @@ export function searchThreads(query: string, opts: SearchThreadsOptions = {}): T
       : (sqlite
           .prepare(
             `SELECT t.* FROM chat_threads t
-             WHERE ${titleTokens.map(() => "lower(t.title) LIKE ?").join(" AND ")} ${deletedClause}`,
+             WHERE ${titleTokens.map(() => "lower(t.title) LIKE ?").join(" AND ")} ${deletedClause} ${owner.clause}`,
           )
-          .all(...titleTokens.map((t) => `%${t}%`)) as ThreadRowRaw[]);
+          .all(...titleTokens.map((t) => `%${t}%`), ...owner.params) as ThreadRowRaw[]);
 
   // Merge by thread id. A thread matched on body, title, or both.
   const hits = new Map<string, ThreadSearchHit>();

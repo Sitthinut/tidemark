@@ -3,6 +3,7 @@ import { adaptAggregate, adaptPortfolios } from "./adapter";
 
 const sampleBucket = {
   id: "core",
+  userId: null,
   name: "Core",
   typeLabel: "Free",
   icon: "○",

@@ -1,6 +1,7 @@
 import { and, desc, eq, gte, isNull, type SQL } from "drizzle-orm";
 import { getDb } from "../context";
 import { journalEntries } from "../schema";
+import { ownedBy, ownerId } from "./scope";
 
 export type JournalEntry = typeof journalEntries.$inferSelect;
 export type JournalEntryInsert = typeof journalEntries.$inferInsert;
@@ -16,7 +17,7 @@ export interface JournalFilters {
 }
 
 export function listJournalEntries(filters: JournalFilters = {}): JournalEntry[] {
-  const where: SQL[] = [];
+  const where: SQL[] = [ownedBy(journalEntries.userId)];
   if (filters.kind) where.push(eq(journalEntries.kind, filters.kind));
   if (filters.since) where.push(gte(journalEntries.createdAt, filters.since));
   if (!filters.includeArchived) where.push(isNull(journalEntries.archivedAt));
@@ -31,13 +32,17 @@ export function listJournalEntries(filters: JournalFilters = {}): JournalEntry[]
 }
 
 export function getJournalEntry(id: number): JournalEntry | undefined {
-  return getDb().select().from(journalEntries).where(eq(journalEntries.id, id)).get();
+  return getDb()
+    .select()
+    .from(journalEntries)
+    .where(and(eq(journalEntries.id, id), ownedBy(journalEntries.userId)))
+    .get();
 }
 
 export function createJournalEntry(input: Omit<JournalEntryInsert, "createdAt">): JournalEntry {
   return getDb()
     .insert(journalEntries)
-    .values({ ...input, createdAt: new Date().toISOString() })
+    .values({ userId: ownerId(), ...input, createdAt: new Date().toISOString() })
     .returning()
     .get();
 }
@@ -49,7 +54,7 @@ export function updateJournalEntry(
   return getDb()
     .update(journalEntries)
     .set(patch)
-    .where(eq(journalEntries.id, id))
+    .where(and(eq(journalEntries.id, id), ownedBy(journalEntries.userId)))
     .returning()
     .get();
 }
@@ -58,10 +63,13 @@ export function archiveJournalEntry(id: number): void {
   getDb()
     .update(journalEntries)
     .set({ archivedAt: new Date().toISOString() })
-    .where(eq(journalEntries.id, id))
+    .where(and(eq(journalEntries.id, id), ownedBy(journalEntries.userId)))
     .run();
 }
 
 export function deleteJournalEntry(id: number): void {
-  getDb().delete(journalEntries).where(eq(journalEntries.id, id)).run();
+  getDb()
+    .delete(journalEntries)
+    .where(and(eq(journalEntries.id, id), ownedBy(journalEntries.userId)))
+    .run();
 }
