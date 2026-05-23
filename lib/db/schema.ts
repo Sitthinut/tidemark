@@ -135,6 +135,9 @@ export const chatThreads = sqliteTable("chat_threads", {
   title: text("title"),
   createdAt: text("created_at").notNull(),
   updatedAt: text("updated_at").notNull(),
+  // Soft-delete: NULL = active, ISO-8601 UTC = trashed at that moment.
+  // 30-day grace period for restore; UI hides past that. Hard purge is manual.
+  deletedAt: text("deleted_at"),
 });
 
 // Chat messages — user/assistant/tool turns within a thread.
@@ -159,6 +162,36 @@ export const settings = sqliteTable("settings", {
   key: text("key").primaryKey(),
   value: text("value", { mode: "json" }).notNull(),
 });
+
+// Long-term memory. Bitemporal: updates add a new row + supersede; rows are
+// never mutated in place. `valid_until IS NULL` is the active set.
+// `source = 'extracted'` is reserved for Phase 5b auto-extraction; 5a writes
+// only `'user_tool'` / `'advisor_tool'`. See docs/features/memory.md.
+export const userPreferences = sqliteTable(
+  "user_preferences",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    userId: text("user_id"), // NULL pre-Phase-6; FK after
+    category: text("category", {
+      enum: ["profile", "finance_context", "response_style", "fact"],
+    }).notNull(),
+    content: text("content").notNull(),
+    source: text("source", { enum: ["user_tool", "advisor_tool", "extracted"] }).notNull(),
+    sourceSessionId: text("source_session_id").references(() => chatThreads.id, {
+      onDelete: "set null",
+    }),
+    sourceTurnIds: text("source_turn_ids", { mode: "json" }).$type<number[]>(),
+    confidence: real("confidence"), // NULL for explicit; 0..1 for extracted
+    validFrom: text("valid_from").notNull(),
+    validUntil: text("valid_until"), // NULL = active
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (table) => [
+    index("idx_user_pref_active").on(table.userId, table.validUntil),
+    index("idx_user_pref_category").on(table.userId, table.category, table.validUntil),
+  ],
+);
 
 // ───────────────────────────────────────────────────────────────────────────
 // better-auth tables. Names match better-auth's defaults so the drizzle
