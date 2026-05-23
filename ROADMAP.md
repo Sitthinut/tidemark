@@ -10,10 +10,10 @@
 
 ## 🌙 Autonomous build run — live status (started 2026-05-23 night)
 
-> ✅ **RUN COMPLETE — all 13 tasks merged to local `main` (unpushed).** Final
-> state: typecheck clean, **251 tests passing**, production build compiles (25
-> routes), lint 0 errors. Nothing pushed — review the log (`git log --oneline`)
-> and the **⏳ Needs the user** checklist below, then push when you're happy.
+> ✅ **RUN COMPLETE — all 13 tasks merged and PUSHED to `origin/main`
+> (2026-05-23).** Final state: typecheck clean, **251 tests passing**,
+> production build compiles (25 routes), lint 0 errors. Review the log
+> (`git log --oneline`) and the **⏳ Needs the user** checklist below.
 > Tasks marked 🧪 are code-complete but need your browser/WebAuthn/live-LLM to
 > verify (I can't drive a passkey or a real model from here).
 >
@@ -75,7 +75,7 @@ verification · ⏸️ needs a user decision before it can proceed.
 ### ▶️ How to resume if my session died
 1. `git branch --list 'team/*'` — each completed task is a committed branch.
 2. Check this table's Status column for what merged vs. what's still on a branch.
-3. Merged work is on local `main` (unpushed). Unmerged `team/*` branches are reviewable diffs.
+3. All 13 tasks are merged and pushed to `origin/main` (2026-05-23). No `team/*` branches remain.
 
 ---
 
