@@ -184,6 +184,25 @@ table in sync when adding/renaming vars and also update
 | `AUTH_RP_ID` | inferred from `PUBLIC_APP_URL` | [lib/auth/index.ts](./lib/auth/index.ts) | Override only if you understand WebAuthn `rpID` rules. |
 | `PUBLIC_APP_URL` | `http://localhost:3000` (implicit) | [lib/auth/index.ts](./lib/auth/index.ts), [lib/portfolio/ocr.ts](./lib/portfolio/ocr.ts) | Canonical URL. Used for OpenRouter `HTTP-Referer` and WebAuthn origin. Changing this in prod breaks existing passkeys. |
 
+### Auth — OAuth + signup gate (Phase 6 — 6b/6c)
+
+All optional and **env-gated**: with none set, the app runs passkey-only and the
+`/login` page hides the OAuth buttons / Turnstile widget. A provider counts as
+"enabled" only when BOTH its id and secret are present.
+
+| Var | Default | Read by | Notes |
+| --- | --- | --- | --- |
+| `GOOGLE_CLIENT_ID` | unset | [lib/auth/providers.ts](./lib/auth/providers.ts) | Enables "Continue with Google" (needs `GOOGLE_CLIENT_SECRET` too). |
+| `GOOGLE_CLIENT_SECRET` | unset | [lib/auth/providers.ts](./lib/auth/providers.ts) | Server-only. |
+| `GITHUB_CLIENT_ID` | unset | [lib/auth/providers.ts](./lib/auth/providers.ts) | Enables "Continue with GitHub" (needs `GITHUB_CLIENT_SECRET` too). |
+| `GITHUB_CLIENT_SECRET` | unset | [lib/auth/providers.ts](./lib/auth/providers.ts) | Server-only. |
+| `TURNSTILE_SITE_KEY` | unset | [lib/auth/turnstile.ts](./lib/auth/turnstile.ts), [/api/auth-config](./app/api/auth-config/route.ts) | **PUBLIC** — shipped to the browser to render the widget. |
+| `TURNSTILE_SECRET_KEY` | unset | [lib/auth/turnstile.ts](./lib/auth/turnstile.ts) | Server verifies the signup/OAuth token here. **When unset, verification is BYPASSED (dev pass).** OAuth callback URIs for both providers must point at `<PUBLIC_APP_URL>/api/auth/callback/{google,github}`. |
+
+Rate limiting: `/api/auth/*` POSTs are IP-limited via `AUTH_RATE_LIMIT`
+(10/min/IP — [lib/api/rate-limit.ts](./lib/api/rate-limit.ts)), wired in
+[app/api/auth/[...all]/route.ts](./app/api/auth/[...all]/route.ts).
+
 ### Database
 
 | Var | Default | Read by | Notes |

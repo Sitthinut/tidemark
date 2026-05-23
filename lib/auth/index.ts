@@ -2,7 +2,10 @@ import "server-only";
 import { passkey } from "@better-auth/passkey";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
-import { ownerDb } from "@/lib/db/client";
+import { ownerDb, ownerSqlite } from "@/lib/db/client";
+import { runWithDbContext } from "@/lib/db/context";
+import { socialProvidersConfig, trustedLinkProviders } from "./providers";
+import { provisionNewUser } from "./provision";
 
 function rpName(): string {
   return process.env.AUTH_RP_NAME ?? "Macrotide";
@@ -62,6 +65,40 @@ export const auth = betterAuth({
   // This is a pre-Phase-6 stopgap: OAuth (Phase 6 / 6b) will replace this
   // bootstrapping mechanism, at which point emailAndPassword can be disabled.
   emailAndPassword: { enabled: true },
+  // OAuth (Phase 6 — 6b). Only providers whose env vars are fully present are
+  // registered; with none set this is `{}` and the app runs passkey-only.
+  // GOOGLE_CLIENT_ID/SECRET, GITHUB_CLIENT_ID/SECRET enable the respective btns.
+  socialProviders: socialProvidersConfig(),
+  account: {
+    // Link an OAuth sign-in to an existing account with the same verified email
+    // (e.g. signed up with Google, later signs in with GitHub on the same addr).
+    accountLinking: {
+      enabled: true,
+      trustedProviders: trustedLinkProviders(),
+    },
+  },
+  // New-account provisioning (Phase 6 — 6c): default tier='free' + one seeded
+  // bucket. Runs in an owner DB context stamped with the new user's id so the
+  // bucket's user_id is set correctly (the auth route is not withDb-wrapped, so
+  // there is no ambient request context here).
+  databaseHooks: {
+    user: {
+      create: {
+        after: async (newUser: { id: string }) => {
+          await runWithDbContext(
+            {
+              db: ownerDb,
+              sqlite: ownerSqlite,
+              isDemo: false,
+              sessionId: "owner",
+              userId: newUser.id,
+            },
+            () => provisionNewUser(newUser.id),
+          );
+        },
+      },
+    },
+  },
   session: {
     expiresIn: 60 * 60 * 24 * 30, // 30 days
     updateAge: 60 * 60 * 24, // refresh once per day

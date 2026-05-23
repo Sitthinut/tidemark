@@ -1,24 +1,94 @@
 "use client";
 
-import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useState } from "react";
 import { authClient, signIn, useSession } from "@/lib/auth/client";
+import { Turnstile } from "./Turnstile";
 
 type Mode = "intro" | "signup";
 
+interface AuthConfig {
+  providers: { google: boolean; github: boolean };
+  turnstile: { enabled: boolean; siteKey: string | null };
+}
+
+// useSearchParams requires a Suspense boundary in Next 15 app router.
 export default function LoginPage() {
+  return (
+    <Suspense fallback={null}>
+      <LoginInner />
+    </Suspense>
+  );
+}
+
+function LoginInner() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { data: session } = useSession();
   const [mode, setMode] = useState<Mode>("intro");
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
+  const [acceptedTos, setAcceptedTos] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [config, setConfig] = useState<AuthConfig | null>(null);
+  const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
 
-  // Already signed in? Skip the login screen.
+  // After OAuth sign-in we redirect back to /login?passkey=prompt to offer
+  // registering a passkey on this device (6b). Detect that here.
+  const passkeyPrompt = searchParams.get("passkey") === "prompt";
+
+  // Load which providers + bot-protection the server has configured (6b/6c).
   useEffect(() => {
-    if (session?.user) router.replace("/");
-  }, [session, router]);
+    fetch("/api/auth-config")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((c: AuthConfig | null) => c && setConfig(c))
+      .catch(() => {});
+  }, []);
+
+  // Already signed in? Skip the login screen — unless we're prompting for a
+  // passkey after a fresh OAuth sign-in.
+  useEffect(() => {
+    if (session?.user && !passkeyPrompt) router.replace("/");
+  }, [session, router, passkeyPrompt]);
+
+  // Header sent on account-creation / OAuth POSTs so the server-side Turnstile
+  // gate can verify it. Empty when Turnstile isn't configured (dev bypass).
+  function turnstileHeaders(): Record<string, string> {
+    return turnstileToken ? { "x-turnstile-token": turnstileToken } : {};
+  }
+
+  async function signInSocial(provider: "google" | "github") {
+    setBusy(true);
+    setError(null);
+    try {
+      const result = await signIn.social({
+        provider,
+        callbackURL: "/login?passkey=prompt",
+        fetchOptions: { headers: turnstileHeaders() },
+      });
+      if (result?.error) throw new Error(result.error.message ?? "sign in failed");
+      // signIn.social triggers a redirect to the provider; nothing more to do.
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "sign in failed");
+      setBusy(false);
+    }
+  }
+
+  async function addPasskeyAndContinue() {
+    setBusy(true);
+    setError(null);
+    try {
+      const addPk = await authClient.passkey.addPasskey({
+        name: `${session?.user?.name ?? "Passkey"} · ${new Date().toLocaleDateString()}`,
+      });
+      if (addPk?.error) throw new Error(addPk.error.message ?? "passkey registration failed");
+      router.replace("/");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "passkey registration failed");
+      setBusy(false);
+    }
+  }
 
   async function startDemo() {
     setBusy(true);
@@ -60,6 +130,9 @@ export default function LoginPage() {
         // better-auth requires a password even when email/password is the
         // disabled fallback path. Generate a random one the user never sees.
         password: crypto.randomUUID() + crypto.randomUUID(),
+        // Carry the Turnstile token so the server-side signup gate (6c) can
+        // verify it. Bypassed server-side when Turnstile isn't configured.
+        fetchOptions: { headers: turnstileHeaders() },
       });
       if (signUp?.error) throw new Error(signUp.error.message ?? "sign up failed");
 
@@ -77,6 +150,34 @@ export default function LoginPage() {
     }
   }
 
+  const hasOAuth = Boolean(config?.providers.google || config?.providers.github);
+  // Turnstile must be solved before account-creation / OAuth when it's
+  // configured. In dev (not configured) this is always satisfied.
+  const turnstileSatisfied = !config?.turnstile.enabled || Boolean(turnstileToken);
+
+  // Post-OAuth passkey registration prompt (6b): offer to add a passkey to
+  // this device so future sign-ins skip the OAuth round-trip.
+  if (passkeyPrompt && session?.user) {
+    return (
+      <div style={shell}>
+        <div style={card}>
+          <div style={mark}>Macrotide</div>
+          <div style={tagline}>
+            You're signed in. Add a passkey to this device for faster sign-in next time?
+          </div>
+          <button type="button" style={primary} onClick={addPasskeyAndContinue} disabled={busy}>
+            {busy ? "Setting up…" : "Add a passkey"}
+          </button>
+          <button type="button" style={ghost} onClick={() => router.replace("/")} disabled={busy}>
+            Skip for now
+          </button>
+          {error && <div style={errBanner}>{error}</div>}
+          <div style={footer}>Open source · Self-hosted</div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div style={shell}>
       <div style={card}>
@@ -91,6 +192,34 @@ export default function LoginPage() {
 
         {mode === "intro" && (
           <>
+            {hasOAuth && (
+              <>
+                {config?.providers.google && (
+                  <button
+                    type="button"
+                    style={secondary}
+                    onClick={() => signInSocial("google")}
+                    disabled={busy || !turnstileSatisfied}
+                  >
+                    Continue with Google
+                  </button>
+                )}
+                {config?.providers.github && (
+                  <button
+                    type="button"
+                    style={secondary}
+                    onClick={() => signInSocial("github")}
+                    disabled={busy || !turnstileSatisfied}
+                  >
+                    Continue with GitHub
+                  </button>
+                )}
+                {config?.turnstile.enabled && config.turnstile.siteKey && (
+                  <Turnstile siteKey={config.turnstile.siteKey} onToken={setTurnstileToken} />
+                )}
+                <div style={divider}>or</div>
+              </>
+            )}
             <button type="button" style={primary} onClick={signInPasskey} disabled={busy}>
               Sign in with passkey
             </button>
@@ -133,7 +262,34 @@ export default function LoginPage() {
               onChange={(e) => setEmail(e.target.value)}
               style={input}
             />
-            <button type="submit" style={primary} disabled={busy || !email || !name}>
+            <label style={tosLabel}>
+              <input
+                type="checkbox"
+                checked={acceptedTos}
+                onChange={(e) => setAcceptedTos(e.target.checked)}
+              />
+              <span>
+                I agree to the{" "}
+                <a href="/legal/terms" target="_blank" rel="noreferrer" style={legalLink}>
+                  Terms
+                </a>{" "}
+                and{" "}
+                <a href="/legal/privacy" target="_blank" rel="noreferrer" style={legalLink}>
+                  Privacy Policy
+                </a>
+                .
+              </span>
+            </label>
+            {config?.turnstile.enabled && config.turnstile.siteKey && (
+              <div style={{ margin: "8px 0" }}>
+                <Turnstile siteKey={config.turnstile.siteKey} onToken={setTurnstileToken} />
+              </div>
+            )}
+            <button
+              type="submit"
+              style={primary}
+              disabled={busy || !email || !name || !acceptedTos || !turnstileSatisfied}
+            >
               {busy ? "Setting up…" : "Create passkey & continue"}
             </button>
             <button type="button" style={ghost} onClick={() => setMode("intro")} disabled={busy}>
@@ -242,6 +398,30 @@ const errBanner: React.CSSProperties = {
   borderRadius: 8,
   padding: "8px 12px",
   textAlign: "left",
+};
+
+const divider: React.CSSProperties = {
+  fontSize: 11,
+  color: "var(--muted-2)",
+  textTransform: "uppercase",
+  letterSpacing: "0.08em",
+  margin: "4px 0",
+};
+
+const tosLabel: React.CSSProperties = {
+  display: "flex",
+  alignItems: "flex-start",
+  gap: 8,
+  fontSize: 12,
+  color: "var(--muted)",
+  textAlign: "left",
+  lineHeight: 1.5,
+  margin: "4px 0 10px",
+};
+
+const legalLink: React.CSSProperties = {
+  color: "var(--accent)",
+  textDecoration: "underline",
 };
 
 const hint: React.CSSProperties = {
