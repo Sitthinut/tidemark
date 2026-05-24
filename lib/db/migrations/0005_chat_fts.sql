@@ -1,4 +1,4 @@
--- Phase 5b #4: full-text search over chat messages.
+-- Full-text search over chat messages.
 --
 -- External-content FTS5 table mirroring `chat_messages.content`. We store no
 -- duplicate text (content='chat_messages'); the index keys back to the source

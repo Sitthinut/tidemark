@@ -3,7 +3,7 @@
 //
 //   0 7 * * *  curl -s -X POST http://localhost:3000/api/admin/refresh-market
 //
-// In multi-user mode (Phase 2.5) this should be gated behind a shared secret
+// In multi-user mode this should be gated behind a shared secret
 // or admin-only auth; for single-user / localhost it's intentionally open.
 
 import { NextResponse } from "next/server";

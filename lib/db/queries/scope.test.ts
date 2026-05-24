@@ -1,7 +1,7 @@
-// Per-user scoping invariant (Phase 6 — 6a). These lock in the contract the
-// rest of Phase 6 builds on:
+// Per-user scoping invariant. These lock in the contract the multi-user data
+// layer builds on:
 //   - With NO user in context (single-owner / pre-auth), behavior is identical
-//     to pre-Phase-6: every row is visible/writable (the legacy NULL set).
+//     to single-owner mode: every row is visible/writable (the legacy NULL set).
 //   - With a user in context, that user sees their own rows PLUS shared
 //     NULL-owned rows, but NOT another user's rows.
 import { readdirSync, readFileSync } from "node:fs";
@@ -44,7 +44,7 @@ const BUCKET = {
 };
 
 describe("per-user row scoping", () => {
-  it("null context behaves like pre-Phase-6: all rows visible + NULL user_id", () => {
+  it("null context behaves like single-owner: all rows visible + NULL user_id", () => {
     const { sqlite, db } = freshDb();
     const ctx: DbContext = { db, sqlite, isDemo: false, sessionId: "owner", userId: null };
     runWithDbContext(ctx, () => {

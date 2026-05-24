@@ -35,10 +35,10 @@ function LoginInner() {
   const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
 
   // After OAuth sign-in we redirect back to /login?passkey=prompt to offer
-  // registering a passkey on this device (6b). Detect that here.
+  // registering a passkey on this device. Detect that here.
   const passkeyPrompt = searchParams.get("passkey") === "prompt";
 
-  // Load which providers + bot-protection the server has configured (6b/6c).
+  // Load which providers + bot-protection the server has configured.
   useEffect(() => {
     fetch("/api/auth-config")
       .then((r) => (r.ok ? r.json() : null))

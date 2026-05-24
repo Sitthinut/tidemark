@@ -1,7 +1,7 @@
-// AI SDK tool surface for Phase 5a memory. Four tools exposed to the chat
+// AI SDK tool surface for memory. Four tools exposed to the chat
 // model; all delegate to the existing query layer at lib/db/queries/preferences.ts.
 //
-// Source attribution: in 5a the model invokes these tools on the user's
+// Source attribution: the model invokes these tools on the user's
 // behalf during a chat turn, so we record source = 'advisor_tool'. A future
 // user-facing "Save this" button would record source = 'user_tool'.
 //
@@ -43,8 +43,8 @@ function formatCandidates(rows: Preference[]): string {
 }
 
 export interface MemoryToolOptions {
-  // Pre-Phase-6 single owner: pass null. Phase 6 will thread the
-  // authenticated user id through here.
+  // Single owner: pass null. Multi-user threads the authenticated user id
+  // through here.
   userId: string | null;
 }
 

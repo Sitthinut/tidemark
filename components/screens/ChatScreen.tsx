@@ -147,7 +147,7 @@ export function ChatScreen({ persona = "advisor", seedPrompt, onPromptConsumed }
   // than condensing silently. See docs/explanation/memory.md § mid-chat.
   const [contextNotice, setContextNotice] = useState(false);
   // Set when the server rejects a turn because the user hit their daily token
-  // budget (header `x-daily-limit`, Phase 6 — 6d). Resets at UTC midnight
+  // budget (header `x-daily-limit`). Resets at UTC midnight
   // server-side; the banner just nudges the user to come back.
   const [limitNotice, setLimitNotice] = useState(false);
   const streamRef = useRef<HTMLDivElement>(null);

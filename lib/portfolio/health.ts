@@ -8,7 +8,7 @@
 //   • allocation by asset class + by region (fund-level, not look-through)
 //
 // Subjective 0–100 "quality" scores (diversification/risk-fit) are deliberately
-// NOT computed here — those need AI tool-calls (Phase 6 / task #11).
+// NOT computed here — those need AI tool-calls.
 
 import type { AssetClass, Holding, MixSlice } from "@/lib/static/types";
 

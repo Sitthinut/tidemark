@@ -5,14 +5,14 @@ import { createBucket } from "@/lib/db/queries/buckets";
 import { accountTier } from "@/lib/db/schema";
 
 /**
- * Provision a freshly-created user (Phase 6 — 6c). Called from the better-auth
+ * Provision a freshly-created user. Called from the better-auth
  * `databaseHooks.user.create.after` hook.
  *
  * Two side effects, both within the current DB context (the auth hook wraps
  * this in `runWithDbContext` with the new user's id so `ownerId()` stamps the
  * seeded bucket correctly):
  *   1. Insert an `account_tier` row defaulting to `'free'` (gates AI model
- *      access — see Phase 6 6d). Idempotent via ON CONFLICT DO NOTHING.
+ *      access — see lib/db/queries/usage.ts). Idempotent via ON CONFLICT DO NOTHING.
  *   2. Seed one empty bucket so the dashboard isn't blank on first login.
  *
  * Kept pure of better-auth types so it's unit-testable with the `:memory:`

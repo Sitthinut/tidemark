@@ -1,4 +1,4 @@
-// Per-user row scoping (Phase 6 — 6a data layer).
+// Per-user row scoping (data layer).
 //
 // User-owned tables (buckets, journal_entries, plans, chat_threads,
 // model_portfolios) carry a nullable `user_id`. Rows with NULL user_id are
@@ -7,7 +7,7 @@
 // Reads/writes are scoped with {@link ownedBy}: it matches the current user's
 // rows OR the shared NULL-owned rows. When there is no user in context
 // (single-owner / pre-auth / demo — `getUserId()` returns null), the clause
-// collapses to `user_id IS NULL`, which is exactly the pre-Phase-6 row set —
+// collapses to `user_id IS NULL`, which is exactly the single-owner row set —
 // so behavior is identical to today and existing tests pass unchanged.
 import { eq, isNull, or, type SQL } from "drizzle-orm";
 import type { SQLiteColumn } from "drizzle-orm/sqlite-core";
@@ -27,7 +27,7 @@ export function ownedBy(userIdColumn: SQLiteColumn): SQL {
 
 /**
  * The `user_id` value to stamp on inserts: the current user, or `null` in
- * single-owner / pre-auth / demo mode (identical to pre-Phase-6 inserts, which
+ * single-owner / pre-auth / demo mode (matching the legacy inserts, which
  * had no column at all).
  */
 export function ownerId(): string | null {

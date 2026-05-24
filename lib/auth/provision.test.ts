@@ -1,4 +1,4 @@
-// New-user provisioning (Phase 6 — 6c): a freshly-created user gets a default
+// New-user provisioning: a freshly-created user gets a default
 // 'free' account_tier row and one seeded bucket stamped with their user_id.
 import { readdirSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";

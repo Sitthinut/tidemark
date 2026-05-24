@@ -10,7 +10,7 @@ export async function POST(req: Request) {
   const body = await req.json();
   // Fill server-managed defaults so the client doesn't have to know schema details.
   // id: UUID is opaque from the user's perspective — they only see the name.
-  // brokerage: legacy notNull column kept until Phase 4 broker import lands.
+  // brokerage: legacy notNull column kept until broker import lands.
   const insert = {
     ...body,
     id: typeof body.id === "string" && body.id.length > 0 ? body.id : crypto.randomUUID(),

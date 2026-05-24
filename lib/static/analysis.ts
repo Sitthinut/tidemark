@@ -1,6 +1,6 @@
 import type { Analysis, BenchmarkKey, Breakdown, SeriesPoint } from "@/lib/static/types";
 
-// Placeholder analytics surface. Real numbers land in Phase 6 when AI tool
+// Placeholder analytics surface. Real numbers will land when AI tool
 // calls (read_portfolio + computed concentration/drift/weighted TER) replace
 // these. Until then, screens render these as a static fixture so the chart
 // shapes are real even if the values aren't yours.

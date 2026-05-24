@@ -1,4 +1,4 @@
-// Quotas + tier gating (Phase 6 — 6d). Locks in the invariants the chat route
+// Quotas + tier gating. Locks in the invariants the chat route
 // depends on:
 //   - tier defaults to 'free' when there's no account_tier row;
 //   - the daily cap reads env budgets with the ROADMAP defaults;

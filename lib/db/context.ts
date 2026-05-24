@@ -15,9 +15,9 @@ export type DbContext = {
   /** Stable identifier for the active session (owner uses "owner"). */
   sessionId: string;
   /**
-   * Authenticated user id for per-user row scoping (Phase 6). `null` in
+   * Authenticated user id for per-user row scoping. `null` in
    * single-owner / pre-auth / demo mode — query scoping then collapses to the
-   * legacy `user_id IS NULL` set, so behavior is identical to pre-Phase-6.
+   * legacy `user_id IS NULL` set, so behavior is identical to single-owner mode.
    * Optional so existing callers (tests, jobs) that omit it default to null.
    */
   userId?: string | null;

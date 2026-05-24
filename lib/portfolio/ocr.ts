@@ -9,7 +9,7 @@ import type { QuoteSource } from "@/lib/market/sources";
  * into plain text and return that string for downstream use — currently the
  * UI surfaces the transcription to the user, and in the future the advisor
  * agent will turn it into structured holdings rows via chat tool calls
- * ([[advisor-assist OCR — Phase 6 follow-up]] in ROADMAP).
+ * (the advisor-assist OCR follow-up in ROADMAP).
  *
  * **Why pure transcription instead of structured JSON.** Earlier iterations
  * asked the model to return a Zod-validated `{ rows: ProposedRow[] }`. Free

@@ -21,7 +21,7 @@ export function isCategory(value: string): value is PreferenceCategory {
 }
 
 function activeFilter(userId: string | null) {
-  // userId NULL pre-Phase-6; treat all-NULL as the single owner namespace.
+  // userId NULL in single-owner mode; treat all-NULL as the single owner namespace.
   const userMatch =
     userId === null ? isNull(userPreferences.userId) : eq(userPreferences.userId, userId);
   return and(userMatch, isNull(userPreferences.validUntil));

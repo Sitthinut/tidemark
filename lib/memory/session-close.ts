@@ -1,4 +1,4 @@
-// Real-time session close (Phase 5b, revised design).
+// Real-time session close.
 //
 // The Advisor saves durable facts in-chat via tools (the primary, model-driven
 // path). This module is the BACKSTOP that runs when a session actually ends —
@@ -17,7 +17,7 @@ import {
 import { type ExtractionResult, extractSessionPreferences } from "./extract";
 
 export interface CloseSessionOptions {
-  /** Pre-Phase-6 single owner: null. Threaded into extraction provenance. */
+  /** Single owner: null. Threaded into extraction provenance. */
   userId?: string | null;
   /** Injectable extractor for tests; defaults to the real incremental one. */
   extract?: (threadId: string) => Promise<ExtractionResult>;

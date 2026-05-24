@@ -5,7 +5,7 @@ import { verifyTurnstile } from "@/lib/auth/turnstile";
 
 const handlers = toNextJsHandler(auth);
 
-// Account-creation / OAuth entry paths that the Turnstile signup gate (6c)
+// Account-creation / OAuth entry paths that the Turnstile signup gate
 // protects. better-auth routes everything under /api/auth/*; we only gate the
 // paths that mint a new account or start an OAuth flow.
 function isGatedSignupPath(url: string): boolean {
@@ -22,7 +22,7 @@ export const GET = handlers.GET;
 export async function POST(req: Request): Promise<Response> {
   const ip = clientIp(req);
 
-  // Abuse defense (6c): IP-keyed rate limit on every auth POST.
+  // Abuse defense: IP-keyed rate limit on every auth POST.
   const rl = rateLimit(ip, AUTH_RATE_LIMIT);
   if (!rl.ok) {
     return Response.json(
@@ -31,7 +31,7 @@ export async function POST(req: Request): Promise<Response> {
     );
   }
 
-  // Signup gate (6c): verify the Turnstile token on account-creation / OAuth
+  // Signup gate: verify the Turnstile token on account-creation / OAuth
   // start. The browser sends it via the `x-turnstile-token` header so we don't
   // consume the request body the handler needs. Bypassed in dev (no secret).
   if (isGatedSignupPath(req.url)) {

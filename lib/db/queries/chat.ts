@@ -8,7 +8,7 @@ export type ChatMessage = typeof chatMessages.$inferSelect;
 export type ChatRole = "user" | "assistant" | "tool" | "summary";
 
 /**
- * Role marker for the context-compression summary row (Phase 5b #3). Stored in
+ * Role marker for the context-compression summary row. Stored in
  * the free-TEXT `chat_messages.role` column (no migration). These rows are an
  * internal model-input artifact: excluded from display ({@link listMessages}'s
  * `includeInternal` filter) and from FTS search. Keep in sync with
@@ -16,7 +16,7 @@ export type ChatRole = "user" | "assistant" | "tool" | "summary";
  */
 export const SUMMARY_ROLE = "summary";
 /**
- * Session lifecycle states (Phase 5b). Deletion is intentionally NOT a status —
+ * Session lifecycle states. Deletion is intentionally NOT a status —
  * it lives on `deletedAt` (30-day trash) so a thread can be e.g. archived AND
  * trashed independently.
  */
@@ -163,7 +163,7 @@ export function purgeExpiredDeletedThreads(daysAgo = 30): number {
 }
 
 // ───────────────────────────────────────────────────────────────────────────
-// Session lifecycle (Phase 5b). `status`: active → idle on session close
+// Session lifecycle. `status`: active → idle on session close
 // (lib/memory/session-close.ts), idle → active on resume (reactivateThread).
 // The lib/jobs/close-stale-sessions.ts backstop closes active threads that
 // never got an explicit close. Deletion stays orthogonal on `deletedAt`.
@@ -269,7 +269,8 @@ export function findIdleThreads(olderThanDays: number): ChatThread[] {
 // chat_messages has no own `user_id` — message access rides on thread
 // ownership. Callers reach these only after resolving a threadId through a
 // user-scoped thread read (getThread / listThreads), and route-level
-// enforcement (Phase 6c) gates the rest. In single-owner mode this is a no-op.
+// enforcement (the per-user query scoping) gates the rest. In single-owner
+// mode this is a no-op.
 
 /**
  * List a thread's messages oldest-first. By default the internal
@@ -292,8 +293,8 @@ export function listMessages(
 }
 
 /**
- * Store (or refresh) the context-compression summary for a thread (Phase 5b
- * #3). Migration-free: writes a {@link SUMMARY_ROLE} row into `chat_messages`.
+ * Store (or refresh) the context-compression summary for a thread.
+ * Migration-free: writes a {@link SUMMARY_ROLE} row into `chat_messages`.
  * Exactly one summary row is kept per thread — a prior one is replaced. This
  * NEVER touches user/assistant rows, so the persisted conversation is intact;
  * summarization only ever compresses the model's *input view*.

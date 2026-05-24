@@ -1,13 +1,13 @@
-// Context-budget compression for the chat model input (Phase 5b, task #3).
+// Context-budget compression for the chat model input.
 //
 // When an active session's assembled model input crosses ~80% of the model's
 // context budget, we summarize the OLDER turns and replace them — in the
 // MODEL'S INPUT VIEW ONLY — with a single compact summary message, keeping the
 // most recent turns verbatim. The persisted chat history is never touched:
 // summarization compresses what we send to the model, it does not delete rows.
-// See docs/explanation/memory.md § Chat session lifecycle (mid-chat) + the 5b
-// acceptance criteria ("a 50-turn session runs at <2× the input-token cost of
-// a 5-turn one; summarization never drops messages from the DB").
+// See docs/explanation/memory.md § Chat session lifecycle (mid-chat) + the
+// acceptance criteria there ("a 50-turn session runs at <2× the input-token
+// cost of a 5-turn one; summarization never drops messages from the DB").
 //
 // This is *banner-suggested, not silent*: the chat route surfaces a banner via
 // a response header when the threshold is crossed (compressed or not), so the

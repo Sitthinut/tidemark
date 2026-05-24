@@ -53,7 +53,7 @@ describe("resolveOwnerProvider", () => {
   });
 });
 
-describe("resolveTierProvider (Phase 6 — 6d tier gating)", () => {
+describe("resolveTierProvider (tier gating)", () => {
   it("returns not-ready when key is missing", () => {
     delete process.env.OPENROUTER_API_KEY;
     expect(resolveTierProvider("free").ready).toBe(false);

@@ -352,8 +352,8 @@ export const PORTFOLIO: AggregatePortfolio = (() => {
 })();
 
 // MARKETS, ANALYSIS, AI_PERSONALITIES moved out of this file. See:
-//   - lib/static/markets.ts      (market chrome — Phase 3b replaces with live data)
-//   - lib/static/analysis.ts     (placeholder analytics — Phase 6 replaces with AI tool calls)
+//   - lib/static/markets.ts      (market chrome — live data replaces this)
+//   - lib/static/analysis.ts     (placeholder analytics — AI tool calls replace this)
 //   - lib/static/personalities.ts (editorial AI persona)
 
 // ===== Model Portfolios — for learning ideal allocations =====

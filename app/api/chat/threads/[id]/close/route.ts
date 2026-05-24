@@ -13,7 +13,7 @@ export const runtime = "nodejs";
  */
 export async function POST(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  // Pre-Phase-6: single owner (userId null). Phase 6 resolves the user here.
+  // Single owner (userId null). Multi-user resolves the user here.
   const result = await withDb(() => closeSession(id, { userId: null }));
   return NextResponse.json({
     closed: result.closed,

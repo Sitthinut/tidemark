@@ -1,7 +1,7 @@
 import "server-only";
 
 /**
- * Cloudflare Turnstile bot-protection gate (Phase 6 — 6c).
+ * Cloudflare Turnstile bot-protection gate.
  *
  * Env vars (operator-supplied):
  *   TURNSTILE_SITE_KEY    — PUBLIC, shipped to the browser to render the widget.

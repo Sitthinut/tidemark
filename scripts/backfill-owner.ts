@@ -1,7 +1,7 @@
-// One-time Phase 6 (6a) data backfill: attach all pre-Phase-6 app rows to a
+// One-time multi-user data backfill: attach all pre-multi-user app rows to a
 // single "owner" account derived from the OWNER_EMAIL env var.
 //
-// Before Phase 6 every app row had no `user_id`. Migration 0007 adds a nullable
+// Before multi-user, every app row had no `user_id`. Migration 0007 adds a nullable
 // `user_id` column, so existing rows are NULL = "shared / visible to everyone".
 // Once you go multi-user you want YOUR data attached to YOUR account. This
 // script finds (or creates) the user row for OWNER_EMAIL and stamps every

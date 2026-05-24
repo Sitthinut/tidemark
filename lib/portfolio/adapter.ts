@@ -292,8 +292,8 @@ function readingFromEntry(e: JournalEntry): ReadingItem {
 }
 
 // Synthesizes the legacy UserJournal shape from journal_entries.
-// `plan`, `feedback`, and `savedModels` are Phase 2/4 surface and stay empty
-// for now — the screens render the empty states fine.
+// `plan`, `feedback`, and `savedModels` are advisor / import surface and stay
+// empty for now — the screens render the empty states fine.
 export function adaptJournal(entries: JournalEntry[]): UserJournal {
   const notes: Note[] = [];
   const reading: ReadingItem[] = [];
