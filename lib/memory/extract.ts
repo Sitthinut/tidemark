@@ -7,7 +7,7 @@
 // sourceTurnIds) is recorded so the Memory page can show which chat a note
 // came from and the user can correct false extractions.
 //
-// Two guards from docs/features/memory.md:
+// Two guards from docs/explanation/memory.md:
 //   - Recursive-memory-pollution: strip Advisor's own injected memory block
 //     out of the transcript before extracting, so we don't re-learn facts that
 //     were only present because we injected them (Supermemory's pattern).

@@ -14,40 +14,48 @@ Memory is:
   recalled on demand, so the prompt stays small and cheap.
 
 For *why* the design looks this way — the prior-art survey and the build-vs-adopt
-decision — see [the memory-systems research](../research/memory-systems.md).
-
----
+decision — see [the memory-systems research](./research/memory-systems.md).
 
 ## Using memory
 
-**Saving.** Tell the Advisor something durable — *"remember I'm targeting
+### Saving
+
+Tell the Advisor something durable — *"remember I'm targeting
 retirement at 50"* or *"don't suggest individual stocks, I only do funds."* It
 calls `save_preference` and an inline card confirms: *"Saved: targeting
 retirement at 50."*
 
-**Loading.** At the start of every chat, your active preferences load into the
+### Loading
+
+At the start of every chat, your active preferences load into the
 Advisor's context automatically. You don't restate them. To see exactly what's
 loaded, open **Settings → Memory**.
 
-**Updating.** *"Actually, change that to age 55"* calls `update_preference`: the
+### Updating
+
+*"Actually, change that to age 55"* calls `update_preference`: the
 old row is stamped with an end date and a new row takes its place. The Memory
 page shows both, the old one marked superseded.
 
-**Forgetting.** *"Forget the retirement age thing"* calls `forget_preference` —
+### Forgetting
+
+*"Forget the retirement age thing"* calls `forget_preference` —
 the row is end-dated and never injected again, but kept for audit. The Memory
 page also has a per-row delete (→ 30-day trash → hard delete).
 
-**Auto-saved notes.** When a chat ends (see [Sessions](#sessions-and-continuity)),
+### Auto-saved notes
+
+When a chat ends (see [Sessions](#sessions-and-continuity)),
 the Advisor scans it for durable facts you stated and saves them as
 `extracted` notes with a confidence score, attributed to the source chat so you
 can trace and correct them. Low-confidence notes are kept for recall but not
 auto-loaded.
 
-**Seeing and editing everything.** Settings → Memory lists every active entry
+### Seeing and editing everything
+
+Settings → Memory lists every active entry
 grouped by category, shows superseded history, and lets you delete or restore.
 It is the single source of truth for "what does the Advisor know about me?"
-
----
 
 ## Sessions and continuity
 
@@ -78,7 +86,9 @@ There's no timer — closing is driven by what you actually do. (A background
 sweep closes any session you abandoned without a clean exit, e.g. a crashed tab,
 so nothing is missed.)
 
-**Resuming.** Reopen an idle or archived chat and send a message, and it becomes
+### Resuming
+
+Reopen an idle or archived chat and send a message, and it becomes
 `active` again. The next time it closes, only the **new** turns are extracted —
 the Advisor reuses the running summary of earlier turns as context rather than
 re-reading the whole transcript. So resuming a chat any number of times never
@@ -110,8 +120,6 @@ Previous 7 days / older), with:
 - Per-row **rename / delete**, an active-session indicator, and a persistent
   *"Advisor is AI and can make mistakes."* disclaimer under the input.
 - On mobile the sidebar collapses to a drawer.
-
----
 
 ## Under the hood
 
@@ -202,7 +210,9 @@ Empty categories are omitted. Per-category token budgets (≈300 profile / 500
 finance_context / 200 response_style / 500 fact, ~1500 total) cap the block;
 beyond that the long tail is reached via `recall_preferences`.
 
-**Confidence floor.** Explicit rows (`confidence` NULL) always inject.
+### Confidence floor
+
+Explicit rows (`confidence` NULL) always inject.
 Auto-`extracted` rows inject only at `confidence ≥ 0.7`; below that they're
 recall-only — saved and searchable, never auto-loaded.
 

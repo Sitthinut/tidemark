@@ -144,7 +144,7 @@ export function ChatScreen({ persona = "advisor", seedPrompt, onPromptConsumed }
   // Set when the server signals it crossed ~80% of the model context budget
   // (header `x-context-summarized`). Earlier turns are summarized in the
   // model's input view; we surface a banner suggesting a fresh chat rather
-  // than condensing silently. See docs/features/memory.md § mid-chat.
+  // than condensing silently. See docs/explanation/memory.md § mid-chat.
   const [contextNotice, setContextNotice] = useState(false);
   // Set when the server rejects a turn because the user hit their daily token
   // budget (header `x-daily-limit`, Phase 6 — 6d). Resets at UTC midnight

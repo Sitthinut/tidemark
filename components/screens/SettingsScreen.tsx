@@ -28,7 +28,7 @@ interface MemoryResponse {
   recentlyForgotten: PreferenceRow[];
 }
 
-// Order from docs/features/memory.md § Architecture > Categories.
+// Order from docs/explanation/memory.md § Architecture > Categories.
 const CATEGORY_ORDER: PreferenceRow["category"][] = [
   "profile",
   "finance_context",

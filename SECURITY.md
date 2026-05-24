@@ -38,7 +38,7 @@ Macrotide follows the **secure-by-default** principle, one of [Saltzer & Schroed
 - **Multi-tenant isolation at the DB level.** There is no row-level security — multi-user mode trusts the auth layer to attribute writes correctly. Audit before deploying to >10 users; consider a dedicated DB per user instead.
 - **Side-channel attacks on auth.** No timing-attack hardening on top of better-auth's internals. We don't add a custom layer.
 - **Supply-chain attacks on dependencies.** No SBOM, no signed releases yet. `npm audit` is your friend; Dependabot is on the roadmap.
-- **Brute-force on `/api/auth/*`.** Not yet rate-limited at the app layer — `AUTH_RATE_LIMIT` is defined in `lib/api/rate-limit.ts` but not wired up. Front the app with Caddy/Cloudflare/fail2ban for now; planned cleanup in Phase 2.6.
+- **Sophisticated brute-force on `/api/auth/*`.** Auth POSTs are now IP-rate-limited at the app layer (`AUTH_RATE_LIMIT`, 10/min/IP, wired in `app/api/auth/[...all]/route.ts`), but the limiter is in-memory and per-instance. Still front the app with Caddy/Cloudflare/fail2ban for distributed attacks and multi-instance deploys.
 
 ## Reporting near-misses
 

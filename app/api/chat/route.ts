@@ -94,7 +94,7 @@ Always read before you reference numbers or propose plan changes, and never inve
 
 // Compose the system prompt with the user's active-preference block prepended.
 // The block is computed once per request (frozen-for-the-session discipline;
-// see docs/features/memory.md § Why "frozen for the session") so the prefix
+// see docs/explanation/memory.md § Why "frozen for the session") so the prefix
 // cache hits across turns of the same session. Writes from memory tools
 // during this request land in the DB but do not retroactively change this
 // snapshot — they take effect on the next chat.
@@ -276,7 +276,7 @@ export async function POST(req: Request) {
       const provider = resolveTierProvider(tier);
       if (!provider.ready || !provider.model) {
         return stubResponse(
-          `AI chat isn't configured yet (${provider.label}). Set OPENROUTER_API_KEY in .env.local — see AUTH.md.`,
+          `AI chat isn't configured yet (${provider.label}). Set OPENROUTER_API_KEY in .env.local — see docs/reference/auth-and-providers.md.`,
           finalThreadId,
         );
       }
@@ -310,7 +310,7 @@ export async function POST(req: Request) {
     const provider = resolveOwnerProvider();
     if (!provider.ready || !provider.model) {
       return stubResponse(
-        `AI chat isn't configured yet (${provider.label}). Set OPENROUTER_API_KEY in .env.local — see AUTH.md.`,
+        `AI chat isn't configured yet (${provider.label}). Set OPENROUTER_API_KEY in .env.local — see docs/reference/auth-and-providers.md.`,
         finalThreadId,
       );
     }

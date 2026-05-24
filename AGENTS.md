@@ -1,8 +1,13 @@
-# AGENTS.md — macrotide
+# AGENTS.md
 
-Project-specific rules for AI agents working on this repo. The workspace-level
-[../AGENTS.md](../AGENTS.md) covers cross-cutting rules (git, secrets, browser
-tools); this file covers things that aren't obvious from reading the code.
+Project-specific rules for AI agents working on this repo.
+
+> **Documentation map.** This file is your rules + canonical env-var table. For
+> everything else — architecture, the data model, the API surface, feature deep
+> dives — the guide lives in [docs/](./docs), with [llms.txt](./llms.txt) as a
+> machine-readable entry point. Load progressively: `llms.txt` →
+> [docs/README.md](./docs/README.md) → the one section you need. When you change
+> behaviour, update the doc that owns that fact in the same commit (see below).
 
 ## Source of truth for "what's done"
 
@@ -12,8 +17,8 @@ or change anything user-visible:
 1. Update [ROADMAP.md](./ROADMAP.md) — the "Phases at a glance" table and the
    relevant phase section. Use the commit hash, not "yesterday".
 2. Update [README.md](./README.md) "Status" block if it mentions the area.
-3. If you change env vars, update [DEPLOY.md](./DEPLOY.md),
-   [AUTH.md](./AUTH.md), and `.env.example` together. Never one without the
+3. If you change env vars, update [deploy.md](./docs/how-to/deploy.md),
+   [auth-and-providers.md](./docs/reference/auth-and-providers.md), and `.env.example` together. Never one without the
    others.
 4. If you change auth / security posture, update [SECURITY.md](./SECURITY.md).
 
@@ -40,7 +45,7 @@ ask the user — never invent one and commit it as if it were real.
 ## DB routing — read this before touching any route handler
 
 Every API route that calls `getDb()` (which most queries do via
-[lib/db/queries/](./lib/db/queries/)) MUST run inside `withDb`. The wrapper
+[lib/db/queries/](./lib/db/queries)) MUST run inside `withDb`. The wrapper
 reads the `macrotide_demo` cookie and opens an AsyncLocalStorage scope that
 routes the query to the right SQLite (owner singleton vs per-session demo
 in-memory).
@@ -80,7 +85,7 @@ return withDb(async (ctx) => {
 ### Server-only
 
 `better-sqlite3` is Node-native. Queries live in
-[lib/db/queries/](./lib/db/queries/), gated by `import "server-only"`. Never
+[lib/db/queries/](./lib/db/queries), gated by `import "server-only"`. Never
 import a query from a client component — go through a fetcher.
 
 ## Demo mode
@@ -99,10 +104,10 @@ that takes a write.
 
 | Kind | Lives in | Notes |
 | --- | --- | --- |
-| Editorial content (markets explainers, learn articles, AI personalities) | [lib/static/](./lib/static/) | Code-resident strings; ship in the bundle. |
+| Editorial content (markets explainers, learn articles, AI personalities) | [lib/static/](./lib/static) | Code-resident strings; ship in the bundle. |
 | Placeholder analytics until Phase 6 (ANALYSIS scores etc.) | [lib/static/analysis.ts](./lib/static/analysis.ts) | Returns nulls / "—". Components render placeholder text. |
-| Pure helpers (plan-edit, plan-parser) | [lib/portfolio/](./lib/portfolio/) | Unit-testable; no DB / network. |
-| User state (buckets, holdings, plan, journal, chat) | [lib/db/queries/](./lib/db/queries/) via `withDb` | Owner vs demo routed automatically. |
+| Pure helpers (plan-edit, plan-parser) | [lib/portfolio/](./lib/portfolio) | Unit-testable; no DB / network. |
+| User state (buckets, holdings, plan, journal, chat) | [lib/db/queries/](./lib/db/queries) via `withDb` | Owner vs demo routed automatically. |
 | Mock seeds | [lib/mock/seed.ts](./lib/mock/seed.ts), [lib/mock/demo-seed.ts](./lib/mock/demo-seed.ts) | NEVER imported by components. |
 | Shared types | [lib/static/types.ts](./lib/static/types.ts) | Domain types shared across components and adapters. |
 
@@ -156,11 +161,11 @@ different sources without a schema change.
 ## Environment variables
 
 **Canonical reference** for every `process.env.*` the app reads. Operator
-setup hints live in [.env.example](./.env.example) (a thin template); the
+setup hints live in [.env.example](.env.example) (a thin template); the
 authoritative behavior, defaults, and code locations are below. Keep this
 table in sync when adding/renaming vars and also update
-[.env.example](./.env.example), [AUTH.md](./AUTH.md), and
-[DEPLOY.md](./DEPLOY.md) where they reference specifics.
+[.env.example](.env.example), [auth-and-providers.md](./docs/reference/auth-and-providers.md), and
+[deploy.md](./docs/how-to/deploy.md) where they reference specifics.
 
 ### AI / model selection
 
@@ -179,7 +184,7 @@ table in sync when adding/renaming vars and also update
 | Var | Default | Read by | Notes |
 | --- | --- | --- | --- |
 | `AUTH_SECRET` | dev fallback (`macrotide-dev-secret-change-me`) | [lib/auth/index.ts](./lib/auth/index.ts) | REQUIRED in production (boot throws if `NODE_ENV=production` and unset). |
-| `AUTH_DISABLED` | unset | [middleware](./middleware.ts), [app/(auth)/login/](./app/(auth)/login/) | Set to `1` to skip the login gate on trusted local dev only. |
+| `AUTH_DISABLED` | unset | [app/page.tsx](./app/page.tsx), [lib/auth/session.ts](./lib/auth/session.ts), [lib/api/with-db.ts](./lib/api/with-db.ts) | Set to `1` to skip the login gate on trusted local dev only. |
 | `AUTH_RP_NAME` | `Macrotide` | [lib/auth/index.ts](./lib/auth/index.ts) | Passkey relying-party display name. |
 | `AUTH_RP_ID` | inferred from `PUBLIC_APP_URL` | [lib/auth/index.ts](./lib/auth/index.ts) | Override only if you understand WebAuthn `rpID` rules. |
 | `PUBLIC_APP_URL` | `http://localhost:3000` (implicit) | [lib/auth/index.ts](./lib/auth/index.ts), [lib/portfolio/ocr.ts](./lib/portfolio/ocr.ts) | Canonical URL. Used for OpenRouter `HTTP-Referer` and WebAuthn origin. Changing this in prod breaks existing passkeys. |
@@ -299,7 +304,7 @@ copy. Reuse it verbatim anywhere else a similar disclaimer is needed.
 Not dismissible; not a banner.
 
 **Memory / chat-session vocabulary** (full table in
-[docs/features/memory.md](./docs/features/memory.md)):
+[docs/explanation/memory.md](./docs/explanation/memory.md)):
 
 | Concept | Use | Don't use |
 |---|---|---|

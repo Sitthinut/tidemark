@@ -1,10 +1,12 @@
 # Authentication & AI providers
 
-## Design principle: secure by default
-
-Macrotide follows the **secure-by-default** principle ([Saltzer & Schroeder, 1975](https://en.wikipedia.org/wiki/Saltzer_and_Schroeder%27s_design_principles)): the safe configuration is the default, and you opt *in* to riskier behavior. A fresh clone with no env vars set will refuse to render the dashboard until you register a passkey. Misconfiguration fails closed, not open.
-
-See [SECURITY.md](SECURITY.md) for the full threat model.
+Reference for how sign-in and the AI provider work. For the *why*
+(secure-by-default), see [design principles](../explanation/design-principles.md)
+and [SECURITY.md](../../SECURITY.md). To *set it up*, see
+[local development](../how-to/local-development.md) (dev) and
+[deploy](../how-to/deploy.md) (shared deployment). Every env var named below is
+defined in the canonical
+[AGENTS.md § Environment variables](../../AGENTS.md#environment-variables) table.
 
 ## Defaults
 
@@ -14,39 +16,18 @@ See [SECURITY.md](SECURITY.md) for the full threat model.
 | Demo button | (always on) | available | Anyone can spin up an isolated in-memory SQLite, capped at 10 chat turns. |
 | AI key | `OPENROUTER_API_KEY` | unset | Without it, chat returns a friendly stub message; rest of the app works. |
 
----
+## Sign-in methods
 
-## Local dev (sole user on loopback)
-
-```sh
-cp .env.example .env.local
-# In .env.local, uncomment to skip the passkey step in dev:
-AUTH_DISABLED=1
-# Optional — for real chat:
-OPENROUTER_API_KEY=sk-or-...
-
-npm run dev
-```
-
-Visit <http://localhost:3000>. No login, your data lives in `data/app.db`. **Only set `AUTH_DISABLED` when you control the bind address** — `next dev` listens on `0.0.0.0` by default, so anyone on your LAN can hit it. Use `next dev -H 127.0.0.1` if you're on an untrusted network.
-
-## Shared deployment (default — secure)
-
-```sh
-cp .env.example .env.local
-# In .env.local:
-AUTH_SECRET=$(openssl rand -base64 32)
-PUBLIC_APP_URL=https://macrotide.example.com
-OPENROUTER_API_KEY=sk-or-...
-```
-
-No `AUTH_DISABLED` line — auth is already required by default.
-
-On first visit the `/login` screen shows three buttons:
+On first visit the `/login` screen shows three options:
 
 - **Sign in with passkey** — for returning users whose device has a passkey.
 - **Create account** — collects name + email + registers a passkey on this device.
-- **Try the demo** — spins an in-memory SQLite, capped chat.
+- **Try the demo** — spins an isolated, in-memory SQLite with capped chat.
+
+Optional **Google / GitHub** sign-in and a **Turnstile** signup gate are
+env-gated — hidden unless their keys are set (see the env-var table). The local
+and shared setup commands live in [local development](../how-to/local-development.md)
+and [deploy](../how-to/deploy.md).
 
 ### How passkeys work here
 
@@ -54,8 +35,6 @@ On first visit the `/login` screen shows three buttons:
 - One device = one passkey. To use the app on phone + laptop, register from each device (or sync via iCloud Keychain / 1Password).
 - Stored as a `passkey` row in the same SQLite as app data, with `publicKey` + `credentialID` + `counter` columns. We never see the private key — it lives on the device's secure enclave.
 - Email/password is intentionally disabled to keep the auth surface small. Magic-link email is on the roadmap (needs a transactional sender).
-
----
 
 ## AI provider — OpenRouter
 
@@ -93,13 +72,9 @@ The `openrouter/free` router picks among ~25 free-tier models per request (volun
 DEMO_AI_MODELS=meta-llama/llama-3.3-70b-instruct:free
 ```
 
----
-
 ## Rate limiting
 
 `/api/chat` is IP-rate-limited at **20 requests/minute** regardless of demo / owner status. Demo sessions add a **10-turn-per-session** cap on top. Both are in-memory; replace with Upstash/Redis when you go multi-instance.
-
----
 
 ## Where the data lives
 
