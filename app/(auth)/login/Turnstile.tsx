@@ -47,7 +47,7 @@ function loadScript(): Promise<void> {
 }
 
 /**
- * Cloudflare Turnstile widget (Phase 6 — 6c). Renders the challenge and hands
+ * Cloudflare Turnstile widget. Renders the challenge and hands
  * the verification token back via `onToken`; `onToken(null)` on expiry/error.
  * Only mounted when the server reports Turnstile is configured.
  */

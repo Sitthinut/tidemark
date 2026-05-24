@@ -1,4 +1,4 @@
-// Full-text search over chat threads + messages (Phase 5b #4).
+// Full-text search over chat threads + messages.
 //
 // Messages are indexed by the `chat_messages_fts` external-content FTS5 table
 // created in migration 0005; thread titles are short so we match them with a
@@ -46,7 +46,7 @@ function hydrateThread(r: ThreadRowRaw): ChatThread {
 /**
  * SQL fragment + bind params scoping `chat_threads` (aliased `t`) to the
  * current user, plus shared NULL-owned rows. In single-owner mode (no user in
- * context) this collapses to `t.user_id IS NULL` — the pre-Phase-6 row set.
+ * context) this collapses to `t.user_id IS NULL` — the single-owner row set.
  */
 function ownerScope(): { clause: string; params: string[] } {
   const userId = getUserId();

@@ -1,4 +1,4 @@
-// RSS / Atom news aggregator. v1 (Phase 3c) feeds a long-term-investing news
+// RSS / Atom news aggregator. Feeds a long-term-investing news
 // block on MarketsScreen — editorial sources only, no headline-driven noise.
 //
 // Cache: 30-min in-memory TTL keyed by the feed list. No DB table.
@@ -41,7 +41,7 @@ export interface NewsAggregateResult {
 // Considered and dropped across both rounds: Bogleheads, Morningstar,
 // MarketWatch (top + marketpulse + realtime), Bloomberg markets, Reuters,
 // Yahoo Finance, CNBC, Bank of Thailand (no public RSS). See ROADMAP
-// Phase 3c for rationale.
+// for the source-selection rationale.
 export const NEWS_FEEDS: readonly NewsFeedDef[] = [
   {
     id: "ofdollarsanddata",

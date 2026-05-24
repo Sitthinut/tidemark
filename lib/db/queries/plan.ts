@@ -5,11 +5,11 @@ import { ownedBy, ownerId } from "./scope";
 
 export type Plan = typeof plans.$inferSelect;
 
-// Single-row table for v1 (one plan, id=1). NOTE (Phase 6): `user_id` is now
-// scoped on reads, but the fixed `id=1` PK still means there is one plan row
-// shared across users. In single-owner mode (userId null) this is unchanged
-// from pre-Phase-6. A true per-user plan needs a (user_id)-keyed redesign —
-// deferred to a later wave; out of scope for the 6a data-layer foundation.
+// Single-row table for v1 (one plan, id=1). NOTE: `user_id` is now scoped on
+// reads, but the fixed `id=1` PK still means there is one plan row shared
+// across users. In single-owner mode (userId null) this is unchanged. A true
+// per-user plan needs a (user_id)-keyed redesign — deferred; out of scope for
+// the current data-layer foundation.
 const PLAN_ID = 1;
 
 export function getPlan(): Plan | undefined {

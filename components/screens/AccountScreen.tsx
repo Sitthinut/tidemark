@@ -469,8 +469,8 @@ export function AccountScreen({ onBack }: AccountScreenProps) {
             lineHeight: 1.5,
           }}
         >
-          OAuth sign-in (Google / GitHub) is configured in Phase 6b. Passkey is the primary method
-          today.
+          OAuth sign-in (Google / GitHub) can be enabled by the operator. Passkey is the primary
+          method today.
         </div>
       </div>
 

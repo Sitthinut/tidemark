@@ -1,6 +1,6 @@
 // Reseeds the database from the mock data layer. Wipes existing rows first
-// so reruns are deterministic. Phase 4 will replace this with real import
-// flows; for now it's how the prototype data lands in the real DB.
+// so reruns are deterministic. Real portfolio import will eventually replace
+// this; for now it's how the prototype data lands in the real DB.
 
 import { existsSync, mkdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";

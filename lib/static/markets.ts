@@ -2,8 +2,8 @@ import type { Markets } from "@/lib/static/types";
 
 // Editorial market chrome (indices fallback + daily digest).
 // Live SET / global indices come from /api/market/indices; the indices array
-// below is the offline fallback. News ships live via /api/market/news
-// (Phase 3c) — the `news` field stays empty here.
+// below is the offline fallback. News ships live via /api/market/news —
+// the `news` field stays empty here.
 export const MARKETS: Markets = {
   indices: [
     { sym: "SET", name: "SET Index", val: 1428.42, d: -0.62 },

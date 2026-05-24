@@ -170,7 +170,7 @@ export function ConnectScreen({ onConnect }: ConnectScreenProps) {
               marginBottom: 24,
             }}
           >
-            Phase 1 supports Thai mutual fund platforms.
+            Currently supports Thai mutual fund platforms.
           </p>
 
           <div className="stack-sm">

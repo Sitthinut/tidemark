@@ -105,7 +105,7 @@ that takes a write.
 | Kind | Lives in | Notes |
 | --- | --- | --- |
 | Editorial content (markets explainers, learn articles, AI personalities) | [lib/static/](./lib/static) | Code-resident strings; ship in the bundle. |
-| Placeholder analytics until Phase 6 (ANALYSIS scores etc.) | [lib/static/analysis.ts](./lib/static/analysis.ts) | Returns nulls / "—". Components render placeholder text. |
+| Placeholder analytics (ANALYSIS scores etc.) until AI tool-calls land | [lib/static/analysis.ts](./lib/static/analysis.ts) | Returns nulls / "—". Components render placeholder text. |
 | Pure helpers (plan-edit, plan-parser) | [lib/portfolio/](./lib/portfolio) | Unit-testable; no DB / network. |
 | User state (buckets, holdings, plan, journal, chat) | [lib/db/queries/](./lib/db/queries) via `withDb` | Owner vs demo routed automatically. |
 | Mock seeds | [lib/mock/seed.ts](./lib/mock/seed.ts), [lib/mock/demo-seed.ts](./lib/mock/demo-seed.ts) | NEVER imported by components. |
@@ -192,7 +192,7 @@ table in sync when adding/renaming vars and also update
 | `PUBLIC_APP_URL` | `http://localhost:3000` (implicit) | [lib/auth/index.ts](./lib/auth/index.ts), [lib/portfolio/ocr.ts](./lib/portfolio/ocr.ts) | Canonical URL. Used for OpenRouter `HTTP-Referer` and WebAuthn origin. Changing this in prod breaks existing passkeys. |
 | `OWNER_EMAIL` | unset (script no-op) | [scripts/backfill-owner.ts](./scripts/backfill-owner.ts) | **Script-only, not read at runtime.** Names the account that inherits `NULL`-owned rows and gets the `trusted` tier. Run `npx tsx --env-file=.env.local scripts/backfill-owner.ts` once after migrating. Idempotent. |
 
-### Auth — OAuth + signup gate (Phase 6 — 6b/6c)
+### Auth — OAuth + signup gate
 
 All optional and **env-gated**: with none set, the app runs passkey-only and the
 `/login` page hides the OAuth buttons / Turnstile widget. A provider counts as
@@ -217,7 +217,7 @@ Rate limiting: `/api/auth/*` POSTs are IP-limited via `AUTH_RATE_LIMIT`
 | --- | --- | --- | --- |
 | `DB_PATH` | `data/app.db` | [lib/db/client.ts](./lib/db/client.ts), [lib/mock/seed.ts](./lib/mock/seed.ts) | SQLite file path (relative paths resolved from CWD). Parent dir auto-created. |
 
-### Quotas + tier gating (Phase 6 — 6d)
+### Quotas + tier gating
 
 Per-user metering only applies to **authenticated** requests. Single-owner /
 `AUTH_DISABLED` mode (`getUserId()` === null) is never metered, and demo
@@ -280,8 +280,8 @@ GitHub Actions CI runs typecheck + lint + build. The build step needs
   migrations.
 - Migrations run on boot in [lib/db/client.ts](./lib/db/client.ts). Demo DBs
   replay the same migrations on session create.
-- Adding a column to an app table? Remember Phase 6 will eventually add
-  `user_id` to most of them; design with that in mind.
+- Adding a column to an app table? Most app tables already carry a nullable
+  `user_id` (migration `0007`) for per-user scoping; design new ones the same way.
 
 ## Product copy & vocabulary
 

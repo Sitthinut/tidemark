@@ -13,7 +13,7 @@ light/dark/system themes. Persistence (SQLite + Drizzle), chat with reload-
 survives history (Vercel AI SDK via OpenRouter), plan-edit Apply that round-
 trips through the API, passkey auth, and live market indices are all wired
 up. Thai mutual-fund NAVs, market news, and a transparent portfolio-health
-score are now wired; multi-user mode (Phase 6) is code-complete and awaiting
+score are now wired; multi-user mode is code-complete and awaiting
 operator setup. See [ROADMAP.md](./ROADMAP.md) for the full status board, and
 **[docs/](./docs)** for the user + developer guide.
 
@@ -127,8 +127,8 @@ Full docs live in **[docs/](./docs)**, organised with the
 ## Contributing
 
 This is an experimental personal project. PRs and issues are welcome but
-expect slow / opinionated responses. If you're picking up Phase 1, 2, 3, or
-4 from the roadmap, open an issue first so we don't duplicate work.
+expect slow / opinionated responses. If you're picking up something from the
+roadmap, open an issue first so we don't duplicate work.
 
 ## License
 

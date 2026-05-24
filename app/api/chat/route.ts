@@ -183,7 +183,7 @@ export async function POST(req: Request) {
       reactivateThread(threadId);
     }
 
-    // Phase 6: the authenticated user id (or `null` in single-owner / pre-auth
+    // The authenticated user id (or `null` in single-owner / pre-auth
     // mode, plumbed by withDb → AsyncLocalStorage). Demo sessions stay `null`:
     // they share the owner's null-namespace inside their isolated per-session
     // in-memory DB (their own preference set without threading session ids
@@ -193,7 +193,7 @@ export async function POST(req: Request) {
     const system = composeSystemPrompt(userId);
     const modelMessages = await toModelMessagesAsync(body.messages);
 
-    // Context-budget compression (Phase 5b #3). When the assembled input crosses
+    // Context-budget compression. When the assembled input crosses
     // ~80% of the model's context budget, fold older turns into a summary and
     // send that in their place — the model INPUT VIEW shrinks, the persisted
     // history is untouched. Best-effort: a summarizer failure leaves the input
@@ -250,11 +250,11 @@ export async function POST(req: Request) {
 
     const finalThreadId = threadId;
 
-    // ── Authenticated multi-user path (Phase 6 — 6d) ───────────────────────
+    // ── Authenticated multi-user path ──────────────────────────────────────
     // A real user means tier gating + a daily token cap. Single-owner /
     // pre-auth mode (userId === null) falls through to the legacy owner path
     // below, which is uncapped and uses the owner model chain — identical to
-    // pre-Phase-6 behavior.
+    // single-owner behavior.
     if (userId !== null) {
       const tier = getTier(userId);
 

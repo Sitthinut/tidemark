@@ -1,4 +1,4 @@
-// AI SDK tool surface for Phase 2 advisor actions. These give the chat model
+// AI SDK tool surface for advisor actions. These give the chat model
 // READ access to the user's real portfolio / plan / journal, a WRITE for
 // journal notes, and a single PROPOSE tool for plan edits that does NOT mutate
 // — it emits a proposal the ChatScreen renders as a PlanProposalCard, applied
@@ -7,7 +7,7 @@
 // tools (lib/memory/tools.ts).
 //
 // All reads/writes resolve through the request's DB context, so they're
-// automatically per-user scoped (6a ownedBy/ownerId) — never bypass it.
+// automatically per-user scoped (ownedBy/ownerId) — never bypass it.
 import { tool } from "ai";
 import { z } from "zod";
 import { listBuckets } from "../db/queries/buckets";
@@ -23,7 +23,7 @@ import { parsePlan } from "../portfolio/plan-parser";
 const JOURNAL_KINDS = ["note", "decision", "question", "reading"] as const;
 
 export interface AdvisorToolOptions {
-  // Pre-Phase-6 single owner: null. Phase 6 threads the authenticated user id.
+  // Single owner: null. Multi-user threads the authenticated user id.
   // Carried for symmetry with createMemoryTools; the query layer reads the
   // owner from the DB context (ownedBy), so we don't pass it down explicitly.
   userId: string | null;

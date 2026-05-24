@@ -4,7 +4,7 @@ import { index, integer, primaryKey, real, sqliteTable, text } from "drizzle-orm
 // Investment buckets — a "bucket" is a portfolio slice (Core, SSF, experiment, etc.).
 export const buckets = sqliteTable("buckets", {
   id: text("id").primaryKey(),
-  // Owner (Phase 6). NULL pre-backfill / single-owner mode → visible to everyone.
+  // Owner. NULL pre-backfill / single-owner mode → visible to everyone.
   userId: text("user_id").references(() => user.id),
   name: text("name").notNull(),
   typeLabel: text("type_label"),
@@ -58,7 +58,7 @@ export const holdings = sqliteTable(
   (table) => [index("idx_holdings_bucket").on(table.bucketId)],
 );
 
-// Latest NAV + perf cache (Phase 3 writes this).
+// Latest NAV + perf cache (written by the live-market refresh).
 export const fundQuotes = sqliteTable("fund_quotes", {
   ticker: text("ticker").primaryKey(),
   nav: real("nav").notNull(),
@@ -68,7 +68,7 @@ export const fundQuotes = sqliteTable("fund_quotes", {
   updatedAt: text("updated_at").notNull(),
 });
 
-// Daily NAV history (Phase 3 writes this).
+// Daily NAV history (written by the live-market refresh).
 export const navHistory = sqliteTable(
   "nav_history",
   {
@@ -85,7 +85,7 @@ export const navHistory = sqliteTable(
 // Investment plan — single-row table in v1.
 export const plans = sqliteTable("plans", {
   id: integer("id").primaryKey(),
-  // Owner (Phase 6). NULL pre-backfill / single-owner mode → visible to everyone.
+  // Owner. NULL pre-backfill / single-owner mode → visible to everyone.
   userId: text("user_id").references(() => user.id),
   markdown: text("markdown").notNull(),
   selectedModelId: text("selected_model_id"),
@@ -97,7 +97,7 @@ export const journalEntries = sqliteTable(
   "journal_entries",
   {
     id: integer("id").primaryKey({ autoIncrement: true }),
-    // Owner (Phase 6). NULL pre-backfill / single-owner mode → visible to everyone.
+    // Owner. NULL pre-backfill / single-owner mode → visible to everyone.
     userId: text("user_id").references(() => user.id),
     kind: text("kind").notNull(),
     title: text("title"),
@@ -120,7 +120,7 @@ export type ModelMixSlice = { label: string; pct: number; ticker?: string; color
 
 export const modelPortfolios = sqliteTable("model_portfolios", {
   id: text("id").primaryKey(),
-  // Owner (Phase 6). NULL = built-in / single-owner → visible to everyone.
+  // Owner. NULL = built-in / single-owner → visible to everyone.
   userId: text("user_id").references(() => user.id),
   name: text("name").notNull(),
   tagline: text("tagline"),
@@ -140,10 +140,10 @@ export const modelPortfolios = sqliteTable("model_portfolios", {
 // Chat threads — one per conversation.
 export const chatThreads = sqliteTable("chat_threads", {
   id: text("id").primaryKey(),
-  // Owner (Phase 6). NULL pre-backfill / single-owner mode → visible to everyone.
+  // Owner. NULL pre-backfill / single-owner mode → visible to everyone.
   userId: text("user_id").references(() => user.id),
   title: text("title"),
-  // Lifecycle state machine (Phase 5b): 'active' on creation; the idle-archive
+  // Lifecycle state machine: 'active' on creation; the idle-archive
   // job promotes 'active' → 'idle' → 'archived' based on `updatedAt` age.
   // Deletion is orthogonal — it stays on `deletedAt` (30-day trash), so there
   // is deliberately no 'deleted' status here.
@@ -154,7 +154,7 @@ export const chatThreads = sqliteTable("chat_threads", {
   updatedAt: text("updated_at").notNull(),
   // Set when the archive job moves a thread to 'archived'; ISO-8601 UTC.
   archivedAt: text("archived_at"),
-  // Watermark for incremental backstop extraction (Phase 5b): the highest
+  // Watermark for incremental backstop extraction: the highest
   // chat_messages.id already folded into a `source='extracted'` pass. On
   // session close we extract only turns newer than this (plus the running
   // summary as context), then advance it — so re-extracting a resumed chat
@@ -190,13 +190,14 @@ export const settings = sqliteTable("settings", {
 
 // Long-term memory. Bitemporal: updates add a new row + supersede; rows are
 // never mutated in place. `valid_until IS NULL` is the active set.
-// `source = 'extracted'` is reserved for Phase 5b auto-extraction; 5a writes
-// only `'user_tool'` / `'advisor_tool'`. See docs/explanation/memory.md.
+// `source = 'extracted'` is reserved for session-close auto-extraction; the
+// memory tools write only `'user_tool'` / `'advisor_tool'`. See
+// docs/explanation/memory.md.
 export const userPreferences = sqliteTable(
   "user_preferences",
   {
     id: integer("id").primaryKey({ autoIncrement: true }),
-    userId: text("user_id"), // NULL pre-Phase-6; FK after
+    userId: text("user_id"), // NULL in single-owner mode; FK after
     category: text("category", {
       enum: ["profile", "finance_context", "response_style", "fact"],
     }).notNull(),
@@ -292,7 +293,7 @@ export const passkey = sqliteTable("passkey", {
 });
 
 // ───────────────────────────────────────────────────────────────────────────
-// Phase 6 multi-user: per-user token accounting + tier gating.
+// Multi-user: per-user token accounting + tier gating.
 // ───────────────────────────────────────────────────────────────────────────
 
 // Per-user daily token usage. One row per (user, UTC date).

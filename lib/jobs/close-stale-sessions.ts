@@ -25,7 +25,7 @@ export interface CloseStaleResult {
 export interface CloseStaleOptions {
   /** Idle threshold in days; `active` threads idle longer than this are closed. */
   idleDays?: number;
-  /** Pre-Phase-6 single owner: null. Threaded into extraction provenance. */
+  /** Single owner: null. Threaded into extraction provenance. */
   userId?: string | null;
   /** Close dependency — injectable for tests. Defaults to the real closeSession. */
   close?: (threadId: string) => Promise<CloseSessionResult>;

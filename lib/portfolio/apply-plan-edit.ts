@@ -5,7 +5,7 @@
 // This is the trusted side of the propose→card→accept loop: the advisor's
 // `propose_plan_edit` tool only EMITS a proposal (it never mutates), and the
 // mutation happens here, only when the user clicks Accept on the card. Reads
-// and writes resolve through the request's DB context (6a ownedBy/ownerId), so
+// and writes resolve through the request's DB context (ownedBy/ownerId), so
 // it's automatically per-user scoped — never bypass that.
 import { getPlan, type Plan, upsertPlan } from "@/lib/db/queries/plan";
 import { applyPlanEdit } from "./plan-edit";

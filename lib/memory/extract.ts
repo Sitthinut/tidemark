@@ -1,4 +1,4 @@
-// Session-close fact extraction (Phase 5b).
+// Session-close fact extraction.
 //
 // On session close (lib/memory/session-close.ts — primary, real-time; or the
 // lib/jobs/close-stale-sessions.ts backstop) this summarizes the new turns and

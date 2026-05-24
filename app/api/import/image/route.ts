@@ -85,7 +85,7 @@ export async function POST(req: Request) {
 
   // Pure transcription endpoint: returns { text } only. Turning text into
   // structured holdings rows is deferred to the user (paste into Manual tab)
-  // or to the future advisor-assist flow (Phase 6 — see ROADMAP).
+  // or to the future advisor-assist flow (see ROADMAP).
   //
   // Wrapped in withDb for consistency with sibling routes even though this
   // endpoint does NOT touch the DB.

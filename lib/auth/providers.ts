@@ -1,7 +1,7 @@
 import "server-only";
 
 /**
- * OAuth provider availability (Phase 6 — 6b).
+ * OAuth provider availability.
  *
  * A provider is "enabled" only when BOTH its client id and secret env vars are
  * present. This keeps the app bootable with zero OAuth config (dev / passkey-

@@ -1,4 +1,4 @@
-// Per-user token accounting + tier gating (Phase 6 — 6d).
+// Per-user token accounting + tier gating.
 //
 // Two tables back this module (migration 0007):
 //   - `account_tier`  one row per user; `tier` ∈ {'free','trusted'}. A user

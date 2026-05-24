@@ -62,10 +62,10 @@ export const auth = betterAuth({
   // then immediately calls authClient.passkey.addPasskey() — passkey remains
   // the only real login method because no password sign-in UI is exposed and
   // the signup flow sets a random unknowable password.
-  // This is a pre-Phase-6 stopgap: OAuth (Phase 6 / 6b) will replace this
-  // bootstrapping mechanism, at which point emailAndPassword can be disabled.
+  // This is a bootstrap stopgap: OAuth will eventually replace this
+  // mechanism, at which point emailAndPassword can be disabled.
   emailAndPassword: { enabled: true },
-  // OAuth (Phase 6 — 6b). Only providers whose env vars are fully present are
+  // OAuth. Only providers whose env vars are fully present are
   // registered; with none set this is `{}` and the app runs passkey-only.
   // GOOGLE_CLIENT_ID/SECRET, GITHUB_CLIENT_ID/SECRET enable the respective btns.
   socialProviders: socialProvidersConfig(),
@@ -77,7 +77,7 @@ export const auth = betterAuth({
       trustedProviders: trustedLinkProviders(),
     },
   },
-  // New-account provisioning (Phase 6 — 6c): default tier='free' + one seeded
+  // New-account provisioning: default tier='free' + one seeded
   // bucket. Runs in an owner DB context stamped with the new user's id so the
   // bucket's user_id is set correctly (the auth route is not withDb-wrapped, so
   // there is no ambient request context here).

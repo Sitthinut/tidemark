@@ -12,12 +12,12 @@ export const DEMO_COOKIE = "macrotide_demo";
  * cookie, we route reads/writes to that session's in-memory SQLite. Otherwise
  * the owner singleton is used.
  *
- * For non-demo requests we also resolve the authenticated user id (Phase 6) and
+ * For non-demo requests we also resolve the authenticated user id and
  * carry it on the context so per-user query scoping (lib/db/queries/scope.ts)
  * applies. `userId` is null in single-owner / `AUTH_DISABLED` mode, which makes
  * scoping collapse to the legacy `user_id IS NULL` set — behavior is identical
- * to pre-Phase-6. Demo sessions are already isolated, so they stay `userId:
- * null`.
+ * to single-owner mode. Demo sessions are already isolated, so they stay
+ * `userId: null`.
  *
  * Wrap every route handler that touches `getDb()` with this so demo sessions
  * remain isolated.
