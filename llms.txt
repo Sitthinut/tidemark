@@ -1,0 +1,40 @@
+# Macrotide
+
+> An open-source AI investment companion for Thai index investors. A single
+> Next.js process (App Router, React 19, TypeScript) over a local SQLite file
+> (Drizzle ORM), with passkey auth (better-auth), an "Advisor" chat built on the
+> Vercel AI SDK via OpenRouter, and live market data. Personal-use experiment;
+> not investment advice.
+
+This file is a curated map for LLMs and coding agents. Read the linked docs
+on demand rather than crawling the whole repo. Paths are relative to the repo
+root so they resolve when browsing the source.
+
+## Start here
+
+- [Root README](./README.md): What the project is, tech stack, quick start.
+- [AGENTS.md](./AGENTS.md): Rules for AI agents — DB routing, secrets, the canonical environment-variable table, product copy. Read before changing code.
+- [Docs index](./docs/README.md): The L0/L1 map of all documentation, organised by Diátaxis mode.
+
+## Documentation
+
+- [Getting started](./docs/tutorials/getting-started.md): Guided first run — clone, demo, first holding, first chat.
+- [Local development](./docs/how-to/local-development.md): Env setup, npm scripts, seeding, tests, pre-commit hook.
+- [Import a portfolio](./docs/how-to/import-a-portfolio.md): CSV, image OCR, and manual entry.
+- [Architecture](./docs/explanation/architecture.md): System shape, request lifecycle, demo/owner DB routing, where everything lives.
+- [Design principles](./docs/explanation/design-principles.md): Secure-by-default, the "Advisor" voice, single-owner → multi-user.
+- [Memory feature](./docs/explanation/memory.md): Long-term memory + chat-session lifecycle design.
+
+## Reference
+
+- [Configuration](./docs/reference/configuration.md): How config works; links to the canonical env-var table in AGENTS.md.
+- [API routes](./docs/reference/api.md): Catalogue of app/api/* route handlers.
+- [Data model](./docs/reference/data-model.md): SQLite tables and relationships.
+- [Auth & AI providers](./docs/reference/auth-and-providers.md): Passkeys, OpenRouter, rate limiting.
+- [Deploy](./docs/how-to/deploy.md): Single-VM (Caddy/systemd) and tailnet deployment.
+- [Security policy](./SECURITY.md): Threat model and vulnerability reporting.
+
+## Optional
+
+- [Roadmap](./ROADMAP.md): Full phase-by-phase status board (large; the authoritative status doc).
+- [Memory-systems research](./docs/explanation/research/memory-systems.md): Prior-art survey behind the memory design.

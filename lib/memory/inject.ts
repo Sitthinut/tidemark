@@ -1,6 +1,6 @@
 // Renders the active-preference block injected into the chat system prompt.
 //
-// Discipline (see docs/features/memory.md § Injection format,
+// Discipline (see docs/explanation/memory.md § Injection format,
 // § Why "frozen for the session"):
 //   - Loaded once at session start; never mutates mid-stream.
 //   - Deterministic ordering: categories alphabetical, rows by id ascending.
@@ -10,7 +10,7 @@ import { createHash } from "node:crypto";
 import { listActive, type Preference, type PreferenceCategory } from "../db/queries/preferences";
 
 // Headings are user-visible inside the system prompt; keep them in sync with
-// the example in docs/features/memory.md § Injection format. Category enum
+// the example in docs/explanation/memory.md § Injection format. Category enum
 // order here is also the alphabetical render order.
 const CATEGORY_HEADINGS: Record<PreferenceCategory, string> = {
   fact: "Facts",
@@ -36,7 +36,7 @@ export const MEMORY_BLOCK_HEADING = "## Your stored preferences";
 // injected. Auto-extracted rows (source 'extracted') are injected only at
 // confidence >= this threshold; below it they are recall-only (surfaced by
 // the recall tool / Memory page, never auto-loaded). Threshold per
-// docs/features/memory.md § open question (extracted < ~0.7 → recall-only).
+// docs/explanation/memory.md § open question (extracted < ~0.7 → recall-only).
 export const INJECT_CONFIDENCE_THRESHOLD = 0.7;
 
 // A preference is injectable unless it's a low-confidence auto-extracted row.

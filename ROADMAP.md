@@ -4,7 +4,7 @@
 > into real software. Last updated 2026-05-23 (Phase 5 shipped — 5a memory
 > foundation + chat sidebar; 5b session lifecycle + real-time session-close extraction +
 > chat summarization + recall/FTS. Memory design in
-> [docs/features/memory.md](./docs/features/memory.md)).
+> [docs/explanation/memory.md](./docs/explanation/memory.md)).
 
 ---
 
@@ -124,8 +124,9 @@ docs/
   (`features/memory/overview.md`, `features/memory/schema.md`).
 - Research notes (library surveys, etc.) stay local — they age fast and
   dilute the durable record.
-- Existing top-level docs (`AUTH.md`, `DEPLOY.md`, `SECURITY.md`) will
-  migrate into `docs/` during a later polish pass; not blocking.
+- Guide docs live under `docs/` (Diátaxis: `tutorials/`, `how-to/`,
+  `reference/`, `explanation/`). Only convention-mandated files stay at the
+  repo root: `README.md`, `AGENTS.md`, `SECURITY.md`, `ROADMAP.md`, `LICENSE`.
 - Publishing layer (GitBook / MkDocs) gets added once we have ~5+ feature
   docs worth surfacing publicly. Until then, GitHub's markdown renderer
   is fine.
@@ -295,7 +296,7 @@ exposes the gaps that need polish; polishing on mock data risks rework.
 | 3b | Fund NAVs + news + NAV history | ✅ Shipped 2026-05-23 | Provider + v2 endpoints + holdings.quote_source + PortfolioScreen wiring all live; demo NAV history pre-seeded (chart fills instantly); RSS news shipped as Phase 3c |
 | 4 | Portfolio import | 🟡 Partial | CSV done; Image OCR shipped 2026-05-23 as pure transcription (qianfan:free → paid fallback); manual-entry ticker autocomplete shipped 2026-05-22 (`lib/data/known-funds.ts` seed + holdings dedupe); advisor-assist OCR (auto-handoff to chat with `propose_holding` cards) gated on Phase 6 |
 | 4b | Broker scraping / API integration | Out of scope | Revisit only if a clear personal need emerges |
-| 5 | Long-term memory + chat archival | ✅ 5a+5b shipped 2026-05-23 | **5a** — bitemporal `user_preferences` + 4-tool surface + always-on injection + Settings → Memory + chat sidebar (auto-title, 30-day trash, in-panel list) + empty-turn fail-safe. **5b** — session lifecycle (active/idle/archived); **real-time session-close extraction** (incremental, watermark `extracted_through_id` migration `0006`, running-summary context; `closeStaleSessions` backstop) writing `source='extracted'` + confidence floor; chat summarization at ~80% context (migration-free `role='summary'`, banner); `recall_preferences` tool + sidebar FTS. **5c+** (vector recall / offline consolidation) future. Guide: [docs/features/memory.md](./docs/features/memory.md); prior-art: [docs/research/memory-systems.md](./docs/research/memory-systems.md) |
+| 5 | Long-term memory + chat archival | ✅ 5a+5b shipped 2026-05-23 | **5a** — bitemporal `user_preferences` + 4-tool surface + always-on injection + Settings → Memory + chat sidebar (auto-title, 30-day trash, in-panel list) + empty-turn fail-safe. **5b** — session lifecycle (active/idle/archived); **real-time session-close extraction** (incremental, watermark `extracted_through_id` migration `0006`, running-summary context; `closeStaleSessions` backstop) writing `source='extracted'` + confidence floor; chat summarization at ~80% context (migration-free `role='summary'`, banner); `recall_preferences` tool + sidebar FTS. **5c+** (vector recall / offline consolidation) future. Guide: [docs/explanation/memory.md](./docs/explanation/memory.md); prior-art: [docs/explanation/research/memory-systems.md](./docs/explanation/research/memory-systems.md) |
 | 5b | Scheduled jobs / digests / notifications | Pending | Depends on 3b and 6 |
 | 6 | Multi-user (Google + GitHub SSO + passkey, public-discoverable) | 🟡 Code shipped 2026-05-23, needs setup | **6a–6e code merged** (autonomous run): per-user data layer (migration `0007`, `ownedBy` scoping, `requireUser`), OAuth env-gated, Turnstile signup gate, quotas/tier gating, account page. 🧪 user must: apply `0007` + `OWNER_EMAIL` backfill, set `AUTH_SECRET`, register OAuth apps, get Turnstile keys, browser-verify. See autonomous-run § |
 
@@ -697,7 +698,7 @@ isolated demo without creating an account.
     in-memory SQLite seeded with mock data.
 - **Secure-by-default gate** — the dashboard refuses to render without a
   session. Opt out with `AUTH_DISABLED=1` in `.env.local` for trusted
-  loopback dev only. See [AUTH.md](./AUTH.md), [SECURITY.md](./SECURITY.md).
+  loopback dev only. See [auth-and-providers.md](./docs/reference/auth-and-providers.md), [SECURITY.md](./SECURITY.md).
 - **Per-session demo DBs** — each demo session keys an isolated in-memory
   SQLite seeded fresh from `lib/mock/demo-seed.ts`. `AsyncLocalStorage`
   routes every query (owner vs demo) to the correct DB. Idle TTL 1h, hard
@@ -1017,7 +1018,7 @@ SEC_API_KEY=...   # Thai SEC Open API subscription key (Ocp-Apim-Subscription-Ke
   natural gaps. Charts must render gracefully.
 - **Subscription key lifecycle**: keys can be rotated. Surface a clear
   401-handling error path; document key-rotation steps in
-  [DEPLOY.md](./DEPLOY.md).
+  [deploy.md](./docs/how-to/deploy.md).
 - **Cost discipline**: rate limit is generous but cache-first remains the
   default. Never bypass the cache from a hot path.
 
@@ -1264,7 +1265,7 @@ once you have a clear personal need.
      | **Don't persist what you don't need** | ✅ Image bytes never touch disk or DB — buffer goes browser → POST → OpenRouter → GC. Browser `imgPreview` clears on sheet close. | Hold this invariant. If we ever add server-side image caching (for retry / advisor re-processing / audit), require TTL ≤ 24h and per-user encryption. |
      | **TTL anything that does persist** | ⚠️ OCR text in `chat_messages` persists indefinitely (manual thread-delete only). | Phase 6 `holding_proposals.source_text` should auto-purge when status moves to `accepted` / `rejected` + 7 days (audit window). Optional: thread-level TTL setting per user. |
      | **User-controlled deletion** | ✅ Thread-delete cascades to messages. | Phase 6: deleting a user's account cascades to ALL their data (holdings, plans, chat, proposals). Right-to-be-forgotten if EU users ever apply. |
-     | **Encryption at rest** | ⚠️ SQLite is plaintext on disk. Disk-level encryption (LUKS / cloud-provider EBS encryption) is the operator's responsibility. | Document in [DEPLOY.md](./DEPLOY.md) for any prod deploy. Application-level encryption of sensitive columns (units, avg_cost) is overkill at personal scale. |
+     | **Encryption at rest** | ⚠️ SQLite is plaintext on disk. Disk-level encryption (LUKS / cloud-provider EBS encryption) is the operator's responsibility. | Document in [deploy.md](./docs/how-to/deploy.md) for any prod deploy. Application-level encryption of sensitive columns (units, avg_cost) is overkill at personal scale. |
      | **Encryption in transit** | ✅ HTTPS via Caddy in prod; localhost in dev. OpenRouter is TLS by default. | Hold. |
      | **No-train upstream providers** | ⚠️ Default `qianfan:free` is operator-verified no-train per OpenRouter (2026-05-23); re-verify before any public deploy. | Phase 6 acceptance: `OCR_MODEL` must be a paid no-train model in prod. |
      | **Audit metadata, not content** | ✅ Server logs `POST /api/import/image 200 in 8.7s` — no image bytes, no transcription text. | Hold. If we add structured audit logs later, log call counts / model / timestamp only — never the OCR text. |
@@ -1389,7 +1390,7 @@ real persistence + lifecycle.
 
 > **Status:** 5a shipped 2026-05-23; 5b pending. Full design (schema, tool
 > surface, injection format, session lifecycle, sidebar UX, design
-> rationale) lives in **[docs/features/memory.md](./docs/features/memory.md)**.
+> rationale) lives in **[docs/explanation/memory.md](./docs/explanation/memory.md)**.
 > This roadmap entry covers phase scope, sequencing, and acceptance.
 
 **Design summary** (see the feature doc for the full reasoning):
@@ -1449,7 +1450,7 @@ and sidebar FTS search.
 > abandoned sessions. The archive *digest* idea was dropped (resume context is
 > handled by the mid-chat summarizer). Substeps 6–7 below describe the original
 > landings; this note supersedes their trigger/wiring. Full current behavior:
-> [docs/features/memory.md](./docs/features/memory.md).
+> [docs/explanation/memory.md](./docs/explanation/memory.md).
 
 User-facing copy: **"Archived"** (state), **"Summarizing…"** (in-progress),
 **"notes"** (extracted preferences), **"Advisor"** (never "agent" or "bot"
@@ -1912,9 +1913,9 @@ the PR, not a follow-up.
 | --- | --- |
 | A phase's deliverables | [ROADMAP.md](./ROADMAP.md) — phase section + "Phases at a glance" table |
 | Status / what works today | [README.md](./README.md) Status block + project-layout block if files moved |
-| Env vars | [.env.example](./.env.example) + [AUTH.md](./AUTH.md) + [DEPLOY.md](./DEPLOY.md) + [AGENTS.md](./AGENTS.md) (env var table) |
-| Auth or security posture | [SECURITY.md](./SECURITY.md) + [AUTH.md](./AUTH.md) |
-| Deployment topology / systemd / Caddy | [DEPLOY.md](./DEPLOY.md) |
+| Env vars | [.env.example](.env.example) + [auth-and-providers.md](./docs/reference/auth-and-providers.md) + [deploy.md](./docs/how-to/deploy.md) + [AGENTS.md](./AGENTS.md) (env var table) |
+| Auth or security posture | [SECURITY.md](./SECURITY.md) + [auth-and-providers.md](./docs/reference/auth-and-providers.md) |
+| Deployment topology / systemd / Caddy | [deploy.md](./docs/how-to/deploy.md) |
 | Conventions an AI agent must know | [AGENTS.md](./AGENTS.md) |
 | External data source (provider, API) | [ROADMAP.md](./ROADMAP.md) Phase 3/3b "Sources" + [SECURITY.md](./SECURITY.md) if it touches auth |
 
@@ -1939,7 +1940,7 @@ that was edited.
    pre-seed; RSS news still pending). Phase 4 OCR shipped as pure
    transcription. Env-var docs centralized in AGENTS.md. **Phase 5a
    shipped** (long-term memory foundation + chat sidebar;
-   [docs/features/memory.md](./docs/features/memory.md)); **Phase 5b
+   [docs/explanation/memory.md](./docs/explanation/memory.md)); **Phase 5b
    pending**. Phase 6 untouched.
 3. **What to pick next** (ranked by impact/effort, ready to dispatch as
    parallel worktree agents — see "Working in parallel" below):

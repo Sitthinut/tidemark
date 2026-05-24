@@ -5,7 +5,7 @@
 // MODEL'S INPUT VIEW ONLY — with a single compact summary message, keeping the
 // most recent turns verbatim. The persisted chat history is never touched:
 // summarization compresses what we send to the model, it does not delete rows.
-// See docs/features/memory.md § Chat session lifecycle (mid-chat) + the 5b
+// See docs/explanation/memory.md § Chat session lifecycle (mid-chat) + the 5b
 // acceptance criteria ("a 50-turn session runs at <2× the input-token cost of
 // a 5-turn one; summarization never drops messages from the DB").
 //

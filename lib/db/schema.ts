@@ -191,7 +191,7 @@ export const settings = sqliteTable("settings", {
 // Long-term memory. Bitemporal: updates add a new row + supersede; rows are
 // never mutated in place. `valid_until IS NULL` is the active set.
 // `source = 'extracted'` is reserved for Phase 5b auto-extraction; 5a writes
-// only `'user_tool'` / `'advisor_tool'`. See docs/features/memory.md.
+// only `'user_tool'` / `'advisor_tool'`. See docs/explanation/memory.md.
 export const userPreferences = sqliteTable(
   "user_preferences",
   {

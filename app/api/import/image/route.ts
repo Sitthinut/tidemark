@@ -46,7 +46,8 @@ export async function POST(req: Request) {
     return NextResponse.json(
       {
         error: "ocr_unavailable",
-        message: "Image OCR requires OPENROUTER_API_KEY. Set it in .env.local — see DEPLOY.md.",
+        message:
+          "Image OCR requires OPENROUTER_API_KEY. Set it in .env.local — see docs/reference/auth-and-providers.md.",
       },
       { status: 503 },
     );

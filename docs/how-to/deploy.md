@@ -4,8 +4,6 @@ Macrotide is a single Next.js process talking to a local SQLite file. There's no
 
 If you just want to share the app with people on the public internet, follow the "Single VM" path. If you'd rather keep it on your laptop and tunnel via Tailscale, jump to "Tailnet only".
 
----
-
 ## Single VM (Ubuntu + Caddy)
 
 Tested on Oracle Cloud Ampere (ARM64, 4 vCPU, 24 GB RAM, Ubuntu 24.04) — but any VPS with ≥1 GB RAM and a public IP works.
@@ -51,7 +49,7 @@ chmod 600 .env.local
 #   AUTH_SECRET=$(openssl rand -base64 32)
 #   OPENROUTER_API_KEY=sk-or-...
 #   AI_MODELS=openrouter/auto   (comma-separated fallback chain; ids from openrouter.ai/models)
-#   # Optional: separate key for demo chat — see AUTH.md.
+#   # Optional: separate key for demo chat — see reference/auth-and-providers.md.
 #   # DEMO_OPENROUTER_API_KEY=sk-or-...
 # Auth is required by default; set AUTH_DISABLED=1 only for trusted local dev.
 ```
@@ -139,8 +137,6 @@ sudo ufw --force enable
 # Click "Try the demo" from incognito → verify isolated session
 ```
 
----
-
 ## Tailnet only (Tailscale Serve)
 
 Don't want to deal with public DNS / certs? Bind Macrotide to loopback and serve over Tailscale:
@@ -152,8 +148,6 @@ sudo tailscale serve --bg --https=443 http://127.0.0.1:3000
 
 The app is now reachable at `https://<machine>.<tailnet>.ts.net` from any tailnet peer. Visitors need Tailscale installed. WebAuthn passkeys still work — `.ts.net` is a valid public origin.
 
----
-
 ## Backups
 
 `data/app.db` is the single source of truth (everything else is config + code).
@@ -164,8 +158,6 @@ Macrotide's runtime calls `backupIfStale()` on boot, snapshotting to `data/backu
 # /etc/cron.d/macrotide-backup
 0 4 * * * ubuntu rclone copy /opt/macrotide/data/backups/ b2:macrotide-backups/ --transfers 4
 ```
-
----
 
 ## Updating
 
@@ -181,8 +173,6 @@ Migrations run automatically on next request (the singleton DB init applies pend
 
 For a zero-downtime swap behind Caddy: blue/green with two systemd instances on different ports + `caddy reload` between them. Probably overkill until you have actual users.
 
----
-
 ## Troubleshooting
 
 | Symptom | Likely cause |
@@ -193,8 +183,6 @@ For a zero-downtime swap behind Caddy: blue/green with two systemd instances on 
 | Demo dashboard renders but data is wrong | Cookie collision across browsers. Clear `macrotide_demo` cookie, hit `/login` again. |
 | `/api/chat` returns 429 immediately | IP rate limit. The default is 20 RPM; see `lib/api/rate-limit.ts`. |
 | Build fails with "out of memory" | ARM64 VMs with <2 GB RAM need a swapfile. `sudo fallocate -l 2G /swapfile && sudo mkswap /swapfile && sudo swapon /swapfile`. |
-
----
 
 ## Hardening checklist
 

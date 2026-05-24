@@ -1,27 +1,29 @@
 # Agent memory systems — a prior-art survey
 
-A developer-facing survey of how production and open-source agent-memory
-systems were storing, writing, and retrieving long-term memory as of May 2026.
-It exists to record the prior art that informed macrotide's own memory design,
-and to keep that reasoning legible after the fact.
+*Researched May 2026*
 
-> **Provenance.** This document reconstructs research carried out by a team of
-> scout agents in May 2026. The Hermes section comes from `WebFetch` against the
-> official Nous Research docs; OpenHuman from reading the
-> `tinyhumansai/openhuman` repo directly via the GitHub API (file paths are
-> cited inline); OpenClaw from the `coolmanns/openclaw-memory-architecture`
-> README plus web search; the rest from a 2025–2026 web survey. Where a claim
-> couldn't be verified beyond a single secondary source, that is flagged. Source
-> URLs are linked per-section.
+## Summary
 
----
+How production and open-source agent-memory systems (Hermes, OpenHuman, mem0,
+Letta, OpenViking, …) store, write, and retrieve long-term memory. The recurring
+splits: auto-extraction vs model-driven writes, and hidden embeddings vs
+user-visible entries.
+
+## Decision
+
+Macrotide builds its own visible, real-time, *bitemporal* memory rather than
+adopting a framework — full rationale in [memory.md](../memory.md).
 
 ## Hermes Agent (Nous Research)
 
-**What it is.** A local-first agent harness with a deliberately minimal,
+### What it is
+
+A local-first agent harness with a deliberately minimal,
 file-based core memory and a pluggable provider system for anything heavier.
 
-**Memory model.** Two plain Markdown files in `~/.hermes/memories/`:
+### Memory model
+
+Two plain Markdown files in `~/.hermes/memories/`:
 
 - `MEMORY.md` — the agent's own operational notes (environment facts, project
   conventions, learned techniques, a completed-task diary). Cap: **2,200 chars
@@ -68,7 +70,9 @@ captured turns to prevent recursive memory pollution"* (avoiding the loop where
 re-injected memories get re-saved), and ByteRover does *"pre-compression
 extraction"* that "saves insights before context compression discards them."
 
-**The one idea worth stealing.** Frozen-snapshot injection as a *cache
+### The one idea worth stealing
+
+Frozen-snapshot injection as a *cache
 discipline* — accept that in-session writes won't be visible until next session,
 in exchange for a stable prompt prefix. Plus the two-tier split: a tiny
 always-injected core, with FTS recall for everything else.
@@ -77,16 +81,18 @@ Sources:
 [memory](https://hermes-agent.nousresearch.com/docs/user-guide/features/memory),
 [memory-providers](https://hermes-agent.nousresearch.com/docs/user-guide/features/memory-providers).
 
----
-
 ## OpenHuman (tinyhumansai/openhuman)
 
-**What it is.** A Rust desktop "personal AI" with one of the more serious
+### What it is
+
+A Rust desktop "personal AI" with one of the more serious
 open-source memory implementations surveyed. Its centrepiece is the **Memory
 Tree** — a deterministic hierarchical-summary pipeline, explicitly *not* a vector
 database with a thin memory wrapper.
 
-**Memory model.** Local-first SQLite at `<workspace>/memory_tree/chunks.db` (the
+### Memory model
+
+Local-first SQLite at `<workspace>/memory_tree/chunks.db` (the
 unified store carries **FTS5 keyword search + vector embeddings + graph
 relations** in one), plus an Obsidian-compatible Markdown vault at
 `<workspace>/wiki/`. The backend contract is the `Memory` trait
@@ -148,7 +154,9 @@ path and proxies every trait call (`store`, `recall`, `get`, `list`, `forget`,
 [agentmemory](https://github.com/rohitg00/agentmemory) REST daemon — so Claude
 Code, Cursor, Codex, OpenCode, and OpenHuman can share one durable store.
 
-**The one idea worth stealing.** A deterministic, LLM-free hot path with all the
+### The one idea worth stealing
+
+A deterministic, LLM-free hot path with all the
 expensive work deferred to background workers — cost stays bounded under burst —
 plus hierarchical summary trees that give you both compression and navigation
 rather than a flat similarity search.
@@ -156,11 +164,11 @@ rather than a flat similarity search.
 Source: [github.com/tinyhumansai/openhuman](https://github.com/tinyhumansai/openhuman)
 (repo read directly; file paths cited inline).
 
----
-
 ## OpenClaw — 12-layer memory architecture
 
-**What it is.** OpenClaw is an open-source agent framework (Peter Steinberger,
+### What it is
+
+OpenClaw is an open-source agent framework (Peter Steinberger,
 Nov 2025; originally "Clawdbot"), runnable over Discord/Telegram/web and
 powerable by Claude models. The core framework ships **no** memory layer; the
 de-facto community standard is the
@@ -168,7 +176,9 @@ de-facto community standard is the
 spec — a 12-layer system whose tagline is that *"agents reconstruct themselves
 from files on every boot."*
 
-**Memory model.** Its thesis is explicitly **anti-monoculture** — *"Don't rely on
+### Memory model
+
+Its thesis is explicitly **anti-monoculture** — *"Don't rely on
 one approach. Use the right memory layer for each type of recall"*:
 
 - "What's my daughter's birthday?" → **structured lookup** (instant, exact)
@@ -200,7 +210,9 @@ The README is candid about the limitation it's fighting: the underlying memory
 is *"fundamentally session-scoped and compaction-dependent — when context
 windows fill up, information gets summarized, which means detail loss."*
 
-**The one idea worth stealing.** A single retrieval tool that fans out to
+### The one idea worth stealing
+
+A single retrieval tool that fans out to
 several specialised stores in parallel and merges — the model gets one ergonomic
 entry point while each backend does what it's best at (exact KV vs FTS vs
 vector).
@@ -210,14 +222,16 @@ Sources:
 [robotpaper.ai reference architecture](https://robotpaper.ai/reference-architecture-openclaw-early-feb-2026-edition-opus-4-6/),
 [VentureBeat on OpenClaw + Anthropic](https://venturebeat.com/technology/anthropic-reinstates-openclaw-and-third-party-agent-usage-on-claude-subscriptions-with-a-catch).
 
----
-
 ## mem0
 
-**What it is.** A managed/open-source memory *layer* that bolts onto an existing
+### What it is
+
+A managed/open-source memory *layer* that bolts onto an existing
 chat loop; the write path is invisible and retrieval is the API.
 
-**Memory model.** Three storage layers — **vector + graph + key-value** — under a
+### Memory model
+
+Three storage layers — **vector + graph + key-value** — under a
 four-(plus-one)-scope model: `user_id`, `agent_id`, `run_id`, `app_id`, plus
 optional `org_id`. Memories are **extracted automatically from conversation in
 the background** and stored against whichever scopes apply.
@@ -232,24 +246,28 @@ at 0.71s median latency with ~1,800 tokens/conversation; the graph variant
 `mem0g` reaches 68.4% at 1.09s. Its 2026 algorithm's biggest gains were on
 temporal queries (+29.6 pts) and multi-hop reasoning (+23.1 pts).
 
-**The one idea worth stealing.** A lean, opinionated managed layer where the
+### The one idea worth stealing
+
+A lean, opinionated managed layer where the
 write is fully out-of-band — the application never thinks about *when* to save,
-only *how* to query. (The flip side, and a reason macrotide went the other way:
+only *how* to query. (The flip side, and a reason Macrotide went the other way:
 the write is **opaque** to the end user.)
 
 Sources:
 [mem0.ai/blog/state-of-ai-agent-memory-2026](https://mem0.ai/blog/state-of-ai-agent-memory-2026),
 [github.com/mem0ai/mem0](https://github.com/mem0ai/mem0).
 
----
-
 ## Letta / MemGPT
 
-**What it is.** The OS-as-metaphor system from the MemGPT paper, productised as
+### What it is
+
+The OS-as-metaphor system from the MemGPT paper, productised as
 Letta. Memory is a hierarchy modelled on a computer's memory pyramid, and the
 agent **manages its own memory** through tool calls.
 
-**Memory model.** Three tiers:
+### Memory model
+
+Three tiers:
 
 - **Core memory** — always in-context, like RAM. The agent edits it live.
 - **Recall memory** — searchable conversation history kept outside context,
@@ -265,7 +283,9 @@ agent-as-memory-manager** pattern: the model is an active participant in
 curating its own memory, not a passive recipient of injected context. The write
 is on the **hot path**, decided by the model.
 
-**The one idea worth stealing.** The clean RAM / disk-cache / cold-storage
+### The one idea worth stealing
+
+The clean RAM / disk-cache / cold-storage
 mental model, and treating "what's in context right now" as something the model
 edits with first-class tools rather than something the framework decides behind
 its back.
@@ -273,15 +293,17 @@ its back.
 Sources:
 [docs.letta.com — MemGPT agents (legacy)](https://docs.letta.com/guides/legacy/memgpt_agents_legacy).
 
----
-
 ## Zep (Graphiti)
 
-**What it is.** A production temporal-knowledge-graph memory layer; its open
+### What it is
+
+A production temporal-knowledge-graph memory layer; its open
 engine is **Graphiti** (Apache 2.0). Its distinguishing bet is **bitemporality**
 — it knows not just *what* a fact is, but *when it was true*.
 
-**Memory model.** A temporal graph of entities, relationships, and facts, where
+### Memory model
+
+A temporal graph of entities, relationships, and facts, where
 **each fact carries a validity window**. Graphiti records **dual timelines**:
 
 - `t_valid` — when the fact became true, and
@@ -301,7 +323,9 @@ Reported benchmark (secondary source): Zep scored **63.8% on LongMemEval** vs
 mem0's 49.0%, and the vendor emphasises SOC 2 / HIPAA / GDPR compliance as a
 selling point into finance/medical/legal.
 
-**The one idea worth stealing.** Bitemporal validity — never mutate a fact in
+### The one idea worth stealing
+
+Bitemporal validity — never mutate a fact in
 place; supersede it with a validity window so the system can reconstruct what was
 true at any point. This is the single most directly relevant idea to a finance
 app, where "your risk tolerance as of March" matters.
@@ -311,15 +335,17 @@ Sources:
 [github.com/getzep/graphiti](https://github.com/getzep/graphiti),
 [getzep.com](https://www.getzep.com/).
 
----
-
 ## LangMem
 
-**What it is.** LangChain's memory framework — not a store but a set of
+### What it is
+
+LangChain's memory framework — not a store but a set of
 **storage-agnostic primitives** you compose with any backend (with native
 LangGraph integration available).
 
-**Memory model.** Two core primitive families, both implemented as pure functions
+### Memory model
+
+Two core primitive families, both implemented as pure functions
 over memory state (no side effects, no DB dependency):
 
 - **Memory Managers** — extract new memories, update/remove outdated ones, and
@@ -332,7 +358,9 @@ agent-accessible **hot-path tools** for recording/searching memories *during* a
 conversation, **and** a **background memory manager** that extracts, consolidates,
 and enriches *outside* the conversation flow.
 
-**The one idea worth stealing.** "Don't pick a database, pick primitives" — keep
+### The one idea worth stealing
+
+"Don't pick a database, pick primitives" — keep
 the extract/update/consolidate logic as pure functions decoupled from storage,
 so the same logic runs on the hot path or in a background job.
 
@@ -341,15 +369,17 @@ Sources:
 [LangMem SDK launch](https://www.langchain.com/blog/langmem-sdk-launch),
 [github.com/langchain-ai/langmem](https://github.com/langchain-ai/langmem).
 
----
-
 ## Cognee
 
-**What it is.** A graph-vector hybrid built around an ingestion **pipeline** that
+### What it is
+
+A graph-vector hybrid built around an ingestion **pipeline** that
 turns raw documents into a knowledge graph layered with embeddings, with an
 offline self-improvement pass.
 
-**Memory model.** A six-stage pipeline: classify documents → check permissions →
+### Memory model
+
+A six-stage pipeline: classify documents → check permissions →
 extract chunks → use an LLM to extract entities and relationships → generate
 summaries → embed everything into the vector store and commit edges to the graph
 (graph and vector index built in parallel, producing subject-relation-object
@@ -363,7 +393,9 @@ adapts from feedback, not static storage. Cognee ships **14 retrieval modes**,
 from classic RAG to chain-of-thought graph traversal, and runs locally on
 SQLite (relational) + LanceDB (vector) + Kuzu (graph) with no external services.
 
-**The one idea worth stealing.** `memify` — an explicit offline consolidation
+### The one idea worth stealing
+
+`memify` — an explicit offline consolidation
 step that reweights and prunes the memory graph by usage, rather than letting it
 grow monotonically.
 
@@ -371,15 +403,17 @@ Sources:
 [cognee.ai — how Cognee builds AI memory](https://www.cognee.ai/blog/fundamentals/how-cognee-builds-ai-memory),
 [best AI agent memory systems 2026 (vectorize.io)](https://vectorize.io/articles/best-ai-agent-memory-systems).
 
----
-
 ## Anthropic memory tool
 
-**What it is.** A built-in tool for Claude (Managed Agents, public beta as of
+### What it is
+
+A built-in tool for Claude (Managed Agents, public beta as of
 2026) that gives agents a persistent **filesystem** of memory across sessions —
 the simplest possible store, with the intelligence kept in the agent loop.
 
-**Memory model.** Memories are **files on a filesystem** (a memory directory,
+### Memory model
+
+Memories are **files on a filesystem** (a memory directory,
 typically Markdown). Claude can **create, read, update, and delete** files via
 the tool, and they persist between sessions; developers can export, edit, and
 manage them via API or in the Console. Writes are agent-driven (a CRUD tool
@@ -394,7 +428,9 @@ A May 2026 addition called **"dreaming"** has the agent review past sessions
 **offline** to find patterns and self-improve (reported via secondary sources;
 treat specifics as preliminary).
 
-**The one idea worth stealing.** Boring files + an offline consolidation pass:
+### The one idea worth stealing
+
+Boring files + an offline consolidation pass:
 the store is as simple as it can be (CRUD over files), the cleverness lives in
 the agent loop and a periodic offline review — and "keep memory lean" is an
 explicit, enforced design value.
@@ -403,8 +439,6 @@ Sources:
 [Memory tool — Claude API docs](https://platform.claude.com/docs/en/agents-and-tools/tool-use/memory-tool),
 [Anthropic — advanced tool use](https://www.anthropic.com/engineering/advanced-tool-use),
 [9to5Mac on the May 2026 updates](https://9to5mac.com/2026/05/07/anthropic-updates-claude-managed-agents-with-three-new-features/).
-
----
 
 ## OpenViking (context note)
 
@@ -424,8 +458,6 @@ Sources:
 [github.com/volcengine/OpenViking](https://github.com/volcengine/OpenViking),
 [OpenViking explained (Medium)](https://medium.com/@techlatest.net/openviking-explained-reinventing-memory-and-context-for-ai-agents-c189b2bea61b).
 
----
-
 ## At a glance: the pattern matrix
 
 How the surveyed systems compare across the dimensions that mattered — store,
@@ -439,8 +471,6 @@ write trigger, retrieval, pruning, and user visibility:
 | Pruning | Hard char cap + consolidate | Bucket-seal + daily digest | Tier promotion | Background | Archival overflow | `t_invalid` edges | Manager consolidate/generalize | "Dreaming" | `memify` |
 | User visibility | Files | Obsidian vault | FS readable | Opaque | Inspectable | Mostly opaque | Backend-dependent | Files | Mixed |
 
----
-
 ## Consensus and the genuine splits
 
 By 2026 a few things had clearly converged across these systems; four were still
@@ -448,7 +478,9 @@ genuinely contested. The matrix above shows the per-system mechanics — this
 section reads the verdicts off it, and the unique findings the columns can't
 carry.
 
-**Where the field had converged:**
+### Where the field had converged
+
+
 
 - **Hybrid stores won.** The vector-vs-graph argument settled in favour of
   "both" — vectors for semantic entry points, a graph for multi-hop relational
@@ -463,7 +495,9 @@ carry.
   Hermes (core files + `session_search`), Letta (core + archival), Anthropic
   (lean memory + external docs), OpenHuman (always-on recall + tree drill-down).
 
-**Where they still split.** Four live tensions — the ones macrotide had to
+### Where they still split
+
+Four live tensions — the ones Macrotide had to
 actively decide; the next section resolves each:
 
 - **Who writes — hot path vs background.** Letta and the Hermes/Anthropic tool
@@ -478,11 +512,9 @@ actively decide; the next section resolves each:
 - **Storage shape** — single `created_at` vs bitemporal validity windows, and a
   single store vs a vector+graph+KV hybrid.
 
----
+## Patterns Macrotide adopted
 
-## Patterns macrotide adopted
-
-macrotide is a single-VM, SQLite, TypeScript personal finance advisor — no
+Macrotide is a single-VM, SQLite, TypeScript personal finance advisor — no
 Python sidecar, no vector service, a small and structured memory surface. That
 constraint set scored the surveyed libraries against a hand-rolled store, then
 resolved each of the four field splits above. It borrows specific ideas rather
@@ -493,7 +525,7 @@ than adopting any one framework wholesale.
 The libraries were scored against those constraints. The verdict was to
 **hand-roll over a single SQLite table** rather than adopt a framework:
 
-| Library | Strength | Fit for macrotide |
+| Library | Strength | Fit for Macrotide |
 | --- | --- | --- |
 | **mem0** | Open-source memory layer that bolts onto existing chat. JS SDK. Vector + relational hybrid. | Strong fallback. Adopt only if the bespoke version starts duplicating significant infrastructure. |
 | **Letta (MemGPT)** | OS-inspired tiered memory (core / archival / recall). Self-editing via tool calls. | Heavier than needed; built for autonomous long-running agents, not a chat advisor. Skip unless the explicit-save model proves insufficient. |
@@ -511,9 +543,9 @@ The libraries were scored against those constraints. The verdict was to
   Only add semantic retrieval / a vector store over `chat_messages` if
   measurement shows it earns its keep.
 
-### The four splits, called for macrotide
+### The four splits, called for Macrotide
 
-| Split | Option A | Option B | Call for macrotide |
+| Split | Option A | Option B | Call for Macrotide |
 |---|---|---|---|
 | Who writes? | Agent tool (Letta/Hermes) | Background extractor (mem0) | **Agent tool.** mem0's invisible writes are slick but un-auditable for finance. |
 | Auto-inject vs tool-recall? | Inject (Hermes/mem0) | Recall tool (Letta) | **Inject** a bounded, frozen snapshot; recall tool added later as the long tail grows. |
@@ -544,5 +576,15 @@ call:
   save tool → the next session knows it. Edits use **substring matching**
   (Hermes's ergonomic touch) rather than requiring exact full text.
 
-> *How* macrotide implements these lives in the
-> [memory feature guide](../features/memory.md).
+> *How* Macrotide implements these lives in the
+> [memory feature guide](../memory.md).
+
+## About this research
+
+This document reconstructs research carried out by a team of scout agents in
+May 2026. The Hermes section comes from `WebFetch` against the official Nous
+Research docs; OpenHuman from reading the `tinyhumansai/openhuman` repo directly
+via the GitHub API (file paths are cited inline); OpenClaw from the
+`coolmanns/openclaw-memory-architecture` README plus web search; the rest from a
+2025–2026 web survey. Where a claim couldn't be verified beyond a single
+secondary source, that is flagged. Source URLs are linked per-section.
