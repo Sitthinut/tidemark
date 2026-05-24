@@ -19,6 +19,7 @@ import { MarketsScreen } from "@/components/screens/MarketsScreen";
 import { ModelPortfoliosScreen } from "@/components/screens/ModelPortfoliosScreen";
 import { PortfolioScreen } from "@/components/screens/PortfolioScreen";
 import { SettingsScreen, type Theme } from "@/components/screens/SettingsScreen";
+import { authClient } from "@/lib/auth/client";
 import { usePortfolioView, useSelectedModelId } from "@/lib/fetchers/legacy";
 import { usePlan } from "@/lib/fetchers/portfolio";
 import { invalidate } from "@/lib/fetchers/swr";
@@ -74,6 +75,20 @@ export function App() {
   const isWide = viewport !== "mobile";
   const isDesktop = viewport === "desktop";
   useScrollHide();
+
+  // Rail identity. A signed-in owner shows their real name/email; demo and
+  // AUTH_DISABLED sessions have no better-auth user, so we fall back to the
+  // generic "Demo user" labels.
+  const accountUser = authClient.useSession().data?.user;
+  const accountName = accountUser?.name?.trim() || "Demo user";
+  const accountSub = accountUser?.email || "Live · Demo Broker";
+  const accountInitials =
+    accountName
+      .split(/\s+/)
+      .map((w) => w[0] ?? "")
+      .join("")
+      .slice(0, 2)
+      .toUpperCase() || "DU";
 
   const [theme, setTheme] = useState<Theme>(() => {
     if (typeof window === "undefined") return "system";
@@ -384,11 +399,11 @@ export function App() {
               onClick={() => setAccountMenuOpen((o) => !o)}
               aria-label="Account"
             >
-              <span className="ra-rail-avatar">DU</span>
+              <span className="ra-rail-avatar">{accountInitials}</span>
               {isDesktop && (
                 <div className="ra-rail-acct-text">
-                  <div className="ra-rail-acct-name">Demo user</div>
-                  <div className="ra-rail-acct-sub">Live · Demo Broker</div>
+                  <div className="ra-rail-acct-name">{accountName}</div>
+                  <div className="ra-rail-acct-sub">{accountSub}</div>
                 </div>
               )}
             </button>
