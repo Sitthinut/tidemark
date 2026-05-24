@@ -1731,6 +1731,17 @@ PRIVACY_URL=/legal/privacy
 
 ### Risk
 
+- **`NULL` user_id is fail-OPEN.** Scoping is `user_id = me OR user_id
+  IS NULL`, so every user sees every `NULL`-owned row. `NULL` is
+  overloaded to mean three things — a shared built-in, legacy
+  pre-backfill data, and *"a code path forgot to stamp the owner"*. The
+  third is a data-leak footgun: a new table, a missed `ownerId()` on an
+  insert, or a query that bypasses `ownedBy()` silently exposes one
+  user's data to everyone, fail-open rather than fail-closed. Harmless
+  while there is a single real account, but **before opening public
+  signup**, switch to default-deny (unowned = invisible) with an
+  explicit `is_shared`/`built_in` flag for the genuinely-public rows, so
+  "shared" and "unowned-by-accident" stop being indistinguishable.
 - **Backfill surprise.** Migration assigns all existing data to
   `OWNER_EMAIL`. If `OWNER_EMAIL` is wrong on first run after the
   migration, the data is attached to the wrong account. Document
@@ -1745,6 +1756,43 @@ PRIVACY_URL=/legal/privacy
 - **OAuth redirect URI drift.** Once `PUBLIC_APP_URL` is locked, never
   change it casually — passkey `rpID` and OAuth callback URIs both
   break. Pin it in production and document loudly.
+
+### Before public launch — multi-tenant hardening
+
+Context: the intended rollout is a **public link** (e.g. on a personal
+site) shared with family/friends. That means *anyone* can reach the
+signup page, so data isolation — not just cost — becomes load-bearing.
+The cost/abuse side is already handled (free-tier model gating + daily
+token cap + Turnstile bot gate + env-gated OAuth). The gaps below are
+about isolation and operability and are **blockers for a public link**:
+
+1. **Fail-closed scoping (blocker).** Switch `ownedBy()` from
+   `user_id = me OR user_id IS NULL` to default-deny: unowned rows are
+   invisible, and genuinely-public rows (the built-in model library)
+   carry an explicit `is_shared`/`built_in = 1` flag instead of relying
+   on `NULL`. Removes the "forgot to stamp the owner → leaks to
+   everyone" footgun. See the fail-open risk above.
+2. **Per-user `plans` (blocker).** `plans` is a single shared row
+   (`id = 1`); `upsertPlan` on a fixed PK means a second user who saves
+   a plan **overwrites the owner's**. Re-key the plan by `user_id`
+   (composite or per-user row) before any second account exists. See
+   [lib/db/queries/plan.ts](./lib/db/queries/plan.ts).
+3. **Owner admin surface (should-do).** Replace manual
+   `UPDATE account_tier …` SQL with a small owner-only page: list users,
+   flip `free`↔`trusted`, optionally disable an account. No new realtime
+   plumbing needed — tier is read per request (`getTier()` in the chat
+   route), so a change applies on the user's **next request**.
+4. **Default posture.** Public signups land on `free` (own isolated
+   data, free models only); the owner promotes known family/friends to
+   `trusted`. New-user provisioning already defaults to `free` — this is
+   mostly the admin UI in (3) plus a clear "your account is pending an
+   upgrade" affordance.
+
+Realtime *collaborative* editing (multiple users editing one record
+live) is explicitly **out of scope** — index investing is single-owner
+and low-frequency; a sharing/roles model (`portfolio_members` with
+owner/editor/viewer) is the ceiling, and only if a concrete shared
+workflow appears (joint household portfolio, advisor↔client view).
 
 ---
 
