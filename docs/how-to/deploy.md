@@ -137,6 +137,22 @@ sudo ufw --force enable
 # Click "Try the demo" from incognito → verify isolated session
 ```
 
+### 8. Promote the owner account
+
+New accounts default to the `free` tier (free-model chain only). After you've signed up and registered a passkey on the live URL — so the account exists — grant *your* account the full model chain:
+
+```sh
+# In .env.local, set the email you signed up with:
+#   OWNER_EMAIL=you@actual-email
+npx -y tsx --env-file=.env.local scripts/backfill-owner.ts
+```
+
+This finds your account by `OWNER_EMAIL`, attaches any pre-existing `NULL`-owned data to it, and sets its tier to `trusted`. It's idempotent — safe to re-run, and a no-op if `OWNER_EMAIL` is unset.
+
+> `tsx` is a devDependency, so a production box built with `npm ci --omit=dev` won't have it locally — the `-y` flag above lets `npx` fetch it on demand. Alternatively run this step from a full checkout (with dev deps) pointed at the same `DB_PATH`.
+
+To promote anyone else (family/friends) to `trusted`, update their tier directly — `UPDATE account_tier SET tier='trusted' WHERE user_id=(SELECT id FROM user WHERE email='…')`. The change applies on their next request (tier is read per request, not cached).
+
 ## Tailnet only (Tailscale Serve)
 
 Don't want to deal with public DNS / certs? Bind Macrotide to loopback and serve over Tailscale:
@@ -199,3 +215,4 @@ Before sharing the URL with anyone:
 - [ ] Off-site backup configured (restic / rclone / borg)
 - [ ] First demo session works from incognito (proves cookie isolation)
 - [ ] Owner data is not visible to a demo session (proves DB context isolation)
+- [ ] Owner account promoted to `trusted` (step 8) — otherwise you're on free-tier models
