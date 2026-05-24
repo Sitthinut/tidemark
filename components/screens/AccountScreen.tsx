@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { aaguidName } from "@/lib/auth/aaguid";
 import { authClient } from "@/lib/auth/client";
 import { useResource } from "@/lib/fetchers/swr";
 
@@ -331,7 +332,8 @@ export function AccountScreen({ onBack }: AccountScreenProps) {
                       fontFamily: "var(--font-mono)",
                     }}
                   >
-                    {pk.deviceType === "multiDevice" ? "Multi-device" : "Single-device"} ·
+                    {aaguidName(pk.aaguid) ??
+                      (pk.deviceType === "multiDevice" ? "Multi-device" : "Single-device")}{" "}
                     Registered {fmtDate(pk.createdAt)}
                   </div>
                 </div>
