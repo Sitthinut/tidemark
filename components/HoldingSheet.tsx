@@ -280,7 +280,7 @@ export function HoldingSheet({
                 list="edit-source-suggestions"
                 value={values.source}
                 onChange={(e) => update({ source: e.target.value })}
-                placeholder="e.g. SCB Easy Invest (optional)"
+                placeholder="Type or pick a source"
               />
               <datalist id="edit-source-suggestions">
                 {sourceOptions.map((s) => (
