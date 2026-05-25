@@ -1,35 +1,11 @@
 import "server-only";
+import { findBenchmark } from "./benchmark-options";
 import { getCachedSeries } from "./cache";
 import type { SeriesRange } from "./providers/types";
 
-/**
- * Selectable benchmarks for the portfolio performance comparison and for the
- * advisor's `read_performance` tool. These are real index series (via the
- * market cache), not the old static placeholders. The SET is first — it's the
- * core "match your index" reference for a Thai investor; goal-based / user-added
- * benchmarks build on this list.
- */
-export interface BenchmarkOption {
-  /** Stable slug used as the selection key + API param. */
-  key: string;
-  /** UI label. */
-  label: string;
-  /** Provider source (matches the quote_source taxonomy). */
-  source: string;
-  /** Provider symbol. */
-  ticker: string;
-}
-
-export const BENCHMARK_OPTIONS: BenchmarkOption[] = [
-  { key: "set", label: "SET", source: "yahoo", ticker: "^SET.BK" },
-  { key: "sp500", label: "S&P 500", source: "yahoo", ticker: "^GSPC" },
-  { key: "nasdaq", label: "Nasdaq", source: "yahoo", ticker: "^IXIC" },
-  { key: "nikkei", label: "Nikkei", source: "yahoo", ticker: "^N225" },
-];
-
-export function findBenchmark(key: string): BenchmarkOption | undefined {
-  return BENCHMARK_OPTIONS.find((b) => b.key === key);
-}
+// Re-export the client-safe catalogue so server callers can keep importing
+// everything benchmark-related from this one module.
+export { BENCHMARK_OPTIONS, type BenchmarkOption, findBenchmark } from "./benchmark-options";
 
 export interface BenchmarkSeriesPoint {
   /** ISO YYYY-MM-DD */
