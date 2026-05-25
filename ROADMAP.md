@@ -1,88 +1,41 @@
 # Roadmap
 
-> **Status:** Active. The forward-looking plan for Macrotide. Shipped history
-> lives in [CHANGELOG.md](./CHANGELOG.md) — this doc is **what's next**, not
-> what's done. Last restructured 2026-05-24 (history split out to the
-> changelog; see [How to read this doc](#how-to-read-this-doc)).
+> **What's next — forward-looking intent only.** What already works is the
+> [README status board](./README.md#status); shipped detail is in
+> [CHANGELOG.md](./CHANGELOG.md). If a line here describes something already true
+> in the running app, it belongs in one of those, not here.
+
+**Vision.** An AI investment companion for Thai index investors — hold your
+mutual-fund holdings, see allocation/fees/NAV trends honestly, and chat with an
+advisor that has structured, read-and-propose access to your portfolio, plan,
+and journal. Personal-use experiment, soft-public for family and friends.
 
 The app is past its static-data prototype stage: persistence, AI chat with
 advisor tool-calls, market data, portfolio import, long-term memory, and the
-multi-user foundation have all shipped (see the [changelog](./CHANGELOG.md)).
-What remains is finishing the public-launch hardening and a short list of
-forward work.
+multi-user foundation have all shipped. What remains is finishing the
+public-launch hardening and a short list of forward work, framed below as
+**Now / Next / Later**.
 
----
+## Out of scope (until a real need appears)
 
-## How to read this doc
+The cheapest way to keep this project focused — what it deliberately does *not*
+do:
 
-- **Roadmap = intent; changelog = history.** If a line describes something
-  already true in the running app, it belongs in [CHANGELOG.md](./CHANGELOG.md),
-  not here. This doc holds goals, open work, design sketches for unbuilt
-  features, locked decisions, and what's explicitly out of scope.
-- **Source of truth for *planned* feature status** is the
-  [Phases at a glance](#phases-at-a-glance) table. Shipped phases collapse to a
-  one-line row that links to the changelog and/or the feature doc under `docs/`.
-- **The implementation-order list in each open phase is a contract.** When you
-  change it, leave a one-line note explaining why.
+- **Open SaaS / billing / self-serve upgrade / admin web UI beyond tier
+  toggling** — public sign-up defaults to free-tier; tier promotion is owner-
+  driven.
+- **Horizontal scaling / multi-region** — single VM, single SQLite writer; the
+  trigger to change is migrating to Turso/Postgres, not layering on SQLite.
+- **Enterprise SSO (SAML/OIDC), org/team accounts, magic-link email,
+  billing/paywall, Apple OAuth** — add any only if a real user needs it.
+- **Realtime collaborative editing** — index investing is single-owner,
+  low-frequency; a sharing/roles model (`portfolio_members` with
+  owner/editor/viewer) is the ceiling, and only if a concrete shared workflow
+  appears.
+- **Mobile-native app / PWA** — desktop / mobile web only.
+- **Aesthetic overhaul** — handled inline, not as a stage of its own.
 
-See [AGENTS.md](./AGENTS.md) for the conventions an agent needs before touching
-code (DB routing, demo mode, env vars, where things live).
-
-## Documentation conventions
-
-The roadmap is the **what's next**; detailed feature designs live under `docs/`
-(Diátaxis: `tutorials/`, `how-to/`, `reference/`, `explanation/`), one file per
-feature, capped ~600 lines before splitting into a folder. Only
-convention-mandated files stay at the repo root: `README.md`, `AGENTS.md`,
-`SECURITY.md`, `ROADMAP.md`, `CHANGELOG.md`, `LICENSE`.
-
-**Update cadence — docs change with the code that touches them, same commit:**
-
-- Ship a behavior change → add a one-line entry under `## [Unreleased]` in
-  [CHANGELOG.md](./CHANGELOG.md), described by capability.
-- Change a phase's planned deliverables → update this file's phase section + the
-  glance table.
-- See [Doc stewardship](#doc-stewardship) for the full "when you change X,
-  update Y" map.
-
-Publishing layer (GitBook / MkDocs) gets added once there are ~5+ feature docs
-worth surfacing publicly; until then GitHub's markdown renderer is fine. When
-that happens, surface the changelog there by rendering `CHANGELOG.md` — don't
-maintain a second copy.
-
----
-
-## Phases at a glance
-
-Shipped rows link to the [changelog](./CHANGELOG.md) for the detail; open rows
-link to their section below.
-
-| # | Phase | Status | Notes |
-| - | --- | --- | --- |
-| 1 | Persistence | ✅ Shipped | SQLite + Drizzle, daily backups. |
-| 2 | AI chat + advisor tool-calls | ✅ Shipped | Streaming, history, tool-calls, plan-edit cards, analysis score. 🧪 live-LLM browser verify outstanding. |
-| 2.5 | Passkey + demo | ✅ Shipped | Single-owner auth + per-session in-memory demo DB. |
-| 2.6 | Chat persistence & cleanup | ✅ Shipped | Chat history persists; plan-edit Apply wired; mock imports migrated out. |
-| 3 / 3b / 3c | Market data | ✅ Shipped | SET/global indices (Yahoo), Thai fund NAVs + history (Thai SEC), RSS news. |
-| 4 | Portfolio import | ✅ Shipped | CSV + manual autocomplete + image OCR, with advisor-assist handoff (transcription → reviewable holding cards). |
-| 4b | Broker scraping / API | 📥 Backlog | TOS/maintenance burden — see [Backlog](#backlog). |
-| 5 | Long-term memory + chat archival | ✅ Shipped | Memory foundation + session lifecycle + real-time extraction + recall/FTS. Guide: [docs/explanation/memory.md](./docs/explanation/memory.md). 5c+ → [Backlog](#backlog). |
-| 5b | Scheduled NAV refresh | ⬜ Not started | Cheap + useful solo — see [below](#open--phase-5b-scheduled-nav-refresh). Digests/notifications → [Backlog](#backlog). |
-| 6 | Multi-user (public launch) | 🟡 Code shipped; launch prep open | Per-user scoping, tier gating, fail-closed hardening, and owner admin UI all shipped. **Open: `/legal/*` review + browser-verify.** See [below](#open--phase-6-finish-the-public-launch). OAuth → [Backlog](#backlog). |
-
-## Why this build order
-
-Easiest → hardest, lowest risk → highest risk: **persistence** (mechanical,
-unlocks everything) → **AI chat** (highest user value) → **market data**
-(moderate plumbing) → **portfolio import** (hardest; unreliable data sources) →
-**multi-user** (only needed before sharing a deployment). Aesthetics come last
-and inline, not as a phase — real data exposes the gaps worth polishing.
-
----
-
-## Open work
-
-### Open — Phase 6: finish the public launch
+## Now — finish the public launch
 
 **Goal:** open the app to family/friends via a public link. Each account is
 isolated; the owner's OpenRouter budget is protected by per-user token caps and
@@ -110,40 +63,41 @@ signup, so data isolation is load-bearing):
    data, free models only); the owner promotes to `trusted`. A "your account is
    pending an upgrade" affordance is a remaining nicety.
 
-**Remaining operator setup (needs the user's hands):**
-
-- [x] Cloudflare **Turnstile** keys → `TURNSTILE_SITE_KEY` / `TURNSTILE_SECRET_KEY` set
-      (2026-05-24); the sign-up gate now enforces instead of bypassing. Restart
-      the app to pick them up, and set the same two keys in the **production**
-      env at deploy.
-- [ ] Review the `/legal/terms` + `/legal/privacy` copy (jurisdiction, contact,
-      operator name, effective date).
-- [ ] **Browser-verify** end-to-end, including per-user isolation with a second
-      test account, passkey revoke + lockout guard, and the limit banner.
-- [x] Owner admin UI integrated — gates on `OWNER_EMAIL` read at runtime (so it
-      must be present in the running app's env, not just for the backfill script).
-
-**Locked invariants for this phase** (keep them tested):
+**Locked invariants for launch** (keep them tested):
 
 - The `free` tier can **never** resolve to a non-free model regardless of
   `AI_MODELS` env — a config slip otherwise burns the budget.
 - Every app route returns 401 without a session and only that user's rows with
   one. A leak test runs as user A and asserts zero rows for B.
 - `OPENROUTER_API_KEY` never appears in browser-visible payloads.
-- `OCR_MODEL` must be a **paid no-train** vision model in any multi-user deploy
-  — free-tier providers train on submissions, incompatible with other users'
-  portfolio screenshots (see [Locked decisions](#locked-decisions)).
 - `PUBLIC_APP_URL` is pinned in production — changing it breaks passkey `rpID`
   and OAuth callback URIs.
 
-**Out of scope for Phase 6:** SAML/enterprise OIDC, org/team accounts, billing/
-paywall, magic-link email, Apple OAuth — add any of them only if a real user
-needs it. Realtime *collaborative* editing is out (index investing is
-single-owner, low-frequency); a sharing/roles model (`portfolio_members` with
-owner/editor/viewer) is the ceiling, and only if a concrete shared workflow
-appears.
+## Next — durable data + freshness
 
-### Open — Phase 5b: scheduled NAV refresh
+Lower urgency than launch, but the obvious follow-ups once the door is open.
+
+### Reliable market-data source (Yahoo 429s)
+
+Indices + FX come from Yahoo's unauthenticated chart endpoint, which rate-
+limits server-side requests (HTTP 429), often blanket-blocking a deploy's IP.
+Mitigated so far — stale-on-error fallback, a per-symbol backoff, and a warmed
+demo cache — so a warmed cache survives outages, but a cold start (or a
+persistently-blocked IP) still shows "Market data is unavailable." Pick a more
+durable path before relying on live indices in production. Options to weigh:
+
+- A keyed provider with a real free tier (e.g. Alpha Vantage, Twelve Data,
+  Finnhub) behind the existing `Provider` registry — most reliable, costs an
+  API key + per-provider symbol mapping.
+- Yahoo with proper cookie+crumb auth, or a more lenient endpoint — no key, but
+  brittle and may still throttle.
+- Lean on scheduled refresh (below) to populate the cache off one well-spaced
+  job instead of per-request fetches, shrinking 429 exposure.
+
+Thai fund NAVs already come from the SEC Open API (reliable) — this is only the
+index/FX path.
+
+### Scheduled NAV refresh
 
 Today NAVs are fetched on-demand and cached (5-min quotes, 24h history). A
 scheduled refresh would proactively pull after the Thai SEC's 17:30 Bangkok
@@ -152,104 +106,53 @@ only the scheduling is missing. The `closeStaleSessions` memory backstop
 (`npm run jobs:close-stale`) is the other job that wants a scheduler — its
 primary close path is real-time, so this is just a safety sweep. Needs a
 scheduler/cron decision. (Weekly digest email + push notifications →
-[Backlog](#backlog).)
+[Later](#later--parked-until-a-real-need).)
 
----
+## Later — parked until a real need
 
-## Locked decisions
+Deliberate "laters," revisited on real need rather than on a schedule:
 
-Kept here so re-cloners and future-you don't re-litigate. Genuinely contentious
-ones may graduate to `docs/decisions/`.
+- **Google + GitHub OAuth sign-in** — passkey-only login covers launch; social
+  SSO is a convenience add. The code path is env-gated and already merged; flip
+  it on by registering the OAuth apps + setting the client vars when a real user
+  wants it.
+- **Scheduled jobs: weekly digest email + push notifications** — needs a
+  scheduler/cron decision and (for digests) email transport, which the project
+  deliberately avoids. Scheduled **NAV refresh** stays a Next item above (cheap,
+  useful even solo).
+- **AI-generated market digest** ("Today, in your words" on the Markets
+  screen) — a short, plain-language read of the day grounded in the user's
+  actual holdings + live index/NAV data. The old card showed a hardcoded digest
+  with fabricated portfolio figures, so it was removed; bring it back only when
+  it's generated from real data (advisor + market signals).
+- **Vector recall / offline memory consolidation** — current FTS-based recall
+  is enough; revisit only if recall quality demands embeddings.
+- **Broker scraping / unofficial APIs** — TOS + maintenance burden; only if a
+  clear personal need emerges. No scraper lands without a discussion first.
 
-| Decision | Picked | Why not the alternative |
-| --- | --- | --- |
-| ORM | Drizzle | Prisma heavier; raw SQL loses types |
-| Client data layer | SWR | React Query overkill at this scale |
-| AI provider | Vercel AI SDK + OpenRouter | Direct Anthropic SDK locks to one provider |
-| Chat model | `AI_MODELS` env (fallback chain), `openrouter/auto` default | Hardcoding one model = a one-string change every model bump |
-| Auth | better-auth + passkey + (env-gated) Google/GitHub | NextAuth heavier, Clerk/Auth0 vendor cost + lock-in |
-| Email transport | **Skip entirely** — SSO + passkeys only | DNS + spam-folder UX is friction for a soft-public launch |
-| Thai fund data | Thai SEC Open API — official, free w/ key | Scraping fund supermarkets = TOS/legal exposure |
-| Sign-up bot defense | Cloudflare Turnstile | hCaptcha works too; Turnstile is already in the zone |
-| Storage scale | Single VM, single SQLite writer | Postgres/Turso only when a real scaling trigger appears |
+## Why this build order
 
-**Durable rules that outlive any one phase:**
+Easiest → hardest, lowest risk → highest risk: **persistence** (mechanical,
+unlocks everything) → **AI chat** (highest user value) → **market data**
+(moderate plumbing) → **portfolio import** (hardest; unreliable data sources) →
+**multi-user** (only needed before sharing a deployment). Aesthetics come last
+and inline, not as a stage of their own — real data exposes the gaps worth
+polishing.
 
-- **Portable Drizzle subset** — `mode: "json"` columns, `boolean()` (not raw
-  0/1), ISO-8601 date strings, typed JSON access (no `json_extract` in app
-  code), `index()` builder (not raw DDL), enums as TEXT validated at the Zod
-  boundary. This keeps the SQLite → Turso / Postgres doors open.
-- **No private / unofficial data sources** in code or docs — TOS/brand
-  exposure for an experimental app. Gaps in the SEC API get raised as a
-  discussion, never quietly scraped.
-- **OCR no-train for any multi-user deploy** — portfolio screenshots carry
-  account-identifying data. The `openrouter/free` default trains on
-  submissions; production must pin a paid no-train vision model (`OCR_MODEL`,
-  e.g. an Anthropic/OpenAI/Google model via OpenRouter) or disable the Image
-  tab. Not enforced in code — operator responsibility, an acceptance gate for
-  the public launch.
-- **Sensitive-data hygiene** — don't persist what you don't need (image bytes
-  never touch disk); TTL anything that does (OCR text in chat, future
-  `holding_proposals.source_text`); account deletion must cascade to all a
-  user's data; audit metadata (counts/model/timestamp), never content; rely on
-  disk-level encryption (LUKS / provider EBS) documented in
-  [deploy.md](./docs/how-to/deploy.md), not app-level column encryption.
-- **`NULL` user_id was fail-open** (shared built-in vs. unowned-by-accident
-  were indistinguishable). Resolved 2026-05-24 by making `ownedBy()`
-  default-deny with explicit opt-in for genuinely-shared rows; keep it that way.
+## References
 
----
+This doc is intent only. The neighbours that hold the rest:
 
-## Backlog
-
-> Parked 2026-05-24 to keep the roadmap focused on what's actually next. Not
-> abandoned — each is a deliberate "later," revisited on real need rather than
-> on a schedule.
-
-- **Google + GitHub OAuth sign-in** (was Phase 6) — passkey-only login covers
-  launch; social SSO is a convenience add. The code path is env-gated and
-  already merged; flip it on by registering the OAuth apps + setting the client
-  vars when a real user wants it.
-- **Scheduled jobs: weekly digest email + push notifications** (was Phase 5b) —
-  needs a scheduler/cron decision and (for digests) email transport, which the
-  project deliberately avoids. Scheduled **NAV refresh** stays an open item
-  under Phase 5b (cheap, useful even solo).
-- **Vector recall / offline memory consolidation** (was Phase 5c+) — current
-  FTS-based recall is enough; revisit only if recall quality demands embeddings.
-- **Broker scraping / unofficial APIs** (was Phase 4b) — TOS + maintenance
-  burden; only if a clear personal need emerges. No scraper lands without a
-  discussion first.
-
-## Explicitly out of scope (until you decide otherwise)
-
-- **Open SaaS / billing / self-serve upgrade / admin web UI beyond tier
-  toggling** — public sign-up defaults to free-tier; tier promotion is owner-
-  driven.
-- **Horizontal scaling / multi-region** — single VM, single SQLite writer; the
-  trigger to change is migrating to Turso/Postgres, not layering on SQLite.
-- **Aesthetic overhaul** — handled inline per phase.
-- **Mobile-native app / PWA** — desktop / mobile web only.
-- **Enterprise SSO (SAML/OIDC), org accounts, magic-link email** — see Phase 6
-  out-of-scope.
-
----
-
-## Deployment
-
-Two supported modes; both first-class. The full runbook (systemd unit,
-Caddyfile, firewall gotchas, backup mirroring, env reference) is in
-[docs/how-to/deploy.md](./docs/how-to/deploy.md) — this is the summary.
-
-- **Mode A — localhost (single user):** `npm install && npm run dev`. SQLite at
-  `data/app.db`, backups in `data/backups/`. No auth, no env beyond
-  `OPENROUTER_API_KEY`.
-- **Mode B — single-owner self-host:** one Linux VM, Caddy reverse proxy
-  (automatic HTTPS), systemd to keep Node alive, SQLite on disk with daily
-  backups mirrored off-VM (e.g. Cloudflare R2 via `rclone`). Owner signs in with
-  a passkey; visitors can try the demo. For inviting family/friends with their
-  own accounts, complete the [Phase 6 launch prep](#open--phase-6-finish-the-public-launch).
-
----
+- **What works today** → [README status board](./README.md#status).
+- **What shipped** → [CHANGELOG.md](./CHANGELOG.md) (by capability).
+- **Why we picked what we picked** →
+  [docs/explanation/decisions/](./docs/explanation/decisions/) (the
+  settled-decisions log / ADRs).
+- **How to run it** → [docs/how-to/deploy.md](./docs/how-to/deploy.md)
+  (localhost + single-owner self-host runbook).
+- **Conventions for touching code** → [AGENTS.md](./AGENTS.md).
+- **Feature designs** → `docs/` (Diátaxis: `tutorials/`, `how-to/`,
+  `reference/`, `explanation/`), one file per feature.
 
 ## Doc stewardship
 
@@ -259,8 +162,9 @@ feature **must** include the matching doc update in the same commit.
 | When you change… | Update… |
 | --- | --- |
 | Shipped a behavior change | [CHANGELOG.md](./CHANGELOG.md) `## [Unreleased]` (by capability) |
-| A planned phase's deliverables | [ROADMAP.md](./ROADMAP.md) phase section + glance table |
-| Status / what works today | [README.md](./README.md) status block |
+| A capability's shipped status | [README.md](./README.md#status) status board |
+| Planned, unbuilt work | [ROADMAP.md](./ROADMAP.md) Now / Next / Later |
+| A settled technical decision | [docs/explanation/decisions/](./docs/explanation/decisions/) |
 | Env vars | [.env.example](.env.example) + [auth-and-providers.md](./docs/reference/auth-and-providers.md) + [deploy.md](./docs/how-to/deploy.md) + [AGENTS.md](./AGENTS.md) env table |
 | Auth or security posture | [SECURITY.md](./SECURITY.md) + [auth-and-providers.md](./docs/reference/auth-and-providers.md) |
 | Deployment topology | [deploy.md](./docs/how-to/deploy.md) |
