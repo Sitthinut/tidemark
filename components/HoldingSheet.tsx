@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { Icon } from "@/components/Icon";
+import { mergeSourceSuggestions } from "@/lib/data/sources";
+import { useHoldings } from "@/lib/fetchers/portfolio";
 import {
   DEFAULT_QUOTE_SOURCE,
   QUOTE_SOURCE_LABELS,
@@ -62,6 +64,9 @@ export function HoldingSheet({
   const [values, setValues] = useState<HoldingFormValues>(initial);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Free-text source label, with suggestions from the user's existing sources.
+  const { data: allHoldings } = useHoldings();
+  const sourceOptions = mergeSourceSuggestions((allHoldings ?? []).map((h) => h.source));
 
   useEffect(() => {
     if (open) {
@@ -272,10 +277,16 @@ export function HoldingSheet({
             <FormRow label="Source" hint="Where this came from">
               <input
                 className="sheet-input"
+                list="edit-source-suggestions"
                 value={values.source}
                 onChange={(e) => update({ source: e.target.value })}
-                placeholder="Demo Broker"
+                placeholder="e.g. SCB Easy Invest (optional)"
               />
+              <datalist id="edit-source-suggestions">
+                {sourceOptions.map((s) => (
+                  <option key={s} value={s} />
+                ))}
+              </datalist>
             </FormRow>
           </div>
 
