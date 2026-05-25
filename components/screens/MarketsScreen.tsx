@@ -14,9 +14,11 @@ import type { LearnArticle, MarketIndex, Markets } from "@/lib/static/types";
 
 export interface MarketsScreenProps {
   onOpenSettings: () => void;
+  /** Show the top-right kebab that opens the account menu (mobile only). */
+  showMenu?: boolean;
 }
 
-export function MarketsScreen({ onOpenSettings }: MarketsScreenProps) {
+export function MarketsScreen({ onOpenSettings, showMenu = true }: MarketsScreenProps) {
   const [tab, setTab] = useState<"today" | "learn">("today");
   return (
     <div className="screen">
@@ -25,9 +27,11 @@ export function MarketsScreen({ onOpenSettings }: MarketsScreenProps) {
           <span>Markets</span>
           <span className="brand-chip">19 MAY · ICT</span>
         </div>
-        <button className="icon-btn" aria-label="Settings" onClick={onOpenSettings}>
-          <Icon name="settings" size={13} />
-        </button>
+        {showMenu && (
+          <button className="icon-btn" aria-label="More" onClick={onOpenSettings}>
+            <Icon name="ellipsis-vertical" size={13} />
+          </button>
+        )}
       </div>
 
       <div className="sub-tabs">

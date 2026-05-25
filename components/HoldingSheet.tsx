@@ -87,7 +87,7 @@ export function HoldingSheet({
       return;
     }
     if (!values.englishName.trim()) {
-      setError("Fund name is required");
+      setError("Name is required");
       return;
     }
     if (!values.bucketId) {
@@ -132,7 +132,7 @@ export function HoldingSheet({
         <div className="sheet-subtitle">
           {isEdit
             ? "Update units, cost basis, or move to another portfolio."
-            : "Add a single fund position. Use the import sheet for multiple at once."}
+            : "Add a single holding. Use the import sheet for multiple at once."}
         </div>
 
         <div className="sheet-body" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
@@ -162,7 +162,7 @@ export function HoldingSheet({
             />
           </FormRow>
 
-          <FormRow label="Fund name (English)">
+          <FormRow label="Name (English)">
             <input
               className="sheet-input"
               value={values.englishName}
@@ -171,7 +171,7 @@ export function HoldingSheet({
             />
           </FormRow>
 
-          <FormRow label="Fund name (Thai)" hint="Optional">
+          <FormRow label="Name (Thai)" hint="Optional">
             <input
               className="sheet-input"
               value={values.thaiName}
