@@ -100,9 +100,28 @@ Chat is the advisor's first surface, not its limit. Build out:
 - **Proactive portfolio review.** A periodic AI assessment — "what changed since
   last time, and does it need action?" — surfaced without the user asking:
   drift, fee creep, concentration, cash drag, rebalance nudges.
-- **Action-plan quality.** Deepen the buy/sell/hold flow (proposal cards already
-  exist) so the advisor produces a concrete, reviewable plan aimed at the core
-  goal — match or beat your chosen index — rather than generic advice.
+- **Let the advisor reason about performance.** Today it literally can't answer
+  "am I beating the SET?" — there is no advisor tool exposing the return series
+  (`getPortfolioSeries` in [lib/db/queries/series.ts](./lib/db/queries/series.ts)
+  powers the chart but isn't wired into
+  [lib/advisor/tools.ts](./lib/advisor/tools.ts)), and the benchmark series are
+  static fakes. Add a `read_performance` tool (period return + as-of) and feed it
+  real index series so vs-benchmark questions actually work.
+- **Resolve the self-defeating guardrail.** The chat system prompt
+  ([app/api/chat/route.ts](./app/api/chat/route.ts)) instructs the advisor to
+  *decline* personalized buy/sell advice — which directly contradicts the
+  product's headline (the on-screen "Suggested rebalance" card, the "Plan the
+  rebalance" CTA, the `propose_holding` tool). The model applies it erratically,
+  so the journey's most important ask sometimes returns a refusal or an empty
+  turn. Decide the stance (recommended: *enable* plan-anchored, educational
+  rebalancing guidance with a standing disclaimer) and align the prompt with the
+  on-screen flow. Add an anti-hallucination rule too — only reference tickers
+  returned by `read_portfolio` (it invented a holding, "SCBSET50", in testing).
+- **Agentic-turn reliability.** Pinning demo/free chat to `openrouter/free` for a
+  5-step tool-calling task yields frequent empty / early-stop turns (a tool read
+  with no follow-up prose or `propose_*` call → the "I didn't have a reply" UI
+  fallback). Use a stronger small model for tool-calling chat, and/or persist and
+  surface tool-only steps instead of dropping them.
 
 ### Benchmarks that work, and are the user's own
 
