@@ -50,15 +50,28 @@ function seedFund(
     assetClass = "equity",
     ter,
     abbrName,
-  }: { assetClass?: string; ter?: number; abbrName?: string } = {},
+    managementStyle,
+    taxIncentiveType,
+    investRegion,
+  }: {
+    assetClass?: string;
+    ter?: number;
+    abbrName?: string;
+    managementStyle?: string;
+    taxIncentiveType?: string;
+    investRegion?: string;
+  } = {},
 ) {
   upsertFund({
     projId,
     abbrName: abbrName ?? projId,
     englishName: `${projId} Fund`,
     amcName: "Demo AMC",
-    fundType: assetClass === "bond" ? "Fixed Income" : "Foreign Investment Fund",
     assetClass,
+    managementStyle: managementStyle ?? null,
+    taxIncentiveType: taxIncentiveType ?? null,
+    investRegion: investRegion ?? null,
+    isFixedTerm: false,
     status: "active",
   });
   if (ter != null) {
@@ -182,14 +195,13 @@ describe("advisor tools — find_funds", () => {
     expect(result.funds[0].abbr).toBe("SCBSP500");
   });
 
-  it("output includes abbr, englishName, amc, fundType, terLabel fields", async () => {
+  it("output includes abbr, englishName, amc, terLabel fields", async () => {
     const result = (await withFresh(async () => {
       upsertFund({
         projId: "F99",
         abbrName: "TESTFUND",
         englishName: "Test Index Fund",
         amcName: "Test AMC",
-        fundType: "Foreign Investment Fund",
         assetClass: "equity",
         status: "active",
       });
@@ -212,7 +224,6 @@ describe("advisor tools — find_funds", () => {
         abbr: string;
         englishName: string | null;
         amc: string | null;
-        fundType: string | null;
         terLabel: string;
       }[];
     };
@@ -222,8 +233,102 @@ describe("advisor tools — find_funds", () => {
     expect(f.abbr).toBe("TESTFUND");
     expect(f.englishName).toBe("Test Index Fund");
     expect(f.amc).toBe("Test AMC");
-    expect(f.fundType).toBe("Foreign Investment Fund");
     expect(f.terLabel).toBe("0.45% p.a.");
+  });
+
+  it("output includes enrichment fields: isIndex, taxIncentiveType, isFeederFund, feederMasterFund", async () => {
+    const result = (await withFresh(async () => {
+      upsertFund({
+        projId: "ENRICHED",
+        abbrName: "IDX-SSF",
+        englishName: "Index SSF Feeder Fund",
+        amcName: "Demo AMC",
+        assetClass: "equity",
+        managementStyle: "PN",
+        taxIncentiveType: "SSF",
+        investRegion: "foreign",
+        isFeederFund: true,
+        feederMasterFund: "Vanguard Total World",
+        distributionPolicy: "accumulating",
+        isFixedTerm: false,
+        status: "active",
+      });
+      upsertFundFees([
+        {
+          projId: "ENRICHED",
+          fundClassName: "A",
+          feeType: "total_expense",
+          feeTypeRaw: "Total Fee and Expense",
+          actualRatePct: 0.5,
+          rateCeilingPct: 0.6,
+          periodStart: "2026-01-01",
+          periodEnd: null,
+        },
+      ]);
+      const tools = createAdvisorTools({ userId: null });
+      return run(tools.find_funds, {});
+    })) as {
+      funds: {
+        isIndex: boolean;
+        managementStyle: string | null;
+        taxIncentiveType: string | null;
+        investRegion: string | null;
+        isFeederFund: boolean;
+        feederMasterFund: string | null;
+        distributionPolicy: string | null;
+      }[];
+    };
+
+    expect(result.funds).toHaveLength(1);
+    const f = result.funds[0];
+    expect(f.isIndex).toBe(true);
+    expect(f.managementStyle).toBe("PN");
+    expect(f.taxIncentiveType).toBe("SSF");
+    expect(f.investRegion).toBe("foreign");
+    expect(f.isFeederFund).toBe(true);
+    expect(f.feederMasterFund).toBe("Vanguard Total World");
+  });
+
+  it("indexOnly param restricts results to PN/PM management style", async () => {
+    const result = (await withFresh(async () => {
+      seedFund("ACTIVE_FUND", { managementStyle: "AM", ter: 0.5 });
+      seedFund("INDEX_FUND", { managementStyle: "PN", ter: 0.3 });
+      const tools = createAdvisorTools({ userId: null });
+      return run(tools.find_funds, { indexOnly: true });
+    })) as { count: number; funds: { abbr: string; isIndex: boolean }[]; message: string };
+
+    expect(result.count).toBe(1);
+    expect(result.funds[0].abbr).toBe("INDEX_FUND");
+    expect(result.funds[0].isIndex).toBe(true);
+    // message notes the index count
+    expect(result.message).toMatch(/index/i);
+  });
+
+  it("taxIncentive param filters by wrapper and message notes it", async () => {
+    const result = (await withFresh(async () => {
+      seedFund("SSF_FUND", { taxIncentiveType: "SSF", ter: 0.5 });
+      seedFund("RMF_FUND", { taxIncentiveType: "RMF", ter: 0.4 });
+      seedFund("PLAIN_FUND", { ter: 0.3 });
+      const tools = createAdvisorTools({ userId: null });
+      return run(tools.find_funds, { taxIncentive: "SSF" });
+    })) as { count: number; funds: { abbr: string; taxIncentiveType: string | null }[] };
+
+    expect(result.count).toBe(1);
+    expect(result.funds[0].abbr).toBe("SSF_FUND");
+    expect(result.funds[0].taxIncentiveType).toBe("SSF");
+  });
+
+  it("region param filters by geographic mandate", async () => {
+    const result = (await withFresh(async () => {
+      seedFund("FOREIGN_FUND", { investRegion: "foreign", ter: 0.5 });
+      seedFund("DOMESTIC_FUND", { investRegion: "domestic", ter: 0.4 });
+      const tools = createAdvisorTools({ userId: null });
+      return run(tools.find_funds, { region: "foreign" });
+    })) as { count: number; funds: { abbr: string; investRegion: string | null }[] };
+
+    expect(result.count).toBe(1);
+    expect(result.funds[0].abbr).toBe("FOREIGN_FUND");
+    expect(result.funds[0].investRegion).toBe("foreign");
   });
 });
 
@@ -241,7 +346,14 @@ describe("advisor tools — find_cheaper_alternatives", () => {
     })) as {
       ok: boolean;
       count: number;
-      alternatives: { abbr: string; terPct: number | null }[];
+      alternatives: {
+        abbr: string;
+        terPct: number | null;
+        isIndex: boolean;
+        taxIncentiveType: string | null;
+        investRegion: string | null;
+        isFeederFund: boolean;
+      }[];
       referenceAbbr: string;
       cheapestAlternativeAbbr: string;
       message: string;

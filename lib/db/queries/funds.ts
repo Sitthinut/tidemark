@@ -10,6 +10,7 @@
 // funds on a single-VM SQLite, so clarity beats a window-function query here.
 
 import { and, eq, inArray, like, or, sql } from "drizzle-orm";
+import { isIndexStyle } from "../../market/fund-classify";
 import { type FeeType, TER_FEE_TYPE } from "../../market/fund-fees";
 import { getDb } from "../context";
 import { fundCatalog, fundFees } from "../schema";
@@ -132,7 +133,10 @@ export type FundWithTer = Fund & { ter: number | null };
 export type FindFundsFilter = {
   /** Normalized allocation class: 'equity' | 'bond' | 'alternative' | 'cash'. */
   assetClass?: string;
-  /** Substring match against SEC fund type (e.g. "Foreign Investment"). */
+  /**
+   * @deprecated fundType is always null in the catalog now (dead column).
+   * Drop this filter from new callers; it is a no-op when fundType is null.
+   */
   fundType?: string;
   /** Substring match against abbr / Thai / English name and policy text. */
   query?: string;
@@ -140,6 +144,17 @@ export type FindFundsFilter = {
   activeOnly?: boolean;
   /** Cap result size. Defaults to 50. */
   limit?: number;
+  /** Restrict to index / passive funds (managementStyle IN 'PN', 'PM'). */
+  indexOnly?: boolean;
+  /** Restrict to a specific tax-advantaged wrapper. */
+  taxIncentive?: "SSF" | "ThaiESG" | "RMF";
+  /** Restrict to a geographic mandate. */
+  region?: "foreign" | "domestic" | "mixed";
+  /**
+   * Exclude fixed-term funds — they stop accepting new subscriptions once
+   * closed and aren't suitable for ongoing investing. Defaults to true.
+   */
+  excludeFixedTerm?: boolean;
 };
 
 /**
@@ -149,11 +164,22 @@ export type FindFundsFilter = {
  * lowest fee?".
  */
 export function findFunds(filter: FindFundsFilter = {}): FundWithTer[] {
-  const { assetClass, fundType, query, activeOnly = true, limit = 50 } = filter;
+  const {
+    assetClass,
+    query,
+    activeOnly = true,
+    limit = 50,
+    indexOnly,
+    taxIncentive,
+    region,
+    excludeFixedTerm = true,
+  } = filter;
   const conds = [];
   if (activeOnly) conds.push(eq(fundCatalog.status, "active"));
   if (assetClass) conds.push(eq(fundCatalog.assetClass, assetClass));
-  if (fundType) conds.push(like(fundCatalog.fundType, `%${fundType}%`));
+  if (taxIncentive) conds.push(eq(fundCatalog.taxIncentiveType, taxIncentive));
+  if (region) conds.push(eq(fundCatalog.investRegion, region));
+  if (excludeFixedTerm) conds.push(eq(fundCatalog.isFixedTerm, false));
   if (query) {
     const q = `%${query}%`;
     conds.push(
@@ -172,7 +198,11 @@ export function findFunds(filter: FindFundsFilter = {}): FundWithTer[] {
     .where(conds.length ? and(...conds) : undefined)
     .all();
 
-  const withTer: FundWithTer[] = funds.map((f) => ({ ...f, ter: getCurrentTer(f.projId) }));
+  // indexOnly filter is applied in JS after the query so we can reuse
+  // isIndexStyle() without duplicating the PN/PM logic in SQL.
+  const filtered = indexOnly ? funds.filter((f) => isIndexStyle(f.managementStyle)) : funds;
+
+  const withTer: FundWithTer[] = filtered.map((f) => ({ ...f, ter: getCurrentTer(f.projId) }));
   withTer.sort((a, b) => {
     if (a.ter == null) return b.ter == null ? 0 : 1; // nulls last
     if (b.ter == null) return -1;
@@ -195,7 +225,6 @@ export function getCheaperAlternatives(projId: string, limit = 5): FundWithTer[]
 
   const peers = findFunds({
     assetClass: ref.assetClass ?? undefined,
-    fundType: ref.assetClass ? undefined : (ref.fundType ?? undefined),
     limit: 200,
   });
   return peers

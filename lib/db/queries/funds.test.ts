@@ -124,11 +124,112 @@ describe("findFunds", () => {
   it("filters by asset class and excludes inactive funds by default", () => {
     withDb(() => {
       upsertFund(fund("EQ"));
-      upsertFund(fund("BD", { assetClass: "bond", fundType: "Fixed Income" }));
+      upsertFund(fund("BD", { assetClass: "bond" }));
       upsertFund(fund("DEAD", { status: "inactive" }));
       upsertFundFees([ter("EQ", 0.3), ter("BD", 0.1), ter("DEAD", 0.05)]);
       const eq = findFunds({ assetClass: "equity" }).map((f) => f.projId);
       expect(eq).toEqual(["EQ"]); // not BD (bond), not DEAD (inactive)
+    });
+  });
+
+  it("indexOnly filters to PN and PM management styles", () => {
+    withDb(() => {
+      upsertFund(fund("ACTIVE", { managementStyle: "AM" }));
+      upsertFund(fund("PASSIVE_PN", { managementStyle: "PN" }));
+      upsertFund(fund("PASSIVE_PM", { managementStyle: "PM" }));
+      upsertFund(fund("SYSTEMATIC", { managementStyle: "SM" }));
+      upsertFundFees([
+        ter("ACTIVE", 1.2),
+        ter("PASSIVE_PN", 0.3),
+        ter("PASSIVE_PM", 0.4),
+        ter("SYSTEMATIC", 0.8),
+      ]);
+      const ids = findFunds({ indexOnly: true }).map((f) => f.projId);
+      expect(ids).toContain("PASSIVE_PN");
+      expect(ids).toContain("PASSIVE_PM");
+      expect(ids).not.toContain("ACTIVE");
+      expect(ids).not.toContain("SYSTEMATIC");
+    });
+  });
+
+  it("taxIncentive filter restricts to the given wrapper", () => {
+    withDb(() => {
+      upsertFund(fund("SSF1", { taxIncentiveType: "SSF" }));
+      upsertFund(fund("RMF1", { taxIncentiveType: "RMF" }));
+      upsertFund(fund("ESGT1", { taxIncentiveType: "ThaiESG" }));
+      upsertFund(fund("PLAIN"));
+      upsertFundFees([ter("SSF1", 0.5), ter("RMF1", 0.6), ter("ESGT1", 0.55), ter("PLAIN", 0.4)]);
+      const ssf = findFunds({ taxIncentive: "SSF" }).map((f) => f.projId);
+      expect(ssf).toEqual(["SSF1"]);
+
+      const esgt = findFunds({ taxIncentive: "ThaiESG" }).map((f) => f.projId);
+      expect(esgt).toEqual(["ESGT1"]);
+    });
+  });
+
+  it("region filter restricts to the given geographic mandate", () => {
+    withDb(() => {
+      upsertFund(fund("FOREIGN", { investRegion: "foreign" }));
+      upsertFund(fund("DOMESTIC", { investRegion: "domestic" }));
+      upsertFund(fund("MIXED", { investRegion: "mixed" }));
+      upsertFundFees([ter("FOREIGN", 0.5), ter("DOMESTIC", 0.4), ter("MIXED", 0.6)]);
+      const foreign = findFunds({ region: "foreign" }).map((f) => f.projId);
+      expect(foreign).toEqual(["FOREIGN"]);
+
+      const domestic = findFunds({ region: "domestic" }).map((f) => f.projId);
+      expect(domestic).toEqual(["DOMESTIC"]);
+    });
+  });
+
+  it("excludeFixedTerm (default true) removes fixed-term funds", () => {
+    withDb(() => {
+      upsertFund(fund("ONGOING", { isFixedTerm: false }));
+      upsertFund(fund("FIXTERM", { isFixedTerm: true }));
+      upsertFundFees([ter("ONGOING", 0.5), ter("FIXTERM", 0.3)]);
+      // default: excludeFixedTerm=true
+      const defaultResult = findFunds({}).map((f) => f.projId);
+      expect(defaultResult).toContain("ONGOING");
+      expect(defaultResult).not.toContain("FIXTERM");
+
+      // opt-in to include fixed-term
+      const withFixed = findFunds({ excludeFixedTerm: false }).map((f) => f.projId);
+      expect(withFixed).toContain("ONGOING");
+      expect(withFixed).toContain("FIXTERM");
+    });
+  });
+
+  it("can combine indexOnly + taxIncentive + region filters", () => {
+    withDb(() => {
+      // The target: PN index + SSF + foreign
+      upsertFund(
+        fund("MATCH", {
+          managementStyle: "PN",
+          taxIncentiveType: "SSF",
+          investRegion: "foreign",
+        }),
+      );
+      // Non-matching variations
+      upsertFund(fund("NOIDX", { taxIncentiveType: "SSF", investRegion: "foreign" }));
+      upsertFund(fund("NOTAX", { managementStyle: "PN", investRegion: "foreign" }));
+      upsertFund(
+        fund("WRONGREG", {
+          managementStyle: "PN",
+          taxIncentiveType: "SSF",
+          investRegion: "domestic",
+        }),
+      );
+      upsertFundFees([
+        ter("MATCH", 0.5),
+        ter("NOIDX", 0.4),
+        ter("NOTAX", 0.45),
+        ter("WRONGREG", 0.55),
+      ]);
+      const result = findFunds({
+        indexOnly: true,
+        taxIncentive: "SSF",
+        region: "foreign",
+      }).map((f) => f.projId);
+      expect(result).toEqual(["MATCH"]);
     });
   });
 });

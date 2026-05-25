@@ -2,10 +2,10 @@
 
 // FundSelect — the "Select" pillar's fund finder panel.
 //
-// Lets the user pick a target exposure (asset class, fund type, free-text search)
-// and see matching Thai-registered funds ranked CHEAPEST FIRST by TER. Fee is the
-// visual hero: the TER badge is the headline on every row, styled to make the cost
-// of each fund immediately legible.
+// Lets the user pick a target exposure (asset class, free-text search, index-only
+// toggle, tax wrapper, and region) and see matching Thai-registered funds ranked
+// CHEAPEST FIRST by TER. Fee is the visual hero: the TER badge is the headline on
+// every row, styled to make the cost of each fund immediately legible.
 //
 // Wired through GET /api/funds, which calls findFunds() — the same query the
 // find_funds advisor tool uses. A small demo seed ensures the list is non-empty
@@ -19,7 +19,8 @@ import { useResource } from "@/lib/fetchers/swr";
 // ─── filter state ────────────────────────────────────────────────────────────
 
 type AssetClassFilter = "equity" | "bond" | "alternative" | "cash" | "";
-type FundTypeFilter = "" | "Foreign Investment" | "Fixed Income" | "Property Fund" | "General";
+type TaxIncentiveFilter = "SSF" | "ThaiESG" | "RMF" | "";
+type RegionFilter = "foreign" | "domestic" | "mixed" | "";
 
 const ASSET_CLASS_OPTIONS: { value: AssetClassFilter; label: string }[] = [
   { value: "", label: "All classes" },
@@ -29,28 +30,58 @@ const ASSET_CLASS_OPTIONS: { value: AssetClassFilter; label: string }[] = [
   { value: "cash", label: "Cash" },
 ];
 
-const FUND_TYPE_OPTIONS: { value: FundTypeFilter; label: string }[] = [
-  { value: "", label: "All types" },
-  { value: "Foreign Investment", label: "Foreign" },
-  { value: "Fixed Income", label: "Fixed income" },
-  { value: "Property Fund", label: "Property" },
-  { value: "General", label: "General" },
+const TAX_INCENTIVE_OPTIONS: { value: TaxIncentiveFilter; label: string; title: string }[] = [
+  {
+    value: "SSF",
+    label: "SSF",
+    title: "Super Savings Fund — deduct up to 30% of income (max 200,000 THB/yr)",
+  },
+  {
+    value: "ThaiESG",
+    label: "Thai ESG",
+    title: "Thai ESG Fund — deduct up to 30% of income (max 300,000 THB/yr)",
+  },
+  {
+    value: "RMF",
+    label: "RMF",
+    title: "Retirement Mutual Fund — deduct up to 30% of income (max 500,000 THB/yr)",
+  },
+];
+
+const REGION_OPTIONS: { value: RegionFilter; label: string }[] = [
+  { value: "foreign", label: "Foreign" },
+  { value: "domestic", label: "Domestic" },
+  { value: "mixed", label: "Mixed" },
 ];
 
 // ─── fetcher ─────────────────────────────────────────────────────────────────
 
-function buildUrl(assetClass: AssetClassFilter, fundType: FundTypeFilter, query: string): string {
+function buildUrl(
+  assetClass: AssetClassFilter,
+  query: string,
+  indexOnly: boolean,
+  taxIncentive: TaxIncentiveFilter,
+  region: RegionFilter,
+): string {
   const params = new URLSearchParams();
   if (assetClass) params.set("assetClass", assetClass);
-  if (fundType) params.set("fundType", fundType);
   if (query.trim()) params.set("query", query.trim());
+  if (indexOnly) params.set("indexOnly", "1");
+  if (taxIncentive) params.set("taxIncentive", taxIncentive);
+  if (region) params.set("region", region);
   params.set("limit", "30");
   const qs = params.toString();
   return qs ? `/api/funds?${qs}` : "/api/funds";
 }
 
-function useFunds(assetClass: AssetClassFilter, fundType: FundTypeFilter, query: string) {
-  const url = buildUrl(assetClass, fundType, query);
+function useFunds(
+  assetClass: AssetClassFilter,
+  query: string,
+  indexOnly: boolean,
+  taxIncentive: TaxIncentiveFilter,
+  region: RegionFilter,
+) {
+  const url = buildUrl(assetClass, query, indexOnly, taxIncentive, region);
   return useResource<FundWithTer[]>(url);
 }
 
@@ -102,6 +133,86 @@ function TerBadge({ ter }: { ter: number | null }) {
       }}
     >
       {ter.toFixed(2)}%
+    </span>
+  );
+}
+
+// ─── compact fund badges ──────────────────────────────────────────────────────
+
+function MiniTag({
+  label,
+  title,
+  color = "var(--accent)",
+  bg = "var(--accent-soft)",
+}: {
+  label: string;
+  title?: string;
+  color?: string;
+  bg?: string;
+}) {
+  return (
+    <span
+      title={title}
+      style={{
+        fontSize: 9.5,
+        fontFamily: "var(--font-mono)",
+        fontWeight: 600,
+        color,
+        background: bg,
+        borderRadius: 4,
+        padding: "1px 5px",
+        letterSpacing: "0.04em",
+        whiteSpace: "nowrap",
+      }}
+    >
+      {label}
+    </span>
+  );
+}
+
+function FundBadges({ fund }: { fund: FundWithTer }) {
+  const isIndex = fund.managementStyle === "PN" || fund.managementStyle === "PM";
+  const tax = fund.taxIncentiveType;
+  const isFeeder = fund.isFeederFund;
+
+  if (!isIndex && !tax && !isFeeder) return null;
+
+  return (
+    <span style={{ display: "inline-flex", gap: 4, flexWrap: "wrap", marginTop: 3 }}>
+      {isIndex && (
+        <MiniTag
+          label="INDEX"
+          title={`Management style: ${fund.managementStyle} — passive/index-tracking`}
+          color="var(--gain)"
+          bg="var(--gain-soft, rgba(34,197,94,0.1))"
+        />
+      )}
+      {tax && (
+        <MiniTag
+          label={tax}
+          title={
+            tax === "SSF"
+              ? "Super Savings Fund — tax deductible up to 30% of income"
+              : tax === "ThaiESG"
+                ? "Thai ESG Fund — tax deductible up to 30% of income"
+                : "Retirement Mutual Fund — tax deductible up to 30% of income"
+          }
+          color="var(--accent)"
+          bg="var(--accent-soft)"
+        />
+      )}
+      {isFeeder && (
+        <MiniTag
+          label={fund.feederMasterFund ? `FEEDER → ${fund.feederMasterFund}` : "FEEDER"}
+          title={
+            fund.feederMasterFund
+              ? `Feeder fund — invests in ${fund.feederMasterFund}`
+              : "Feeder fund — invests in an offshore master fund"
+          }
+          color="var(--muted)"
+          bg="var(--surface)"
+        />
+      )}
     </span>
   );
 }
@@ -201,9 +312,10 @@ function FundRow({
             }}
           >
             {amc}
-            {fund.fundType ? ` · ${fund.fundType}` : ""}
           </div>
         )}
+        {/* Compact property badges: index, tax wrapper, feeder */}
+        <FundBadges fund={fund} />
       </div>
 
       {/* Ask advisor shortcut */}
@@ -313,6 +425,43 @@ function FeeLegend() {
   );
 }
 
+// ─── chip button helper ───────────────────────────────────────────────────────
+
+function ChipButton({
+  label,
+  active,
+  onClick,
+  title,
+  size = "sm",
+}: {
+  label: string;
+  active: boolean;
+  onClick: () => void;
+  title?: string;
+  size?: "sm" | "xs";
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={title}
+      style={{
+        padding: size === "xs" ? "3px 8px" : "4px 10px",
+        borderRadius: size === "xs" ? 6 : 8,
+        border: "1px solid",
+        borderColor: active ? "var(--accent)" : "var(--line-soft)",
+        background: active ? "var(--accent-soft)" : "var(--paper)",
+        fontSize: size === "xs" ? 10.5 : 11.5,
+        cursor: "pointer",
+        color: active ? "var(--accent-ink)" : "var(--muted)",
+        fontWeight: active ? 600 : 400,
+      }}
+    >
+      {label}
+    </button>
+  );
+}
+
 // ─── main component ───────────────────────────────────────────────────────────
 
 export interface FundSelectProps {
@@ -322,7 +471,9 @@ export interface FundSelectProps {
 
 export function FundSelect({ onAskAdvisor }: FundSelectProps) {
   const [assetClass, setAssetClass] = useState<AssetClassFilter>("");
-  const [fundType, setFundType] = useState<FundTypeFilter>("");
+  const [indexOnly, setIndexOnly] = useState(false);
+  const [taxIncentive, setTaxIncentive] = useState<TaxIncentiveFilter>("");
+  const [region, setRegion] = useState<RegionFilter>("");
   const [queryInput, setQueryInput] = useState("");
   // Debounce the search query so we don't fire on every keystroke.
   const [query, setQuery] = useState("");
@@ -332,7 +483,7 @@ export function FundSelect({ onAskAdvisor }: FundSelectProps) {
     return () => clearTimeout(timer);
   }, [queryInput]);
 
-  const { data: funds, isLoading } = useFunds(assetClass, fundType, query);
+  const { data: funds, isLoading } = useFunds(assetClass, query, indexOnly, taxIncentive, region);
 
   const handleAskAdvisor = (abbr: string) => {
     const prompt = `Tell me about ${abbr} — is it a good low-fee option for my portfolio, and are there cheaper alternatives?`;
@@ -379,47 +530,76 @@ export function FundSelect({ onAskAdvisor }: FundSelectProps) {
         {/* Asset class chips */}
         <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginBottom: 6 }}>
           {ASSET_CLASS_OPTIONS.map((opt) => (
-            <button
+            <ChipButton
               key={opt.value}
-              type="button"
+              label={opt.label}
+              active={assetClass === opt.value}
               onClick={() => setAssetClass(opt.value)}
-              style={{
-                padding: "4px 10px",
-                borderRadius: 8,
-                border: "1px solid",
-                borderColor: assetClass === opt.value ? "var(--accent)" : "var(--line-soft)",
-                background: assetClass === opt.value ? "var(--accent-soft)" : "var(--paper)",
-                fontSize: 11.5,
-                cursor: "pointer",
-                color: assetClass === opt.value ? "var(--accent-ink)" : "var(--muted)",
-                fontWeight: assetClass === opt.value ? 600 : 400,
-              }}
-            >
-              {opt.label}
-            </button>
+            />
           ))}
         </div>
 
-        {/* Fund type chips */}
-        <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
-          {FUND_TYPE_OPTIONS.map((opt) => (
-            <button
+        {/* Index-only toggle + region chips on one row */}
+        <div
+          style={{
+            display: "flex",
+            gap: 5,
+            flexWrap: "wrap",
+            marginBottom: 6,
+            alignItems: "center",
+          }}
+        >
+          {/* Index-only toggle — the star filter for passive investors */}
+          <ChipButton
+            label="Index funds only"
+            active={indexOnly}
+            onClick={() => setIndexOnly((v) => !v)}
+            title="Restrict to passive/index-tracking funds (management style PN or PM)"
+            size="xs"
+          />
+          <span
+            style={{
+              width: 1,
+              height: 14,
+              background: "var(--line-soft)",
+              margin: "0 2px",
+              display: "inline-block",
+              alignSelf: "center",
+            }}
+          />
+          {REGION_OPTIONS.map((opt) => (
+            <ChipButton
               key={opt.value}
-              type="button"
-              onClick={() => setFundType(opt.value)}
-              style={{
-                padding: "3px 8px",
-                borderRadius: 6,
-                border: "1px solid",
-                borderColor: fundType === opt.value ? "var(--accent)" : "var(--line-soft)",
-                background: fundType === opt.value ? "var(--accent-soft)" : "var(--paper)",
-                fontSize: 10.5,
-                cursor: "pointer",
-                color: fundType === opt.value ? "var(--accent-ink)" : "var(--muted)",
-              }}
-            >
-              {opt.label}
-            </button>
+              label={opt.label}
+              active={region === opt.value}
+              onClick={() => setRegion((v) => (v === opt.value ? "" : opt.value))}
+              size="xs"
+            />
+          ))}
+        </div>
+
+        {/* Tax wrapper chips */}
+        <div style={{ display: "flex", gap: 5, flexWrap: "wrap", alignItems: "center" }}>
+          <span
+            style={{
+              fontSize: 10,
+              color: "var(--muted)",
+              fontFamily: "var(--font-mono)",
+              letterSpacing: "0.04em",
+              marginRight: 2,
+            }}
+          >
+            Tax
+          </span>
+          {TAX_INCENTIVE_OPTIONS.map((opt) => (
+            <ChipButton
+              key={opt.value}
+              label={opt.label}
+              active={taxIncentive === opt.value}
+              onClick={() => setTaxIncentive((v) => (v === opt.value ? "" : opt.value))}
+              title={opt.title}
+              size="xs"
+            />
           ))}
         </div>
       </div>
@@ -441,6 +621,15 @@ export function FundSelect({ onAskAdvisor }: FundSelectProps) {
         >
           {list.length} fund{list.length === 1 ? "" : "s"} ·{" "}
           {list.filter((f) => f.ter != null).length} with TER data
+          {list.filter((f) => f.managementStyle === "PN" || f.managementStyle === "PM").length >
+            0 && (
+            <>
+              {" "}
+              ·{" "}
+              {list.filter((f) => f.managementStyle === "PN" || f.managementStyle === "PM").length}{" "}
+              index
+            </>
+          )}
         </div>
       )}
 
