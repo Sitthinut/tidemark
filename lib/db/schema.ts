@@ -115,9 +115,43 @@ export const fundCatalog = sqliteTable(
     // Investment-policy text — used for exposure matching ("S&P 500 feeder").
     policyDesc: text("policy_desc"),
     // Our normalized allocation taxonomy, mirrors holdings.assetClass:
-    // 'equity' | 'bond' | 'alternative' | 'cash'. NULL until classified.
+    // 'equity' | 'bond' | 'alternative' | 'cash'. NULL = mixed/unclassifiable.
+    // Derived from `policyDescTh` (the v2 API has no fund-type field — see
+    // lib/market/fund-classify.ts).
     assetClass: text("asset_class"),
-    // 'active' = currently offered; 'inactive' = closed/merged (kept for history).
+    // Short Thai asset-type label from the SEC (ตราสารหนี้ / ตราสารทุน / ผสม /
+    // ทรัพย์สินทางเลือก) — the source for `assetClass` inference.
+    policyDescTh: text("policy_desc_th"),
+    // Management style: 'AM' active | 'PN' passive/index-tracking | 'SM'
+    // systematic | 'PM' passive multi-factor | 'BH' buy-and-hold (fixed term).
+    // 'PN' is the index-fund marker — core to the index-investor filter.
+    managementStyle: text("management_style"),
+    // Tax-advantaged wrapper, if any: 'SSF' | 'ThaiESG' | NULL. Primary driver
+    // for Thai retail investors.
+    taxIncentiveType: text("tax_incentive_type"),
+    // Share-class character: 'accumulating' | 'dividend' | NULL — matters for tax.
+    distributionPolicy: text("distribution_policy"),
+    // Geographic mandate from the SEC `invest_country_flag`:
+    // 'foreign' | 'mixed' | 'domestic' | NULL.
+    investRegion: text("invest_region"),
+    // Feeder funds (the main vehicle for Thai access to global indices).
+    isFeederFund: integer("is_feeder_fund", { mode: "boolean" }).notNull().default(false),
+    feederMasterFund: text("feeder_master_fund"),
+    // Fixed-term funds mature and stop accepting subscriptions; excluded from
+    // ongoing-investment recommendations.
+    isFixedTerm: integer("is_fixed_term", { mode: "boolean" }).notNull().default(false),
+    initDate: text("init_date"), // fund inception (ISO date)
+    isinCode: text("isin_code"), // ~30% coverage; for external cross-reference
+    // Latest total net asset value (THB) + the NAV date it was read on. Small
+    // funds (low AUM) have poor liquidity; used to down-rank dormant funds.
+    aum: real("aum"),
+    aumDate: text("aum_date"),
+    // Raw SEC `fund_status`: 'Registered' | 'IPO' | 'Liquidated' | 'Expired' |
+    // 'Canceled'. `status` below is derived from this.
+    secStatus: text("sec_status"),
+    // Derived from `secStatus`: 'active' (Registered/IPO) = currently offered;
+    // 'inactive' = liquidated/expired/canceled (kept for history). Drives the
+    // fund finder's active-only default.
     status: text("status", { enum: ["active", "inactive"] })
       .notNull()
       .default("active"),
@@ -126,7 +160,9 @@ export const fundCatalog = sqliteTable(
   },
   (table) => [
     index("idx_fund_catalog_asset_class").on(table.assetClass),
-    index("idx_fund_catalog_fund_type").on(table.fundType),
+    index("idx_fund_catalog_status").on(table.status),
+    index("idx_fund_catalog_mgmt_style").on(table.managementStyle),
+    index("idx_fund_catalog_tax").on(table.taxIncentiveType),
   ],
 );
 
