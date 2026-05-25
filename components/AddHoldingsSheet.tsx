@@ -405,7 +405,7 @@ export function AddHoldingsSheet({ open, onClose, onAdd }: AddHoldingsSheetProps
               list="add-source-suggestions"
               value={source}
               onChange={(e) => setSource(e.target.value)}
-              placeholder="e.g. SCB Easy Invest (optional)"
+              placeholder="Type or pick a source"
               className="twk-field"
               style={{
                 width: "100%",
@@ -779,7 +779,7 @@ export function AddHoldingsSheet({ open, onClose, onAdd }: AddHoldingsSheetProps
                         zIndex: 10,
                         margin: 0,
                         padding: 4,
-                        background: "var(--card)",
+                        background: "var(--paper)",
                         border: "1px solid var(--line-soft)",
                         borderRadius: 8,
                         boxShadow: "0 6px 16px rgba(0,0,0,0.12)",

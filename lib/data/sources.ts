@@ -1,13 +1,17 @@
-// Suggestions for a holding's `source` label (where the holding is held — a
-// brokerage/account). Free text, so these are only hints: the user's own
-// previously-used sources first, then a few common Thai brokerages as starters.
-// `source` is cosmetic — it does NOT affect pricing (that's `quoteSource`).
+// Suggestions for a holding's `source` label (where the holding is held). Free
+// text — these are only hints: the user's own previously-used sources surface
+// first, then these open-architecture Thai fund platforms/brokers (one account,
+// funds from many AMCs). Single-AMC apps and plain bank apps are deliberately
+// omitted — there you'd only ever hold that one AMC's funds. `source` is
+// cosmetic — it does NOT affect pricing (that's `quoteSource`).
 
 export const BROKERAGE_SUGGESTIONS = [
-  "SCB Easy Invest",
-  "Kasikorn (K-My Funds)",
-  "Krungsri Asset",
-  "BBLAM",
+  "Dime!",
+  "Finnomena",
+  "InnovestX",
+  "Krungsri Securities",
+  "Phillip",
+  "Pi",
 ] as const;
 
 /**
