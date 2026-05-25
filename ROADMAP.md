@@ -1788,6 +1788,15 @@ isolation/operability gaps — **both data-isolation blockers shipped
    admin UI in (3). A "your account is pending an upgrade" affordance is
    the remaining nicety.
 
+Also shipped 2026-05-24 (launch-readiness fixes): public signed-out
+landing + a real sign-out (was a no-op); an authenticated session now
+overrides a stale demo cookie (a logged-in user no longer sees demo
+data); account page consolidated into one "Sign in" section with
+AAGUID-derived authenticator names; the last passkey can't be revoked
+when it's the only sign-in method (lockout guard); honest onboarding /
+settings copy (removed the fake "Demo Broker connected" card and the
+simulated brokerage flow).
+
 Realtime *collaborative* editing (multiple users editing one record
 live) is explicitly **out of scope** — index investing is single-owner
 and low-frequency; a sharing/roles model (`portfolio_members` with
