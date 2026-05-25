@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { getDb } from "../context";
 import { holdings } from "../schema";
 
@@ -30,4 +30,20 @@ export function updateHolding(id: number, patch: HoldingUpdate): Holding | undef
 
 export function deleteHolding(id: number): void {
   getDb().delete(holdings).where(eq(holdings.id, id)).run();
+}
+
+/**
+ * Rename a `source` label across all holdings in the given buckets. The caller
+ * passes the user's own bucket ids (resolved via the user-scoped listBuckets in
+ * the route), so a user can only rewrite their own holdings. Empty `to` clears
+ * the label (NULL). Returns the number of rows changed.
+ */
+export function renameHoldingSource(bucketIds: string[], from: string, to: string): number {
+  if (bucketIds.length === 0) return 0;
+  const res = getDb()
+    .update(holdings)
+    .set({ source: to || null, updatedAt: new Date().toISOString() })
+    .where(and(eq(holdings.source, from), inArray(holdings.bucketId, bucketIds)))
+    .run();
+  return res.changes;
 }

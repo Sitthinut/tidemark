@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { invalidate, useResource } from "@/lib/fetchers/swr";
 
 export type Theme = "light" | "dark" | "system";
@@ -93,6 +94,42 @@ export function SettingsScreen({ theme, onThemeChange, onBack }: SettingsScreenP
       return;
     }
     await invalidate(MEMORY_KEY);
+  };
+
+  // Source labels — distinct values across the user's holdings, with counts, so
+  // they can be renamed in bulk (one rename rewrites every holding using it).
+  const { data: holdingRows } = useResource<{ source: string | null }[]>("/api/holdings");
+  const sourceCounts = new Map<string, number>();
+  for (const h of holdingRows ?? []) {
+    const s = h.source?.trim();
+    if (s) sourceCounts.set(s, (sourceCounts.get(s) ?? 0) + 1);
+  }
+  const sources = [...sourceCounts.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+  const [renamingFrom, setRenamingFrom] = useState<string | null>(null);
+  const [renameTo, setRenameTo] = useState("");
+  const [renameBusy, setRenameBusy] = useState(false);
+
+  const submitRename = async (from: string) => {
+    const to = renameTo.trim();
+    if (!to || to === from) {
+      setRenamingFrom(null);
+      return;
+    }
+    setRenameBusy(true);
+    try {
+      const res = await fetch("/api/holdings/source", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ from, to }),
+      });
+      if (!res.ok) throw new Error(`rename failed (${res.status})`);
+      await invalidate(/^\/api\/holdings/);
+      setRenamingFrom(null);
+    } catch {
+      window.alert("Failed to rename source.");
+    } finally {
+      setRenameBusy(false);
+    }
   };
 
   const themeOpts = [
@@ -260,6 +297,86 @@ export function SettingsScreen({ theme, onThemeChange, onBack }: SettingsScreenP
         >
           Manage your investment plan in{" "}
           <strong style={{ fontWeight: 500, color: "var(--ink-soft)" }}>Journal → Plan</strong>.
+        </div>
+      </div>
+
+      <div className="section">
+        <div className="section-header">
+          <h3>Sources</h3>
+        </div>
+        {sources.length === 0 ? (
+          <div className="card" style={{ fontSize: 12.5, color: "var(--muted)" }}>
+            No sources yet — tag holdings with where they're held when you add them.
+          </div>
+        ) : (
+          <div className="card" style={{ padding: 0 }}>
+            {sources.map(([src, count]) => (
+              <div key={src} className="row between" style={{ padding: "10px 12px", gap: 8 }}>
+                {renamingFrom === src ? (
+                  <>
+                    <input
+                      className="sheet-input"
+                      value={renameTo}
+                      onChange={(e) => setRenameTo(e.target.value)}
+                      style={{ flex: 1 }}
+                    />
+                    <div className="row" style={{ gap: 6 }}>
+                      <button
+                        className="btn ghost sm"
+                        onClick={() => setRenamingFrom(null)}
+                        disabled={renameBusy}
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        className="btn ghost sm"
+                        onClick={() => submitRename(src)}
+                        disabled={renameBusy}
+                      >
+                        Save
+                      </button>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div>
+                      <div style={{ fontSize: 13.5, fontWeight: 500, letterSpacing: "-0.01em" }}>
+                        {src}
+                      </div>
+                      <div
+                        style={{
+                          fontSize: 11,
+                          color: "var(--muted)",
+                          fontFamily: "var(--font-mono)",
+                        }}
+                      >
+                        {count} holding{count === 1 ? "" : "s"}
+                      </div>
+                    </div>
+                    <button
+                      className="btn ghost sm"
+                      onClick={() => {
+                        setRenamingFrom(src);
+                        setRenameTo(src);
+                      }}
+                    >
+                      Rename
+                    </button>
+                  </>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+        <div
+          style={{
+            fontSize: 11.5,
+            color: "var(--muted)",
+            padding: "10px 4px 0",
+            lineHeight: 1.5,
+          }}
+        >
+          Renaming updates the label on every holding that uses it.
         </div>
       </div>
 
