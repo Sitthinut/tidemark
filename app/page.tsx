@@ -7,16 +7,25 @@ import { getSessionUser, isAuthRequired } from "@/lib/auth/session";
 
 export default async function Home() {
   const store = await cookies();
-  const isDemo = !!store.get(DEMO_COOKIE)?.value;
+  const hasDemoCookie = !!store.get(DEMO_COOKIE)?.value;
 
-  // Four modes:
-  //  - AUTH_DISABLED=1: open access (single-user / dev). Render directly.
-  //  - auth required + valid session cookie: render as the owner.
-  //  - auth required + valid demo cookie: render as a demo session.
+  // An authenticated session always wins over a stale demo cookie: resolve the
+  // user first and only treat the request as demo when there's a demo cookie
+  // AND no logged-in user.
+  //
+  // Modes:
+  //  - AUTH_DISABLED=1: open access (single-user / dev). Render the owner app.
+  //  - auth required + valid session: render as the owner (no banner), even if
+  //    a demo cookie lingers.
+  //  - auth required + demo cookie + no session: render as a demo session.
   //  - auth required + neither: show the public landing page.
-  if (isAuthRequired() && !isDemo) {
+  let isDemo = false;
+  if (isAuthRequired()) {
     const user = await getSessionUser();
-    if (!user) return <Landing />;
+    if (!user) {
+      if (!hasDemoCookie) return <Landing />;
+      isDemo = true;
+    }
   }
 
   return (

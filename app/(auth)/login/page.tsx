@@ -52,13 +52,35 @@ function LoginInner() {
   // following addPasskey() can run, so a redirect here would preempt the
   // WebAuthn prompt. The active handler does its own redirect once done.
   useEffect(() => {
-    if (session?.user && !passkeyPrompt && !busy) router.replace("/");
+    if (session?.user && !passkeyPrompt && !busy) {
+      // Drop any stale demo session before bouncing into the dashboard so a
+      // returning demo-then-login user doesn't carry the cookie. Best-effort.
+      fetch("/api/demo", { method: "DELETE" }).catch(() => {});
+      router.replace("/");
+    }
   }, [session, router, passkeyPrompt, busy]);
 
   // Header sent on account-creation / OAuth POSTs so the server-side Turnstile
   // gate can verify it. Empty when Turnstile isn't configured (dev bypass).
   function turnstileHeaders(): Record<string, string> {
     return turnstileToken ? { "x-turnstile-token": turnstileToken } : {};
+  }
+
+  // Clear any stale demo session before entering a real account. DELETE
+  // /api/demo drops the in-memory demo DB and clears the macrotide_demo cookie
+  // so a returning demo-then-login user doesn't carry it into the dashboard.
+  // Best-effort: never block login if it fails.
+  async function clearDemoSession() {
+    try {
+      await fetch("/api/demo", { method: "DELETE" });
+    } catch {
+      // ignore — demo cookie is harmless once a real session takes precedence.
+    }
+  }
+
+  async function continueToApp() {
+    await clearDemoSession();
+    router.replace("/");
   }
 
   async function signInSocial(provider: "google" | "github") {
@@ -86,7 +108,7 @@ function LoginInner() {
         name: `${session?.user?.name ?? "Passkey"} · ${new Date().toLocaleDateString()}`,
       });
       if (addPk?.error) throw new Error(addPk.error.message ?? "passkey registration failed");
-      router.replace("/");
+      await continueToApp();
     } catch (e) {
       setError(e instanceof Error ? e.message : "passkey registration failed");
       setBusy(false);
@@ -112,7 +134,7 @@ function LoginInner() {
     try {
       const result = await signIn.passkey();
       if (result?.error) throw new Error(result.error.message ?? "sign in failed");
-      router.replace("/");
+      await continueToApp();
     } catch (e) {
       setError(e instanceof Error ? e.message : "sign in failed");
       setBusy(false);
@@ -146,7 +168,7 @@ function LoginInner() {
       });
       if (addPk?.error) throw new Error(addPk.error.message ?? "passkey registration failed");
 
-      router.replace("/");
+      await continueToApp();
     } catch (err) {
       setError(err instanceof Error ? err.message : "sign up failed");
       setBusy(false);
@@ -171,7 +193,7 @@ function LoginInner() {
           <button type="button" style={primary} onClick={addPasskeyAndContinue} disabled={busy}>
             {busy ? "Setting up…" : "Add a passkey"}
           </button>
-          <button type="button" style={ghost} onClick={() => router.replace("/")} disabled={busy}>
+          <button type="button" style={ghost} onClick={continueToApp} disabled={busy}>
             Skip for now
           </button>
           {error && <div style={errBanner}>{error}</div>}
