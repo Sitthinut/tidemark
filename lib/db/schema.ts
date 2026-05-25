@@ -90,6 +90,80 @@ export const navHistory = sqliteTable(
   ],
 );
 
+// ───────────────────────────────────────────────────────────────────────────
+// Fund catalog — the universe of Thai-registered funds and their fees, refreshed
+// daily from the SEC Open API. Powers the fee-aware fund finder ("Select"): given
+// a target exposure, name the lowest-fee fund that delivers it. Distinct from
+// `holdings` (what the user owns) and `fund_quotes` (live NAV cache).
+// ───────────────────────────────────────────────────────────────────────────
+
+// One row per fund, keyed by the SEC's internal project id (`proj_id`).
+export const fundCatalog = sqliteTable(
+  "fund_catalog",
+  {
+    // SEC internal fund id (e.g. "M0017_2538"). The join key to fund_fees.
+    projId: text("proj_id").primaryKey(),
+    // Short fund symbol / abbreviation (e.g. "K-FIXED"). The human-facing ticker,
+    // aligns with holdings.ticker where the user holds the fund.
+    abbrName: text("abbr_name"),
+    thaiName: text("thai_name"),
+    englishName: text("english_name"),
+    // Asset management company (e.g. "Kasikorn Asset Management").
+    amcName: text("amc_name"),
+    // SEC fund classification, raw (e.g. "Fixed Income", "Foreign Investment Fund").
+    fundType: text("fund_type"),
+    // Investment-policy text — used for exposure matching ("S&P 500 feeder").
+    policyDesc: text("policy_desc"),
+    // Our normalized allocation taxonomy, mirrors holdings.assetClass:
+    // 'equity' | 'bond' | 'alternative' | 'cash'. NULL until classified.
+    assetClass: text("asset_class"),
+    // 'active' = currently offered; 'inactive' = closed/merged (kept for history).
+    status: text("status", { enum: ["active", "inactive"] })
+      .notNull()
+      .default("active"),
+    createdAt: text("created_at").notNull().default(sql`(CURRENT_TIMESTAMP)`),
+    updatedAt: text("updated_at").notNull().default(sql`(CURRENT_TIMESTAMP)`),
+  },
+  (table) => [
+    index("idx_fund_catalog_asset_class").on(table.assetClass),
+    index("idx_fund_catalog_fund_type").on(table.fundType),
+  ],
+);
+
+// Fund fees — a time-series, one row per (fund, share class, fee type, period),
+// mirroring the SEC FundFactsheet fees endpoint. The SEC reports a max/ceiling
+// rate (`rateCeilingPct`) and the rate actually charged in the period
+// (`actualRatePct`); the fee finder ranks on the latter. The currently-active
+// record has `periodEnd IS NULL`. `feeType` is our normalized enum; `feeTypeRaw`
+// preserves the original SEC label so an unrecognized fee type still round-trips.
+export const fundFees = sqliteTable(
+  "fund_fees",
+  {
+    projId: text("proj_id")
+      .notNull()
+      .references(() => fundCatalog.projId, { onDelete: "cascade" }),
+    fundClassName: text("fund_class_name").notNull(),
+    // Normalized: 'front_end' | 'back_end' | 'management' | 'total_expense' | 'other'.
+    feeType: text("fee_type").notNull(),
+    // Original SEC `fee_type_desc` (Thai + English), kept for audit / unknown types.
+    feeTypeRaw: text("fee_type_raw").notNull(),
+    // SEC `rate` — prospectus ceiling (% p.a. or % of transaction), incl. VAT.
+    rateCeilingPct: real("rate_ceiling_pct"),
+    // SEC `actual_value` — rate actually charged in the period (% p.a.).
+    actualRatePct: real("actual_rate_pct"),
+    periodStart: text("period_start").notNull(),
+    periodEnd: text("period_end"), // NULL = currently active
+    prospectusType: text("prospectus_type"), // 'Monthly' | 'SignificantFactsheet'
+    lastUpdDate: text("last_upd_date"),
+  },
+  (table) => [
+    primaryKey({
+      columns: [table.projId, table.fundClassName, table.feeTypeRaw, table.periodStart],
+    }),
+    index("idx_fund_fees_current").on(table.projId, table.feeType, table.periodEnd),
+  ],
+);
+
 // Investment plan — one row per user. `id` autoincrements; a UNIQUE index on
 // `user_id` enforces a single plan per owner. SQLite treats multiple NULLs as
 // distinct in a UNIQUE index, which is fine: single-owner mode has exactly one
