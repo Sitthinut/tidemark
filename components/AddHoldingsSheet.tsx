@@ -7,6 +7,7 @@ import {
   mergeWithHoldings,
   type TickerSuggestion,
 } from "@/lib/data/known-funds";
+import { mergeSourceSuggestions } from "@/lib/data/sources";
 import { useBuckets, useHoldings } from "@/lib/fetchers/portfolio";
 import { invalidate } from "@/lib/fetchers/swr";
 import { QUOTE_SOURCE_LABELS, QUOTE_SOURCES, type QuoteSource } from "@/lib/market/sources";
@@ -68,7 +69,7 @@ export function AddHoldingsSheet({ open, onClose, onAdd }: AddHoldingsSheetProps
     { ticker: "", units: "", value: "" },
     { ticker: "", units: "", value: "" },
   ]);
-  const [source, setSource] = useState("Manual");
+  const [source, setSource] = useState("");
   const [quoteSource, setQuoteSource] = useState<QuoteSource>("thai_mutual_fund");
   const [bucketId, setBucketId] = useState<string>("");
   const [submitting, setSubmitting] = useState(false);
@@ -94,6 +95,14 @@ export function AddHoldingsSheet({ open, onClose, onAdd }: AddHoldingsSheetProps
       })),
     );
   }, [holdings]);
+
+  // Source-label suggestions for the combobox: the user's previously-used
+  // sources first, then common Thai brokerages as starters. Free text — blank
+  // is fine (an unknown origin is honest).
+  const sourceOptions = useMemo(
+    () => mergeSourceSuggestions((holdings ?? []).map((h) => h.source)),
+    [holdings],
+  );
 
   // Debounce the active row's ticker query so the filter doesn't refire on
   // every keystroke. ~120 ms is short enough to feel live, long enough to
@@ -257,7 +266,7 @@ export function AddHoldingsSheet({ open, onClose, onAdd }: AddHoldingsSheetProps
             avgCost,
             ter: 0,
             color: "var(--accent)",
-            source: row.source || source,
+            source: (row.source || source).trim() || null,
             quoteSource,
           }),
         });
@@ -392,9 +401,11 @@ export function AddHoldingsSheet({ open, onClose, onAdd }: AddHoldingsSheetProps
             >
               SOURCE
             </label>
-            <select
+            <input
+              list="add-source-suggestions"
               value={source}
               onChange={(e) => setSource(e.target.value)}
+              placeholder="e.g. SCB Easy Invest (optional)"
               className="twk-field"
               style={{
                 width: "100%",
@@ -406,14 +417,12 @@ export function AddHoldingsSheet({ open, onClose, onAdd }: AddHoldingsSheetProps
                 fontSize: 13,
                 color: "var(--ink)",
               }}
-            >
-              <option>Manual</option>
-              <option>SCB Easy Invest</option>
-              <option>Kasikorn (K-My Funds)</option>
-              <option>Krungsri Asset</option>
-              <option>BBLAM</option>
-              <option>Other Thai brokerage</option>
-            </select>
+            />
+            <datalist id="add-source-suggestions">
+              {sourceOptions.map((s) => (
+                <option key={s} value={s} />
+              ))}
+            </datalist>
           </div>
         </div>
 
