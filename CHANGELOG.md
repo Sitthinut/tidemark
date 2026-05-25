@@ -34,8 +34,11 @@ cut: this section is sliced into a dated/versioned heading and a fresh
 - **Interactive charts** (recharts) with hover + tooltips.
 - **Market data** — SET + global indices and FX (Yahoo); **Thai fund NAVs +
   NAV history** (Thai SEC Open API) behind a provider registry +
-  `holdings.quote_source` taxonomy; demo NAV history pre-seeded so charts render
-  instantly.
+  `holdings.quote_source` taxonomy. Resilient to upstream rate-limits: a
+  stale-on-error cache fallback and per-symbol backoff keep a warmed cache
+  serving through Yahoo 429s, the Markets screen shows an honest "unavailable"
+  state instead of fabricated numbers when nothing loads, and the demo cache is
+  pre-warmed (indices + NAV history) so charts render instantly.
 - **RSS news aggregator** — curated long-horizon editorial feeds on the markets
   screen (parallel fetch, dedupe, 30-min cache, partial-failure resilience).
 - **Portfolio import** — CSV upload, manual-entry ticker autocomplete (seed of

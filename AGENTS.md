@@ -11,12 +11,16 @@ Project-specific rules for AI agents working on this repo.
 
 ## Source of truth for "what's done"
 
-[ROADMAP.md](./ROADMAP.md) is the single index of feature status. When you ship
-or change anything user-visible:
+[README.md](./README.md#status) holds the capability/status board (what works
+today); [CHANGELOG.md](./CHANGELOG.md) holds shipped detail by capability;
+[ROADMAP.md](./ROADMAP.md) is forward-looking only (Now / Next / Later). When
+you ship or change anything user-visible:
 
-1. Update [ROADMAP.md](./ROADMAP.md) — the "Phases at a glance" table and the
-   relevant phase section. Use the commit hash, not "yesterday".
-2. Update [README.md](./README.md) "Status" block if it mentions the area.
+1. Add a one-line entry under `## [Unreleased]` in [CHANGELOG.md](./CHANGELOG.md),
+   described by capability — not "yesterday", not a phase number.
+2. Flip the matching row in the [README.md](./README.md#status) status board if
+   its status changed, and move the item out of [ROADMAP.md](./ROADMAP.md) if it
+   was listed as planned.
 3. If you change env vars, update [deploy.md](./docs/how-to/deploy.md),
    [auth-and-providers.md](./docs/reference/auth-and-providers.md), and `.env.example` together. Never one without the
    others.

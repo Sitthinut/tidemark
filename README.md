@@ -7,17 +7,25 @@
 
 ## Status
 
-**Experimental.** The 7-screen UI (Portfolio, Markets, Chat, Journal, Models,
-Connect, Settings) is responsive across mobile / tablet / desktop with
-light/dark/system themes. Persistence (SQLite + Drizzle), chat with reload-
-survives history (Vercel AI SDK via OpenRouter), plan-edit Apply that round-
-trips through the API, passkey auth, and live market indices are all wired
-up. Thai mutual-fund NAVs, market news, and a transparent portfolio-health
-score are now wired; multi-user mode is code-complete and awaiting
-operator setup. See [ROADMAP.md](./ROADMAP.md) for the full status board, and
-**[docs/](./docs)** for the user + developer guide.
+**Experimental — don't rely on it for real investment decisions.** The
+7-screen UI (Portfolio, Markets, Chat, Journal, Models, Connect, Settings) is
+responsive across mobile / tablet / desktop with light/dark/system themes.
 
-Don't rely on it for real investment decisions.
+| Capability | Status |
+| --- | --- |
+| Persistence — SQLite + Drizzle, daily backups | ✅ Shipped |
+| AI advisor — streaming chat, tool-calls, proposal cards, transparent health score | ✅ Shipped |
+| Passkey auth + isolated per-session demo mode | ✅ Shipped |
+| Market data — SET/global indices + FX (Yahoo), Thai fund NAVs + history (Thai SEC), RSS news | ✅ Shipped |
+| Portfolio import — CSV, manual autocomplete, image OCR with advisor handoff | ✅ Shipped |
+| Long-term memory + chat archival — recall, FTS, session lifecycle | ✅ Shipped |
+| Multi-user — per-user isolation, tiers/quotas, owner admin | 🟡 Code shipped; launch prep open |
+| Scheduled NAV refresh | ⬜ Planned |
+| Reliable index/FX source (Yahoo 429 fix) | ⬜ Planned |
+
+For what's next see [ROADMAP.md](./ROADMAP.md); for shipped detail see
+[CHANGELOG.md](./CHANGELOG.md) and the **[docs/](./docs)** user + developer
+guide.
 
 ## What it will do
 

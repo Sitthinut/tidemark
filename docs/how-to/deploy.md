@@ -4,6 +4,22 @@ Macrotide is a single Next.js process talking to a local SQLite file. There's no
 
 If you just want to share the app with people on the public internet, follow the "Single VM" path. If you'd rather keep it on your laptop and tunnel via Tailscale, jump to "Tailnet only".
 
+## Modes at a glance
+
+Two supported modes, both first-class:
+
+- **Mode A — localhost (single user):** `npm install && npm run dev`. SQLite at
+  `data/app.db`, backups in `data/backups/`. No auth, no env beyond
+  `OPENROUTER_API_KEY`.
+- **Mode B — single-owner self-host:** one Linux VM, Caddy reverse proxy
+  (automatic HTTPS), systemd to keep Node alive, SQLite on disk with daily
+  backups mirrored off-VM (e.g. Cloudflare R2 via `rclone`). Owner signs in with
+  a passkey; visitors can try the demo. To invite family/friends with their own
+  accounts, finish the public-launch hardening tracked in
+  [ROADMAP.md](../../ROADMAP.md).
+
+The rest of this doc is the full runbook for Mode B (and the Tailnet variant).
+
 ## Single VM (Ubuntu + Caddy)
 
 Tested on Oracle Cloud Ampere (ARM64, 4 vCPU, 24 GB RAM, Ubuntu 24.04) — but any VPS with ≥1 GB RAM and a public IP works.
