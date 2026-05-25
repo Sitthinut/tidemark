@@ -20,6 +20,9 @@ responsive across mobile / tablet / desktop with light/dark/system themes.
 | Portfolio import — CSV, manual autocomplete, image OCR with advisor handoff | ✅ Shipped |
 | Long-term memory + chat archival — recall, FTS, session lifecycle | ✅ Shipped |
 | Multi-user — per-user isolation, tiers/quotas, owner admin | 🟡 Code shipped; launch prep open |
+| Benchmark comparison — goal-based, "match or beat your index" | 🚧 UI present, overlay not rendering |
+| Richer AI — daily digest, AI-curated news brief, proactive review | ⬜ Planned |
+| Data freshness — auto-refresh cadence per surface | ⬜ Planned |
 | Scheduled NAV refresh | ⬜ Planned |
 | Reliable index/FX source (Yahoo 429 fix) | ⬜ Planned |
 
