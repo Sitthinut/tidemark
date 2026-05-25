@@ -74,6 +74,8 @@ export interface ChatScreenProps {
   persona?: string;
   seedPrompt?: SeedPrompt | null;
   onPromptConsumed?: () => void;
+  /** Opens the account menu from the topbar (mobile only; hidden in the dock). */
+  onOpenMenu?: () => void;
 }
 
 function PlanProposalCard({
@@ -228,7 +230,12 @@ function HoldingProposalCard({
   );
 }
 
-export function ChatScreen({ persona = "advisor", seedPrompt, onPromptConsumed }: ChatScreenProps) {
+export function ChatScreen({
+  persona = "advisor",
+  seedPrompt,
+  onPromptConsumed,
+  onOpenMenu,
+}: ChatScreenProps) {
   void persona; // single advisor persona for MVP
 
   const initial = useMemo<Message[]>(
@@ -802,16 +809,6 @@ export function ChatScreen({ persona = "advisor", seedPrompt, onPromptConsumed }
         </button>
         <div className="brand" style={{ flex: 1 }}>
           <span>{AI_PERSONALITIES.advisor.label}</span>
-          <span
-            className="brand-chip"
-            style={{
-              background: "var(--accent-soft)",
-              color: "var(--accent-ink)",
-              borderColor: "transparent",
-            }}
-          >
-            ● INDEX TEACHER
-          </span>
         </div>
         <button
           type="button"
@@ -823,7 +820,15 @@ export function ChatScreen({ persona = "advisor", seedPrompt, onPromptConsumed }
         >
           <Icon name="sparkle" size={12} /> New chat
         </button>
-        <div className="avatar">DU</div>
+        <button
+          type="button"
+          className="icon-btn"
+          onClick={onOpenMenu}
+          aria-label="More"
+          title="More"
+        >
+          <Icon name="ellipsis-vertical" size={15} />
+        </button>
       </div>
 
       <ChatThreadList

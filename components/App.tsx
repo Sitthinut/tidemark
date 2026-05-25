@@ -87,7 +87,6 @@ export function App() {
   const { data: adminStatus } = useResource<{ isOwner: boolean }>("/api/admin/status");
   const isOwner = adminStatus?.isOwner ?? false;
   const accountName = accountUser?.name?.trim() || "Demo user";
-  const accountSub = accountUser?.email || "Live · Demo Broker";
   const accountInitials =
     accountName
       .split(/\s+/)
@@ -237,11 +236,50 @@ export function App() {
     else setScreen("chat");
   };
 
+  // Mobile screens carry a top-right kebab that opens the account menu. The
+  // wide shell hides it — the rail avatar holds the menu there.
+  const openMobileMenu = () => setAccountMenuOpen(true);
+
+  // Account menu contents, shared by the desktop rail dropdown and the mobile
+  // sheet so the two stay in sync.
+  const gotoScreen = (s: Screen) => {
+    setAccountMenuOpen(false);
+    setScreen(s);
+  };
+  const signOut = async () => {
+    setAccountMenuOpen(false);
+    await authClient.signOut();
+    window.location.href = "/login";
+  };
+  const accountMenuItems = (
+    <>
+      <button onClick={() => gotoScreen("settings")}>
+        <Icon name="settings" size={14} /> Settings
+      </button>
+      <button onClick={() => gotoScreen("models")}>
+        <Icon name="insight" size={14} /> Templates
+      </button>
+      <button onClick={() => gotoScreen("account")}>
+        <Icon name="user" size={14} /> Account
+      </button>
+      {isOwner && (
+        <button onClick={() => gotoScreen("admin")}>
+          <Icon name="shield" size={14} /> Admin
+        </button>
+      )}
+      <hr />
+      <button onClick={signOut}>
+        <Icon name="refresh" size={14} /> Sign out
+      </button>
+    </>
+  );
+
   const renderScreen = () => {
     if (screen === "portfolio") {
       return (
         <PortfolioScreen
-          onOpenSettings={() => setScreen("settings")}
+          onOpenSettings={openMobileMenu}
+          showMenu={!isWide}
           onOpenModels={() => setScreen("models")}
           onOpenChat={openChat}
           onOpenImport={() => setImportOpen(true)}
@@ -249,7 +287,7 @@ export function App() {
       );
     }
     if (screen === "markets") {
-      return <MarketsScreen onOpenSettings={() => setScreen("settings")} />;
+      return <MarketsScreen onOpenSettings={openMobileMenu} showMenu={!isWide} />;
     }
     if (screen === "chat") {
       return (
@@ -257,6 +295,7 @@ export function App() {
           persona="advisor"
           seedPrompt={pendingPrompt}
           onPromptConsumed={() => setPendingPrompt(null)}
+          onOpenMenu={() => setAccountMenuOpen(true)}
         />
       );
     }
@@ -265,7 +304,8 @@ export function App() {
         <JournalScreen
           onOpenChat={openChat}
           onOpenModels={() => setScreen("models")}
-          onOpenSettings={() => setScreen("settings")}
+          onOpenSettings={openMobileMenu}
+          showMenu={!isWide}
         />
       );
     }
@@ -360,6 +400,19 @@ export function App() {
                 ))}
               </nav>
             )}
+            {/* Account menu opens from each screen's top-right control (the
+                settings gear, or the kebab on Chat) — see openMobileMenu. */}
+            {accountMenuOpen && (
+              <>
+                <button
+                  type="button"
+                  className="mobile-menu-backdrop"
+                  aria-label="Close menu"
+                  onClick={() => setAccountMenuOpen(false)}
+                />
+                <div className="mobile-account-menu">{accountMenuItems}</div>
+              </>
+            )}
           </div>
         </div>
         {sharedModals}
@@ -400,56 +453,12 @@ export function App() {
               {isDesktop && (
                 <div className="ra-rail-acct-text">
                   <div className="ra-rail-acct-name">{accountName}</div>
-                  <div className="ra-rail-acct-sub">{accountSub}</div>
                 </div>
               )}
             </button>
             {accountMenuOpen && (
               <div className="ra-account-menu" onMouseLeave={() => setAccountMenuOpen(false)}>
-                <button
-                  onClick={() => {
-                    setAccountMenuOpen(false);
-                    setScreen("settings");
-                  }}
-                >
-                  <Icon name="settings" size={14} /> Settings
-                </button>
-                <button
-                  onClick={() => {
-                    setAccountMenuOpen(false);
-                    setScreen("models");
-                  }}
-                >
-                  <Icon name="insight" size={14} /> Templates
-                </button>
-                <button
-                  onClick={() => {
-                    setAccountMenuOpen(false);
-                    setScreen("account");
-                  }}
-                >
-                  <Icon name="user" size={14} /> Account
-                </button>
-                {isOwner && (
-                  <button
-                    onClick={() => {
-                      setAccountMenuOpen(false);
-                      setScreen("admin");
-                    }}
-                  >
-                    <Icon name="settings" size={14} /> Admin
-                  </button>
-                )}
-                <hr />
-                <button
-                  onClick={async () => {
-                    setAccountMenuOpen(false);
-                    await authClient.signOut();
-                    window.location.href = "/login";
-                  }}
-                >
-                  <Icon name="refresh" size={14} /> Sign out
-                </button>
+                {accountMenuItems}
               </div>
             )}
           </div>

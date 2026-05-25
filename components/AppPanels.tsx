@@ -82,7 +82,7 @@ export function ChatPanel({
             >
               <Icon name="menu" size={15} />
             </button>
-            <span className="ra-dot"></span> Chat
+            <span className="ra-dot"></span> Advisor
           </div>
           <button className="icon-btn" onClick={onClose} aria-label="Close">
             <Icon name="close" size={14} />

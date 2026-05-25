@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { ModelDonut } from "@/components/charts";
 import { Icon } from "@/components/Icon";
+import { authClient } from "@/lib/auth/client";
 import { useJournalView, useModelPortfoliosView, useSelectedModelId } from "@/lib/fetchers/legacy";
 import { usePlan } from "@/lib/fetchers/portfolio";
 import { invalidate } from "@/lib/fetchers/swr";
@@ -21,22 +22,34 @@ export interface JournalScreenProps {
   onOpenChat: () => void;
   onOpenModels: () => void;
   onOpenSettings: () => void;
+  /** Show the top-right kebab that opens the account menu (mobile only). */
+  showMenu?: boolean;
 }
 
-export function JournalScreen({ onOpenChat, onOpenModels, onOpenSettings }: JournalScreenProps) {
+export function JournalScreen({
+  onOpenChat,
+  onOpenModels,
+  onOpenSettings,
+  showMenu = true,
+}: JournalScreenProps) {
   const [tab, setTab] = useState<Tab>("plan");
   const { journal } = useJournalView();
+  // No better-auth user ⇒ demo / AUTH_DISABLED session. Real accounts don't
+  // get the "DEMO" chip.
+  const isDemo = !authClient.useSession().data?.user;
 
   return (
     <div className="screen">
       <div className="topbar">
         <div className="brand" style={{ flex: 1 }}>
           <span>Journal</span>
-          <span className="brand-chip">DEMO USER</span>
+          {isDemo && <span className="brand-chip">DEMO</span>}
         </div>
-        <button className="icon-btn" aria-label="Settings" onClick={onOpenSettings}>
-          <Icon name="settings" size={13} />
-        </button>
+        {showMenu && (
+          <button className="icon-btn" aria-label="More" onClick={onOpenSettings}>
+            <Icon name="ellipsis-vertical" size={13} />
+          </button>
+        )}
       </div>
 
       <div className="sub-tabs">

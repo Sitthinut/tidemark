@@ -74,12 +74,15 @@ export interface PortfolioScreenProps {
   onOpenModels: () => void;
   onOpenChat: () => void;
   onOpenImport: () => void;
+  /** Show the top-right kebab that opens the account menu (mobile only). */
+  showMenu?: boolean;
 }
 
 export function PortfolioScreen({
   onOpenSettings,
   onOpenModels,
   onOpenImport,
+  showMenu = true,
 }: PortfolioScreenProps) {
   const [activePfId, setActivePfId] = useState<string>("all");
   const [range, setRange] = useState<string>("6M");
@@ -273,9 +276,11 @@ export function PortfolioScreen({
             <span className="brand-mark"></span>
             <span>Macrotide</span>
           </div>
-          <button className="icon-btn" aria-label="Settings" onClick={onOpenSettings}>
-            <Icon name="settings" size={13} />
-          </button>
+          {showMenu && (
+            <button className="icon-btn" aria-label="More" onClick={onOpenSettings}>
+              <Icon name="ellipsis-vertical" size={13} />
+            </button>
+          )}
         </div>
         <div style={{ padding: "24px 20px" }}>
           <div className="card" style={{ padding: "36px 22px", textAlign: "center" }}>
@@ -300,8 +305,9 @@ export function PortfolioScreen({
                 margin: "0 auto 22px",
               }}
             >
-              A portfolio holds a set of fund positions. Most people start with one "Core" portfolio
-              for long-term holdings, plus optional ones for tax-advantaged accounts.
+              A portfolio holds a set of holdings — funds, stocks, ETFs, or cash. Most people start
+              with one "Core" portfolio for long-term holdings, plus optional ones for
+              tax-advantaged accounts.
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
               <button className="btn primary" onClick={openNewPortfolio}>
@@ -373,19 +379,11 @@ export function PortfolioScreen({
           <span className="brand-mark"></span>
           <span>Macrotide</span>
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-          <button
-            className="icon-btn"
-            aria-label="Add holdings"
-            onClick={onOpenImport}
-            style={{ borderColor: "var(--accent)", color: "var(--accent)" }}
-          >
-            <Icon name="plus" size={13} />
+        {showMenu && (
+          <button className="icon-btn" aria-label="More" onClick={onOpenSettings}>
+            <Icon name="ellipsis-vertical" size={13} />
           </button>
-          <button className="icon-btn" aria-label="Settings" onClick={onOpenSettings}>
-            <Icon name="settings" size={13} />
-          </button>
-        </div>
+        )}
       </div>
 
       <div className="portfolio-switch">
@@ -636,7 +634,7 @@ export function PortfolioScreen({
                   </span>
                 </div>
                 <div className="row between" style={{ padding: "2px 0" }}>
-                  <span>Funds held</span>
+                  <span>Holdings held</span>
                   <span className="num" style={{ color: "var(--muted)" }}>
                     {health.concentration.holdingCount}
                   </span>
@@ -980,7 +978,16 @@ export function PortfolioScreen({
 
       <div className="section-header" style={{ padding: "0 20px", marginBottom: 4, marginTop: 18 }}>
         <h3>Holdings</h3>
-        <span className="link">{view.holdings.length} funds</span>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <span className="link">{view.holdings.length} holdings</span>
+          <button
+            className="btn ghost sm"
+            onClick={onOpenImport}
+            style={{ gap: 4, borderColor: "var(--accent)", color: "var(--accent)" }}
+          >
+            <Icon name="plus" size={12} /> Add
+          </button>
+        </div>
       </div>
       <div className="filter-chips">
         <span className="chip" data-active={filter === "all"} onClick={() => setFilter("all")}>
