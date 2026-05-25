@@ -338,18 +338,41 @@ export const secThailandProvider: Provider = {
 /**
  * Raw profile item returned by the /v2/fund/general-info/profiles endpoint
  * when enumerating the full fund universe (no query filter).
+ *
+ * Field names verified against a live data-inventory spike (29 total fields).
+ * NOTE: the v2 endpoint does NOT return fund_type_en/fund_type_th — those
+ * fields do not exist. Asset class is derived from policy_desc (Thai label)
+ * via inferAssetClass in lib/market/fund-classify.ts.
  */
 export interface SecFundProfile {
   proj_id: string;
   proj_abbr_name: string;
   proj_name_th?: string | null;
   proj_name_en?: string | null;
+  /** Asset management company name (e.g. "Kasikorn Asset Management"). */
   amc_name?: string | null;
-  fund_type_en?: string | null;
-  fund_type_th?: string | null;
-  policy_desc?: string | null;
-  fund_class_name?: string | null;
+  /** Raw SEC fund status: 'Registered' | 'IPO' | 'Liquidated' | 'Expired' | 'Canceled'. */
   fund_status?: string | null;
+  /** Short Thai asset-type label (ตราสารหนี้ / ตราสารทุน / ผสม / ทรัพย์สินทางเลือก / ตลาดเงิน). */
+  policy_desc?: string | null;
+  /** Management style code: 'AM' active | 'PN' passive/index | 'SM' systematic | 'PM' passive multi-factor | 'BH' buy-and-hold. */
+  management_style?: string | null;
+  /** Thai label for tax-incentive wrapper (e.g. "กองทุนรวมเพื่อการออม" → SSF). */
+  fund_class_tax_incentive_type?: string | null;
+  /** Thai share-class detail (จ่ายเงินปันผล = dividend, สะสมมูลค่า = accumulating). */
+  fund_class_detail?: string | null;
+  /** Geographic mandate flag: '1' = foreign | '3' = mixed | '4' = domestic. */
+  invest_country_flag?: string | null;
+  /** Master fund name if this is a feeder fund; null/undefined otherwise. */
+  feederfund_master_fund?: string | null;
+  /** 'Y' if the fund has a fixed maturity date. */
+  proj_term_flag?: string | null;
+  /** Fund inception date (ISO date string). */
+  init_date?: string | null;
+  /** ISIN code (~30% coverage). */
+  fund_class_isin_code?: string | null;
+  /** Share-class name (e.g. 'A', 'B', 'main'). Used only for symbol resolution. */
+  fund_class_name?: string | null;
 }
 
 /**
@@ -399,6 +422,49 @@ export async function enumerateFundProfiles(limit = 0): Promise<SecFundProfile[]
 export async function fetchFundFees(projId: string): Promise<SecFundFeeItem[]> {
   const key = apiKey();
   return secFetchPaginated<SecFundFeeItem>("/v2/fund/factsheet/fees", { proj_id: projId }, key);
+}
+
+interface SecDailyNavRow {
+  proj_id: string;
+  nav_date: string;
+  net_asset?: number | null;
+  last_val?: number | null;
+}
+
+/**
+ * Fetch the most recent total net asset value (AUM) for one fund.
+ * Uses a 7-day window so we catch the latest published figure even over
+ * a long weekend. Returns { aum, aumDate } from the most recent row, or
+ * null if no data is available. Only call this for Registered (active) funds.
+ */
+export async function fetchFundAum(
+  projId: string,
+): Promise<{ aum: number; aumDate: string } | null> {
+  const key = apiKey();
+  const today = new Date();
+  today.setUTCHours(0, 0, 0, 0);
+  const start = new Date(today);
+  start.setUTCDate(start.getUTCDate() - 7);
+
+  const rows = await secFetchPaginated<SecDailyNavRow>(
+    "/v2/fund/daily-info/nav",
+    {
+      proj_id: projId,
+      start_nav_date: yyyyMmDd(start),
+      end_nav_date: yyyyMmDd(today),
+    },
+    key,
+  );
+
+  // Find the most recent row that has a net_asset value.
+  const sorted = rows
+    .filter((r) => r.net_asset != null && r.nav_date)
+    .sort((a, b) => (b.nav_date > a.nav_date ? 1 : b.nav_date < a.nav_date ? -1 : 0));
+
+  if (sorted.length === 0) return null;
+  const best = sorted[0];
+  // net_asset is guaranteed non-null due to the filter above.
+  return { aum: best.net_asset as number, aumDate: best.nav_date };
 }
 
 /** Test-only — reset the per-symbol cache. */

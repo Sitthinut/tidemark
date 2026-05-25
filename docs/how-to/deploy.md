@@ -211,6 +211,8 @@ Macrotide uses **systemd timers** (not in-process cron) for periodic background 
 
 The SEC publishes fresh fee data after ~10:30 UTC daily. The timer fires at **11:00 UTC** to give a comfortable margin.
 
+A full crawl catalogs ~11,500 profile rows (~9,400 unique funds including inactive ones). Fees and AUM are only fetched for currently-offered (Registered) funds — approximately 2,300 — which produces roughly 10,000–15,000 API calls total. At the 5,000-calls/300-second budget this completes in about 15–30 minutes, well within the daily window before the next SEC refresh cycle. No change to the unit files or timer schedule is needed.
+
 Create the service unit:
 
 ```sh

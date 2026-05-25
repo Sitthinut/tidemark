@@ -1,9 +1,9 @@
 // Unit tests for the refresh-fund-catalog job.
 //
 // Strategy: mock the SEC provider functions (enumerateFundProfiles +
-// fetchFundFees) and the DB query functions (upsertFund + upsertFundFees) so
-// tests run without a real DB or network. All assertions are on the transform +
-// orchestration logic.
+// fetchFundFees + fetchFundAum) and the DB query functions (upsertFund +
+// upsertFundFees) so tests run without a real DB or network. All assertions
+// are on the transform + orchestration logic.
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -23,17 +23,24 @@ import { refreshFundCatalog } from "./refresh-fund-catalog";
 
 // ─── Fixtures ────────────────────────────────────────────────────────────────
 
+/** A Registered (active) fund with all new enrichment fields populated. */
 const makeProfile = (overrides: Partial<SecFundProfile> = {}): SecFundProfile => ({
   proj_id: "1234",
   proj_abbr_name: "TEST-FUND",
   proj_name_th: "กองทุนทดสอบ",
   proj_name_en: "Test Fund",
   amc_name: "Test AMC",
-  fund_type_en: "Equity Fund",
-  fund_type_th: null,
-  policy_desc: "Invests in equities",
+  fund_status: "Registered",
+  policy_desc: "ตราสารทุน", // equity → assetClass: 'equity'
+  management_style: "AM",
+  fund_class_tax_incentive_type: null,
+  fund_class_detail: "สะสมมูลค่า", // accumulating
+  invest_country_flag: "4", // domestic
+  feederfund_master_fund: null,
+  proj_term_flag: "N",
+  init_date: "2010-01-15",
+  fund_class_isin_code: "TH1234567890",
   fund_class_name: "main",
-  fund_status: "A",
   ...overrides,
 });
 
@@ -50,6 +57,8 @@ const makeFeeItem = (overrides: Partial<SecFundFeeItem> = {}): SecFundFeeItem =>
   ...overrides,
 });
 
+const makeAum = () => ({ aum: 1_500_000_000, aumDate: "2026-05-23" });
+
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function makeEnumerate(profiles: SecFundProfile[]) {
@@ -58,6 +67,10 @@ function makeEnumerate(profiles: SecFundProfile[]) {
 
 function makeFetchFees(items: SecFundFeeItem[]) {
   return vi.fn().mockResolvedValue(items);
+}
+
+function makeFetchAum(result: { aum: number; aumDate: string } | null = makeAum()) {
+  return vi.fn().mockResolvedValue(result);
 }
 
 // ─── Tests ────────────────────────────────────────────────────────────────────
@@ -72,11 +85,14 @@ describe("refreshFundCatalog", () => {
     const result = await refreshFundCatalog({
       _enumerate: makeEnumerate([]),
       _fetchFees: makeFetchFees([]),
+      _fetchAum: makeFetchAum(null),
     });
 
     expect(result).toEqual({
       fundsSeen: 0,
       fundsUpserted: 0,
+      fundsActive: 0,
+      fundsWithFees: 0,
       feeRowsUpserted: 0,
       errors: [],
     });
@@ -84,21 +100,25 @@ describe("refreshFundCatalog", () => {
     expect(upsertFundFees).not.toHaveBeenCalled();
   });
 
-  it("upserts one fund and its fees", async () => {
+  it("upserts one Registered fund with fees, AUM, and enrichment columns", async () => {
     const profile = makeProfile();
     const feeItem = makeFeeItem();
+    const aum = makeAum();
 
     const result = await refreshFundCatalog({
       _enumerate: makeEnumerate([profile]),
       _fetchFees: makeFetchFees([feeItem]),
+      _fetchAum: makeFetchAum(aum),
     });
 
     expect(result.fundsSeen).toBe(1);
     expect(result.fundsUpserted).toBe(1);
+    expect(result.fundsActive).toBe(1);
+    expect(result.fundsWithFees).toBe(1);
     expect(result.feeRowsUpserted).toBe(1);
     expect(result.errors).toHaveLength(0);
 
-    // Check catalog insert shape
+    // Check catalog insert shape — new enrichment columns present.
     expect(upsertFund).toHaveBeenCalledOnce();
     expect(upsertFund).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -107,14 +127,25 @@ describe("refreshFundCatalog", () => {
         thaiName: "กองทุนทดสอบ",
         englishName: "Test Fund",
         amcName: "Test AMC",
-        fundType: "Equity Fund",
-        policyDesc: "Invests in equities",
+        // Asset class now derived from policy_desc (Thai label), NOT fund_type_en.
+        policyDescTh: "ตราสารทุน",
         assetClass: "equity",
+        secStatus: "Registered",
         status: "active",
+        managementStyle: "AM",
+        distributionPolicy: "accumulating",
+        investRegion: "domestic",
+        isFeederFund: false,
+        feederMasterFund: null,
+        isFixedTerm: false,
+        initDate: "2010-01-15",
+        isinCode: "TH1234567890",
+        aum: aum.aum,
+        aumDate: aum.aumDate,
       }),
     );
 
-    // Check fee insert shape
+    // Check fee insert shape.
     expect(upsertFundFees).toHaveBeenCalledOnce();
     const feeRows = vi.mocked(upsertFundFees).mock.calls[0][0];
     expect(feeRows).toHaveLength(1);
@@ -148,6 +179,7 @@ describe("refreshFundCatalog", () => {
     await refreshFundCatalog({
       _enumerate: makeEnumerate(profiles),
       _fetchFees: makeFetchFees(feeItems),
+      _fetchAum: makeFetchAum(),
     });
 
     const feeRows = vi.mocked(upsertFundFees).mock.calls[0][0];
@@ -160,32 +192,77 @@ describe("refreshFundCatalog", () => {
     ]);
   });
 
-  it("infers asset class from fund_type_en", async () => {
+  it("infers asset class from policy_desc Thai label (not fund_type_en)", async () => {
+    // policy_desc is the Thai asset-type label. fund_type_en does not exist in v2.
     const cases: Array<[string | null, string | null]> = [
-      ["Equity Fund", "equity"],
-      ["Fixed Income Fund", "bond"],
-      ["Money Market Fund", "cash"],
-      ["Property and Infrastructure Fund", "alternative"],
-      ["Mixed Fund", null],
+      ["ตราสารทุน", "equity"],
+      ["ตราสารหนี้", "bond"],
+      ["ตลาดเงิน", "cash"],
+      ["ทรัพย์สินทางเลือก", "alternative"],
+      ["ผสม", null], // mixed — intentionally stays null
       [null, null],
     ];
 
-    for (const [fundTypeEn, expectedAssetClass] of cases) {
+    for (const [policyDesc, expectedAssetClass] of cases) {
       vi.mocked(upsertFund).mockReset();
       await refreshFundCatalog({
-        _enumerate: makeEnumerate([makeProfile({ fund_type_en: fundTypeEn })]),
+        _enumerate: makeEnumerate([
+          makeProfile({ policy_desc: policyDesc, fund_status: "Registered" }),
+        ]),
         _fetchFees: makeFetchFees([]),
+        _fetchAum: makeFetchAum(null),
       });
       const call = vi.mocked(upsertFund).mock.calls[0][0];
       expect(call.assetClass).toBe(expectedAssetClass);
     }
   });
 
+  it("skips fee + AUM fetch for non-Registered funds and does NOT set aum fields", async () => {
+    const fetchFees = vi.fn();
+    const fetchAum = vi.fn();
+
+    const inactiveFund = makeProfile({ fund_status: "Liquidated" });
+    const ipoFund = makeProfile({ proj_id: "9999", proj_abbr_name: "NEW-IPO", fund_status: "IPO" });
+
+    const result = await refreshFundCatalog({
+      _enumerate: makeEnumerate([inactiveFund, ipoFund]),
+      _fetchFees: fetchFees,
+      _fetchAum: fetchAum,
+      concurrency: 1,
+    });
+
+    // Neither inactive nor IPO funds trigger API calls.
+    expect(fetchFees).not.toHaveBeenCalled();
+    expect(fetchAum).not.toHaveBeenCalled();
+    expect(upsertFundFees).not.toHaveBeenCalled();
+
+    // Both catalog rows are still upserted.
+    expect(result.fundsUpserted).toBe(2);
+    expect(result.fundsActive).toBe(0);
+    expect(result.fundsWithFees).toBe(0);
+
+    // AUM fields must be absent (undefined) on inactive fund inserts — not null —
+    // so the DB upsert leaves any existing AUM intact.
+    const calls = vi.mocked(upsertFund).mock.calls;
+    for (const [insert] of calls) {
+      expect(insert.aum).toBeUndefined();
+      expect(insert.aumDate).toBeUndefined();
+    }
+
+    // Status correctly derived from secStatus.
+    const liquidatedInsert = calls.find(([ins]) => ins.secStatus === "Liquidated")?.[0];
+    expect(liquidatedInsert?.status).toBe("inactive");
+
+    // IPO maps to 'active' per statusFromSec contract.
+    const ipoInsert = calls.find(([ins]) => ins.secStatus === "IPO")?.[0];
+    expect(ipoInsert?.status).toBe("active");
+  });
+
   it("collects per-fund errors and continues processing remaining funds", async () => {
     const profiles = [
-      makeProfile({ proj_id: "A", proj_abbr_name: "FUND-A" }),
-      makeProfile({ proj_id: "B", proj_abbr_name: "FUND-B" }),
-      makeProfile({ proj_id: "C", proj_abbr_name: "FUND-C" }),
+      makeProfile({ proj_id: "A", proj_abbr_name: "FUND-A", fund_status: "Registered" }),
+      makeProfile({ proj_id: "B", proj_abbr_name: "FUND-B", fund_status: "Registered" }),
+      makeProfile({ proj_id: "C", proj_abbr_name: "FUND-C", fund_status: "Registered" }),
     ];
 
     const fetchFees = vi.fn().mockImplementation((projId: string) => {
@@ -196,23 +273,25 @@ describe("refreshFundCatalog", () => {
     const result = await refreshFundCatalog({
       _enumerate: makeEnumerate(profiles),
       _fetchFees: fetchFees,
+      _fetchAum: makeFetchAum(),
       concurrency: 1,
     });
 
     expect(result.fundsSeen).toBe(3);
-    // All 3 catalog rows are upserted (upsertFund succeeds before fee fetch).
-    // B's error is raised during the fee fetch step; the catalog row is still written.
-    expect(result.fundsUpserted).toBe(3);
+    expect(result.fundsActive).toBe(3); // all three are Registered
+    // B's error is raised during the fee/AUM step; its catalog row is NOT written
+    // because the whole processOne block throws after the parallel fetch.
     expect(result.errors).toHaveLength(1);
     expect(result.errors[0].projId).toBe("B");
     expect(result.errors[0].error).toContain("network timeout");
-    expect(result.feeRowsUpserted).toBe(2); // A and C have fees; B's fee fetch failed
+    expect(result.feeRowsUpserted).toBe(2); // A and C succeed; B errored
   });
 
-  it("skips upsertFundFees when a fund has no fee rows", async () => {
+  it("skips upsertFundFees when a Registered fund has no fee rows", async () => {
     await refreshFundCatalog({
       _enumerate: makeEnumerate([makeProfile()]),
       _fetchFees: makeFetchFees([]),
+      _fetchAum: makeFetchAum(),
     });
 
     expect(upsertFund).toHaveBeenCalledOnce();
@@ -230,6 +309,7 @@ describe("refreshFundCatalog", () => {
     await refreshFundCatalog({
       _enumerate: makeEnumerate(profiles),
       _fetchFees: makeFetchFees([]),
+      _fetchAum: makeFetchAum(null),
       onProgress: (info) => progressCalls.push(info),
       concurrency: 1,
     });
@@ -241,7 +321,12 @@ describe("refreshFundCatalog", () => {
 
   it("passes limit to the enumerate function", async () => {
     const enumerate = makeEnumerate([]);
-    await refreshFundCatalog({ _enumerate: enumerate, _fetchFees: makeFetchFees([]), limit: 5 });
+    await refreshFundCatalog({
+      _enumerate: enumerate,
+      _fetchFees: makeFetchFees([]),
+      _fetchAum: makeFetchAum(null),
+      limit: 5,
+    });
     expect(enumerate).toHaveBeenCalledWith(5);
   });
 
@@ -250,14 +335,21 @@ describe("refreshFundCatalog", () => {
       proj_name_th: null,
       proj_name_en: null,
       amc_name: null,
-      fund_type_en: null,
-      fund_type_th: null,
       policy_desc: null,
+      management_style: null,
+      fund_class_tax_incentive_type: null,
+      fund_class_detail: null,
+      invest_country_flag: null,
+      feederfund_master_fund: null,
+      proj_term_flag: null,
+      init_date: null,
+      fund_class_isin_code: null,
     });
 
     const result = await refreshFundCatalog({
       _enumerate: makeEnumerate([profile]),
       _fetchFees: makeFetchFees([]),
+      _fetchAum: makeFetchAum(null),
     });
 
     expect(result.errors).toHaveLength(0);
@@ -266,10 +358,80 @@ describe("refreshFundCatalog", () => {
         thaiName: null,
         englishName: null,
         amcName: null,
-        fundType: null,
-        policyDesc: null,
+        policyDescTh: null,
         assetClass: null,
+        managementStyle: null,
+        taxIncentiveType: null,
+        distributionPolicy: null,
+        investRegion: null,
+        isFeederFund: false,
+        feederMasterFund: null,
+        isFixedTerm: false,
+        initDate: null,
+        isinCode: null,
+        // AUM not set (null from fetchAum → we still don't set undefined fields)
       }),
     );
+  });
+
+  it("maps tax incentive types and feeder-fund fields correctly", async () => {
+    const ssf = makeProfile({
+      proj_id: "SSF1",
+      fund_class_tax_incentive_type: "กองทุนรวมเพื่อการออม",
+      feederfund_master_fund: "MASTER-GLOBAL",
+      fund_status: "Registered",
+    });
+    const rmf = makeProfile({
+      proj_id: "RMF1",
+      fund_class_tax_incentive_type: "กองทุนรวมเพื่อการเลี้ยงชีพ",
+      feederfund_master_fund: null,
+      fund_status: "Registered",
+    });
+
+    await refreshFundCatalog({
+      _enumerate: makeEnumerate([ssf, rmf]),
+      _fetchFees: makeFetchFees([]),
+      _fetchAum: makeFetchAum(null),
+      concurrency: 1,
+    });
+
+    const calls = vi.mocked(upsertFund).mock.calls;
+    const ssfInsert = calls.find(([ins]) => ins.projId === "SSF1")?.[0];
+    expect(ssfInsert?.taxIncentiveType).toBe("SSF");
+    expect(ssfInsert?.isFeederFund).toBe(true);
+    expect(ssfInsert?.feederMasterFund).toBe("MASTER-GLOBAL");
+
+    const rmfInsert = calls.find(([ins]) => ins.projId === "RMF1")?.[0];
+    expect(rmfInsert?.taxIncentiveType).toBe("RMF");
+    expect(rmfInsert?.isFeederFund).toBe(false);
+  });
+
+  it("result summary reports fundsActive and fundsWithFees separately", async () => {
+    // 2 Registered + 1 Liquidated.
+    const profiles = [
+      makeProfile({ proj_id: "R1", fund_status: "Registered" }),
+      makeProfile({ proj_id: "R2", fund_status: "Registered" }),
+      makeProfile({ proj_id: "L1", fund_status: "Liquidated" }),
+    ];
+
+    const fetchFees = vi.fn().mockImplementation((projId: string) => {
+      // R2 has no fee rows.
+      if (projId === "R2") return Promise.resolve([]);
+      return Promise.resolve([makeFeeItem({ proj_id: projId })]);
+    });
+
+    const result = await refreshFundCatalog({
+      _enumerate: makeEnumerate(profiles),
+      _fetchFees: fetchFees,
+      _fetchAum: makeFetchAum(),
+      concurrency: 1,
+    });
+
+    expect(result.fundsSeen).toBe(3);
+    expect(result.fundsUpserted).toBe(3);
+    expect(result.fundsActive).toBe(2); // R1 + R2
+    expect(result.fundsWithFees).toBe(1); // only R1 has fee rows
+    expect(result.feeRowsUpserted).toBe(1);
+    expect(result.errors).toHaveLength(0);
   });
 });
