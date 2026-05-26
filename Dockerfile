@@ -24,7 +24,12 @@ COPY package.json package-lock.json ./
 RUN npm ci
 
 COPY . .
-RUN npm run build
+# lib/auth reads AUTH_SECRET at module-eval, and Next sets NODE_ENV=production
+# during `next build` — so a value must be present at BUILD time or page-data
+# collection throws. This placeholder is build-only and never signs real
+# sessions; the runtime secret comes from compose `env_file` (.env.local).
+# Mirrors the CI build step.
+RUN AUTH_SECRET=docker-build-placeholder-not-used-at-runtime-32chars npm run build
 
 # ── Runner ───────────────────────────────────────────────────────────────────
 FROM node:24-bookworm-slim AS runner

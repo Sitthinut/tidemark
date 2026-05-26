@@ -76,7 +76,15 @@ Cookies stay host-scoped by default (better-auth) — do not configure a
 
 ### 2. Build + run
 
+The container runs as the unprivileged `node` user (**uid 1000**). The SQLite
+file lives in a bind-mounted `./data` — create it **owned by uid 1000 first**, so
+the container can write. If you skip this, Docker auto-creates `./data` as
+`root` on first `up` and the DB silently fails on the first query (the `/login`
+page still renders, so the healthcheck won't catch it).
+
 ```sh
+mkdir -p data && sudo chown 1000:1000 data
+
 docker compose up -d --build
 # First boot applies all Drizzle migrations against /app/data/app.db.
 docker compose logs -f macrotide          # watch startup
