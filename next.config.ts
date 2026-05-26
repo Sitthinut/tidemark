@@ -19,6 +19,9 @@ const securityHeaders = [
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
+  turbopack: {
+    root: __dirname,
+  },
   outputFileTracingRoot: path.join(__dirname),
   // Dev-only escape hatch: trust one extra origin when the dev server is reached
   // through a reverse proxy or remote host (Codespaces, a LAN IP, a tunnel, etc.)

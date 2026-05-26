@@ -22,6 +22,9 @@
   --accent: #10a86b;
   --accent-ink: #076339;
   --accent-soft: #e3f6ec;
+  --accent-2: #0aa694;
+  --accent-2-soft: #dcf1ed;
+  --accent-2-ink: #086459;
   --gain: #10a86b;
   --loss: #d14545;
   --amber: #d89a1f;
@@ -63,6 +66,9 @@
   --accent: #19c37d;
   --accent-ink: #19c37d;
   --accent-soft: rgba(25, 195, 125, 0.14);
+  --accent-2: #14c9af;
+  --accent-2-soft: rgba(20, 201, 175, 0.14);
+  --accent-2-ink: #14c9af;
   --gain: #19c37d;
   --loss: #f46a6a;
   --amber: #e4b440;
@@ -95,6 +101,9 @@
     --accent: #19c37d;
     --accent-ink: #19c37d;
     --accent-soft: rgba(25, 195, 125, 0.14);
+    --accent-2: #14c9af;
+    --accent-2-soft: rgba(20, 201, 175, 0.14);
+    --accent-2-ink: #14c9af;
     --gain: #19c37d;
     --loss: #f46a6a;
     --amber: #e4b440;
@@ -242,22 +251,6 @@ body[data-topbar-hidden="true"] .ra-main .portfolio-switch {
   display: flex;
   align-items: center;
   gap: 9px;
-}
-.topbar .brand-mark {
-  width: 22px;
-  height: 22px;
-  border-radius: 7px;
-  background: var(--ink);
-  position: relative;
-  display: inline-block;
-  flex-shrink: 0;
-}
-.topbar .brand-mark::after {
-  content: "";
-  position: absolute;
-  inset: 5px;
-  border-radius: 4px;
-  background: var(--accent);
 }
 .topbar .brand-chip {
   font-family: var(--font-mono);

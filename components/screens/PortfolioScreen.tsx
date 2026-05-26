@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { BrandMark } from "@/components/BrandMark";
 import { ModelDonut, ScoreCircle } from "@/components/charts";
 import { FeedbackRow } from "@/components/FeedbackRow";
 import { type HoldingFormValues, HoldingSheet } from "@/components/HoldingSheet";
@@ -288,7 +289,7 @@ export function PortfolioScreen({
       <div className="screen">
         <div className="topbar">
           <div className="brand" style={{ flex: 1 }}>
-            <span className="brand-mark"></span>
+            <BrandMark />
             <span>Macrotide</span>
           </div>
         </div>
@@ -302,7 +303,7 @@ export function PortfolioScreen({
       <div className="screen">
         <div className="topbar">
           <div className="brand" style={{ flex: 1 }}>
-            <span className="brand-mark"></span>
+            <BrandMark />
             <span>Macrotide</span>
           </div>
           {showMenu && (
@@ -405,7 +406,7 @@ export function PortfolioScreen({
     <div className="screen">
       <div className="topbar">
         <div className="brand" style={{ flex: 1 }}>
-          <span className="brand-mark"></span>
+          <BrandMark />
           <span>Macrotide</span>
         </div>
         {showMenu && (
