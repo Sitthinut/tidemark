@@ -302,6 +302,9 @@ export const chatMessages = sqliteTable(
     content: text("content").notNull(),
     toolCallId: text("tool_call_id"),
     feedback: text("feedback"),
+    // The OpenRouter / provider model id that served this response.
+    // NULL for user/tool/summary rows and for messages predating this column.
+    model: text("model"),
     createdAt: text("created_at").notNull(),
   },
   (table) => [index("idx_chat_messages_thread").on(table.threadId, table.createdAt)],

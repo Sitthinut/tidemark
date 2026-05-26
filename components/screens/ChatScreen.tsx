@@ -51,6 +51,8 @@ interface Message {
   // Set on a failed/empty assistant turn so the UI can offer a "Try again"
   // button that re-sends the preceding user message.
   canRetry?: boolean;
+  /** The model id that served this assistant message (null/undefined = unknown). */
+  model?: string | null;
 }
 
 function makeId(): string {
@@ -317,7 +319,13 @@ export function ChatScreen({
         const res = await fetch(`/api/chat/threads/${encodeURIComponent(id)}`);
         if (!res.ok) return false;
         const { messages: rows } = (await res.json()) as {
-          messages: Array<{ id: number; role: string; content: string; createdAt: string }>;
+          messages: Array<{
+            id: number;
+            role: string;
+            content: string;
+            createdAt: string;
+            model?: string | null;
+          }>;
         };
         setThreadId(id);
         if (typeof window !== "undefined") {
@@ -331,6 +339,7 @@ export function ChatScreen({
                 text: r.content,
                 ts: Date.parse(r.createdAt) || Date.now(),
                 id: `db-${r.id}`,
+                model: r.model ?? null,
               })),
         );
         setMsgFeedback({});
@@ -859,6 +868,7 @@ export function ChatScreen({
                   hour: "2-digit",
                   minute: "2-digit",
                 })}
+                {m.model && <> · {m.model}</>}
               </div>
             )}
             {m.role === "ai" && !m.text && loading ? (

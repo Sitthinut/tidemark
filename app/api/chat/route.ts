@@ -250,10 +250,15 @@ export async function POST(req: Request) {
         // across steps in onFinish, so 6d's per-user budget is unaffected.
         stopWhen: stepCountIs(5),
         maxOutputTokens: 1024,
-        onFinish: ({ text }) => {
+        onFinish: ({ text, response: aiResponse }) => {
           if (!text) return;
           runWithDbContext(ctx, () => {
-            appendMessage({ threadId: finalThreadId, role: "assistant", content: text });
+            appendMessage({
+              threadId: finalThreadId,
+              role: "assistant",
+              content: text,
+              model: aiResponse.modelId ?? null,
+            });
           });
         },
       });
@@ -304,10 +309,15 @@ export async function POST(req: Request) {
         tools,
         stopWhen: stepCountIs(5),
         maxOutputTokens: tier === "trusted" ? 2048 : 1024,
-        onFinish: ({ text, totalUsage }) => {
+        onFinish: ({ text, totalUsage, response: aiResponse }) => {
           runWithDbContext(ctx, () => {
             if (text) {
-              appendMessage({ threadId: finalThreadId, role: "assistant", content: text });
+              appendMessage({
+                threadId: finalThreadId,
+                role: "assistant",
+                content: text,
+                model: aiResponse.modelId ?? null,
+              });
             }
             // Log tokens regardless of whether prose came back — a tool-only
             // turn still consumes budget. `totalUsage` aggregates across steps.
@@ -338,10 +348,15 @@ export async function POST(req: Request) {
       tools,
       stopWhen: stepCountIs(5),
       maxOutputTokens: 2048,
-      onFinish: ({ text }) => {
+      onFinish: ({ text, response: aiResponse }) => {
         if (!text) return;
         runWithDbContext(ctx, () => {
-          appendMessage({ threadId: finalThreadId, role: "assistant", content: text });
+          appendMessage({
+            threadId: finalThreadId,
+            role: "assistant",
+            content: text,
+            model: aiResponse.modelId ?? null,
+          });
         });
       },
     });

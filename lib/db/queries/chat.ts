@@ -331,6 +331,8 @@ export function appendMessage(input: {
   role: ChatRole;
   content: string;
   toolCallId?: string | null;
+  /** The OpenRouter / provider model id that served this response. */
+  model?: string | null;
 }): ChatMessage {
   const now = new Date().toISOString();
   const row = getDb()
@@ -340,6 +342,7 @@ export function appendMessage(input: {
       role: input.role,
       content: input.content,
       toolCallId: input.toolCallId ?? null,
+      model: input.model ?? null,
       createdAt: now,
     })
     .returning()
