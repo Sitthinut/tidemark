@@ -12,6 +12,24 @@ interface AuthConfig {
   turnstile: { enabled: boolean; siteKey: string | null };
 }
 
+// Map WebAuthn ceremony failures to friendly copy. Returns null for anything
+// that isn't a recognized passkey error, so callers fall back to the original
+// message (e.g. a real "email already registered" signup error). A cancelled
+// prompt surfaces a raw DOMException ("The operation either timed out or was
+// not allowed…") which we never want to show verbatim.
+function passkeyErrorMessage(e: unknown): string | null {
+  const name = e instanceof Error ? e.name : "";
+  // User dismissed the OS/browser prompt, or it timed out — an intent, not a bug.
+  if (name === "NotAllowedError" || name === "AbortError") {
+    return "Passkey prompt was cancelled or timed out — please try again.";
+  }
+  // The authenticator already holds a passkey for this account.
+  if (name === "InvalidStateError") {
+    return "A passkey already exists for this account on this device.";
+  }
+  return null;
+}
+
 // useSearchParams requires a Suspense boundary in Next 15 app router.
 export default function LoginPage() {
   return (
@@ -29,6 +47,18 @@ function LoginInner() {
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);
+  // Set after email signup creates the account+session but before its passkey
+  // exists. Blocks the redirect-on-session effect (the account is unusable
+  // without a passkey — random password, no OAuth) so a cancelled WebAuthn
+  // prompt lands on a mandatory retry screen, not the dashboard.
+  const [pendingPasskey, setPendingPasskey] = useState(false);
+  // Per-field validation messages for the signup form, shown inline under each
+  // input on submit and cleared as the user edits that field.
+  const [fieldErrors, setFieldErrors] = useState<{
+    name?: string;
+    email?: string;
+    turnstile?: string;
+  }>({});
   const [error, setError] = useState<string | null>(null);
   const [config, setConfig] = useState<AuthConfig | null>(null);
   const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
@@ -51,13 +81,13 @@ function LoginInner() {
   // following addPasskey() can run, so a redirect here would preempt the
   // WebAuthn prompt. The active handler does its own redirect once done.
   useEffect(() => {
-    if (session?.user && !passkeyPrompt && !busy) {
+    if (session?.user && !passkeyPrompt && !pendingPasskey && !busy) {
       // Drop any stale demo session before bouncing into the dashboard so a
       // returning demo-then-login user doesn't carry the cookie. Best-effort.
       fetch("/api/demo", { method: "DELETE" }).catch(() => {});
       router.replace("/");
     }
-  }, [session, router, passkeyPrompt, busy]);
+  }, [session, router, passkeyPrompt, pendingPasskey, busy]);
 
   // Header sent on account-creation / OAuth POSTs so the server-side Turnstile
   // gate can verify it. Empty when Turnstile isn't configured (dev bypass).
@@ -109,9 +139,12 @@ function LoginInner() {
         name: session?.user?.email ?? session?.user?.name ?? "Passkey",
       });
       if (addPk?.error) throw new Error(addPk.error.message ?? "passkey registration failed");
+      setPendingPasskey(false);
       await continueToApp();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "passkey registration failed");
+      setError(
+        passkeyErrorMessage(e) ?? (e instanceof Error ? e.message : "passkey registration failed"),
+      );
       setBusy(false);
     }
   }
@@ -137,13 +170,25 @@ function LoginInner() {
       if (result?.error) throw new Error(result.error.message ?? "sign in failed");
       await continueToApp();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "sign in failed");
+      setError(passkeyErrorMessage(e) ?? (e instanceof Error ? e.message : "sign in failed"));
       setBusy(false);
     }
   }
 
   async function createAccountWithPasskey(e: React.FormEvent) {
     e.preventDefault();
+    // Inline validation: surface exactly what's missing/invalid per field rather
+    // than leaving the user at an inert button.
+    const errs: typeof fieldErrors = {};
+    if (!name.trim()) errs.name = "Enter your name";
+    if (!email.trim()) errs.email = "Enter your email";
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) errs.email = "Enter a valid email";
+    if (!turnstileSatisfied) errs.turnstile = "Complete the verification first";
+    if (Object.keys(errs).length > 0) {
+      setFieldErrors(errs);
+      return;
+    }
+    setFieldErrors({});
     setBusy(true);
     setError(null);
     try {
@@ -162,6 +207,11 @@ function LoginInner() {
       });
       if (signUp?.error) throw new Error(signUp.error.message ?? "sign up failed");
 
+      // The account + session now exist but there's no passkey yet — and no
+      // password the user knows. Mark it pending so a cancelled WebAuthn prompt
+      // can't slip into the dashboard via the redirect-on-session effect.
+      setPendingPasskey(true);
+
       // Step 2: prompt the browser to create a passkey now that we have a
       // session cookie.
       const addPk = await authClient.passkey.addPasskey({
@@ -171,9 +221,14 @@ function LoginInner() {
       });
       if (addPk?.error) throw new Error(addPk.error.message ?? "passkey registration failed");
 
+      setPendingPasskey(false);
       await continueToApp();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "sign up failed");
+      // Leave pendingPasskey set on failure: the account exists but has no
+      // passkey, so we stay on the (mandatory) retry screen rather than redirect.
+      // A cancelled WebAuthn prompt maps to friendly copy; a real signup error
+      // (e.g. duplicate email) falls through to its own message.
+      setError(passkeyErrorMessage(err) ?? (err instanceof Error ? err.message : "sign up failed"));
       setBusy(false);
     }
   }
@@ -183,23 +238,34 @@ function LoginInner() {
   // configured. In dev (not configured) this is always satisfied.
   const turnstileSatisfied = !config?.turnstile.enabled || Boolean(turnstileToken);
 
-  // Post-OAuth passkey registration prompt (6b): offer to add a passkey to
-  // this device so future sign-ins skip the OAuth round-trip.
-  if (passkeyPrompt && session?.user) {
+  // Passkey registration prompt. Two cases:
+  //  - Post-OAuth (6b): optional convenience — offer "Skip for now" since OAuth
+  //    is already a usable sign-in method.
+  //  - Post-email-signup (pendingPasskey): MANDATORY — the account has no
+  //    password and no OAuth, so a passkey is the only way back in. No skip;
+  //    a cancelled prompt stays here to retry.
+  if ((passkeyPrompt || pendingPasskey) && session?.user) {
     return (
       <div style={shell}>
         <div style={card}>
           <div style={mark}>Macrotide</div>
           <div style={tagline}>
-            You're signed in. Add a passkey to this device for faster sign-in next time?
+            {pendingPasskey
+              ? "Almost done — create a passkey to finish setting up your account. It's how you'll sign in."
+              : "You're signed in. Add a passkey to this device for faster sign-in next time?"}
           </div>
           <button type="button" style={primary} onClick={addPasskeyAndContinue} disabled={busy}>
-            {busy ? "Setting up…" : "Add a passkey"}
+            {busy ? "Setting up…" : pendingPasskey ? "Create passkey" : "Add a passkey"}
           </button>
-          <button type="button" style={ghost} onClick={continueToApp} disabled={busy}>
-            Skip for now
-          </button>
+          {!pendingPasskey && (
+            <button type="button" style={ghost} onClick={continueToApp} disabled={busy}>
+              Skip for now
+            </button>
+          )}
           {error && <div style={errBanner}>{error}</div>}
+          {pendingPasskey && !error && (
+            <div style={footer}>A passkey is required to access your account.</div>
+          )}
           <div style={footer}>Open source · Self-hosted</div>
         </div>
       </div>
@@ -271,35 +337,47 @@ function LoginInner() {
         )}
 
         {mode === "signup" && (
-          <form onSubmit={createAccountWithPasskey} style={{ width: "100%" }}>
+          <form onSubmit={createAccountWithPasskey} style={{ width: "100%" }} noValidate>
             <input
               type="text"
-              required
               autoComplete="name"
               placeholder="Your name"
               value={name}
-              onChange={(e) => setName(e.target.value)}
+              onChange={(e) => {
+                setName(e.target.value);
+                if (fieldErrors.name) setFieldErrors((f) => ({ ...f, name: undefined }));
+              }}
+              aria-invalid={Boolean(fieldErrors.name)}
               style={input}
             />
+            {fieldErrors.name && <div style={fieldError}>{fieldErrors.name}</div>}
             <input
               type="email"
-              required
               autoComplete="email"
               placeholder="you@example.com"
               value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              onChange={(e) => {
+                setEmail(e.target.value);
+                if (fieldErrors.email) setFieldErrors((f) => ({ ...f, email: undefined }));
+              }}
+              aria-invalid={Boolean(fieldErrors.email)}
               style={input}
             />
+            {fieldErrors.email && <div style={fieldError}>{fieldErrors.email}</div>}
             {config?.turnstile.enabled && config.turnstile.siteKey && (
               <div style={{ margin: "8px 0" }}>
-                <Turnstile siteKey={config.turnstile.siteKey} onToken={setTurnstileToken} />
+                <Turnstile
+                  siteKey={config.turnstile.siteKey}
+                  onToken={(t) => {
+                    setTurnstileToken(t);
+                    if (fieldErrors.turnstile)
+                      setFieldErrors((f) => ({ ...f, turnstile: undefined }));
+                  }}
+                />
               </div>
             )}
-            <button
-              type="submit"
-              style={primary}
-              disabled={busy || !email || !name || !turnstileSatisfied}
-            >
+            {fieldErrors.turnstile && <div style={fieldError}>{fieldErrors.turnstile}</div>}
+            <button type="submit" style={primary} disabled={busy}>
               {busy ? "Setting up…" : "Create passkey & continue"}
             </button>
             <p style={consentNote}>
@@ -411,6 +489,14 @@ const input: React.CSSProperties = {
   boxSizing: "border-box",
 };
 
+const fieldError: React.CSSProperties = {
+  width: "100%",
+  fontSize: 12,
+  color: "var(--loss)",
+  textAlign: "left",
+  marginTop: -4,
+  marginBottom: 8,
+};
 const errBanner: React.CSSProperties = {
   width: "100%",
   fontSize: 12,
