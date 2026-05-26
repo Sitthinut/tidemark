@@ -1,19 +1,43 @@
 // Refresh job — enumerate all Thai mutual funds from the SEC and upsert their
 // catalog metadata + fee time-series into the local DB.
 //
-// Design: enumerate → upsert catalog row (always) → if Registered: fetch fees + AUM.
+// Design: enumerate → upsert catalog row (always) → if Registered: fetch fees + AUM
+//         + (if opted in via env flags) enrichment data.
 // Idempotent: the underlying upserts key on PK, so re-running is safe.
 // Concurrency: p-limit style manual pool (configurable, default 4) so we don't
 // hammer the SEC API (5 000 calls / 300 s ceiling; modest concurrency helps).
 // Errors per fund are collected and do NOT abort the whole run.
 //
+// ─── Enrichment env flags (all default OFF) ────────────────────────────────
+// SEC_INGEST_PERFORMANCE=1  — fetch /v2/fund/factsheet/performance (all types)
+// SEC_INGEST_ALLOCATION=1   — fetch /v2/fund/factsheet/asset-allocation
+// SEC_INGEST_HOLDINGS=1     — fetch /v2/fund/factsheet/top5-holdings
+// SEC_INGEST_PORTFOLIO=1    — fetch /v2/fund/outstanding/portfolio (full holdings,
+//                             paginated) + /v2/fund/outstanding/portfolio-asset-type.
+//                             WARNING: Full portfolio ingestion roughly doubles
+//                             crawl API calls (many funds have 100+ holdings).
+//                             Recommend running on a weekly cadence, not nightly.
+//
+// Merging this branch does NOT change prod behavior until at least one flag is set.
+//
 // Scope:
 //   - Catalog ALL enumerated funds (Registered + IPO + Liquidated + Expired + Canceled).
-//   - Fees and AUM are only fetched for Registered funds (~2,300) — IPO data is
-//     truncated; inactive funds have no meaningful fee to report.
+//   - Fees, AUM, and enrichment are only fetched for Registered funds (~2,300).
 //   - Inactive/IPO funds leave aum/feeRows undefined to avoid clobbering any
 //     existing values with null.
 
+import {
+  type FundAssetAllocationInsert,
+  type FundPerformanceInsert,
+  type FundPortfolioAssetTypeInsert,
+  type FundPortfolioInsert,
+  type FundTopHoldingInsert,
+  upsertFundAssetAllocation,
+  upsertFundPerformance,
+  upsertFundPortfolio,
+  upsertFundPortfolioAssetType,
+  upsertFundTopHoldings,
+} from "../db/queries/fund-enrichment";
 import {
   type FundFeeInsert,
   type FundInsert,
@@ -31,8 +55,13 @@ import {
 import { normalizeFeeType } from "../market/fund-fees";
 import {
   enumerateFundProfiles,
+  fetchFundAssetAllocation,
   fetchFundAum,
   fetchFundFees,
+  fetchFundPerformance,
+  fetchFundPortfolio,
+  fetchFundPortfolioAssetType,
+  fetchFundTop5Holdings,
   type SecFundProfile,
 } from "../market/providers/sec-thailand";
 
@@ -57,6 +86,16 @@ export interface RefreshFundCatalogOptions {
   _fetchAum?: typeof fetchFundAum;
   /** Injectable profile enumerator (replaces the real API call in tests). */
   _enumerate?: typeof enumerateFundProfiles;
+  /** Injectable performance-fetcher (replaces the real API call in tests). */
+  _fetchPerformance?: typeof fetchFundPerformance;
+  /** Injectable asset-allocation-fetcher (replaces the real API call in tests). */
+  _fetchAssetAllocation?: typeof fetchFundAssetAllocation;
+  /** Injectable top-5-holdings-fetcher (replaces the real API call in tests). */
+  _fetchTop5Holdings?: typeof fetchFundTop5Holdings;
+  /** Injectable portfolio-fetcher (replaces the real API call in tests). */
+  _fetchPortfolio?: typeof fetchFundPortfolio;
+  /** Injectable portfolio-asset-type-fetcher (replaces the real API call in tests). */
+  _fetchPortfolioAssetType?: typeof fetchFundPortfolioAssetType;
 }
 
 export interface RefreshFundCatalogResult {
@@ -67,7 +106,21 @@ export interface RefreshFundCatalogResult {
   /** Funds for which at least one fee row was upserted. */
   fundsWithFees: number;
   feeRowsUpserted: number;
+  /** Funds for which at least one performance row was upserted. */
+  fundsWithPerformance: number;
+  /** Funds for which asset allocation was upserted. */
+  fundsWithAllocation: number;
+  /** Funds for which top-5 holdings were upserted. */
+  fundsWithHoldings: number;
+  /** Funds for which portfolio data was upserted. */
+  fundsWithPortfolio: number;
   errors: Array<{ projId: string; error: string }>;
+}
+
+// ─── Enrichment flags ─────────────────────────────────────────────────────────
+
+function envFlag(name: string): boolean {
+  return process.env[name] === "1" || process.env[name] === "true";
 }
 
 // ─── Profile mapper ───────────────────────────────────────────────────────────
@@ -120,6 +173,8 @@ function profileToFundInsert(
 /**
  * Enumerate all SEC mutual funds, upsert catalog rows, then for Registered
  * funds fetch their fee time-series + latest AUM and batch-upsert.
+ * Optionally also fetches enrichment data (performance, allocation, holdings,
+ * portfolio) when the corresponding SEC_INGEST_* env flags are set.
  *
  * Returns a summary object. Non-fatal errors (per fund) are collected in
  * `errors`; they do not abort the run.
@@ -132,6 +187,17 @@ export async function refreshFundCatalog(
   const enumerate = opts._enumerate ?? enumerateFundProfiles;
   const getFees = opts._fetchFees ?? fetchFundFees;
   const getAum = opts._fetchAum ?? fetchFundAum;
+  const getPerformance = opts._fetchPerformance ?? fetchFundPerformance;
+  const getAssetAllocation = opts._fetchAssetAllocation ?? fetchFundAssetAllocation;
+  const getTop5Holdings = opts._fetchTop5Holdings ?? fetchFundTop5Holdings;
+  const getPortfolio = opts._fetchPortfolio ?? fetchFundPortfolio;
+  const getPortfolioAssetType = opts._fetchPortfolioAssetType ?? fetchFundPortfolioAssetType;
+
+  // Read enrichment flags once per run (not per fund).
+  const doPerformance = envFlag("SEC_INGEST_PERFORMANCE");
+  const doAllocation = envFlag("SEC_INGEST_ALLOCATION");
+  const doHoldings = envFlag("SEC_INGEST_HOLDINGS");
+  const doPortfolio = envFlag("SEC_INGEST_PORTFOLIO");
 
   // 1. Enumerate all funds (active + inactive).
   const profiles = await enumerate(limitFunds);
@@ -141,6 +207,10 @@ export async function refreshFundCatalog(
   let fundsActive = 0;
   let fundsWithFees = 0;
   let feeRowsUpserted = 0;
+  let fundsWithPerformance = 0;
+  let fundsWithAllocation = 0;
+  let fundsWithHoldings = 0;
+  let fundsWithPortfolio = 0;
   const errors: Array<{ projId: string; error: string }> = [];
 
   // 2. Process in a concurrency-capped pool.
@@ -152,13 +222,109 @@ export async function refreshFundCatalog(
       const secStatus = p.fund_status ?? null;
       const fetchEnrichment = shouldFetchFees(secStatus);
 
-      // 2a. For Registered funds: fetch fees + AUM in parallel.
+      // 2a. For Registered funds: fetch fees + AUM (always) and enrichment (if flagged).
       let feeItems: Awaited<ReturnType<typeof fetchFundFees>> = [];
       let aumResult: Awaited<ReturnType<typeof fetchFundAum>> = null;
 
       if (fetchEnrichment) {
         fundsActive++;
+
+        // Core fetches (always for active funds).
         [feeItems, aumResult] = await Promise.all([getFees(projId), getAum(projId)]);
+
+        // Enrichment fetches (gated by env flags).
+        if (doPerformance) {
+          const perfItems = await getPerformance(projId);
+          if (perfItems.length > 0) {
+            const perfRows: FundPerformanceInsert[] = perfItems.map((item) => ({
+              projId: item.proj_id,
+              fundClassName: item.fund_class_name,
+              startDate: item.start_date,
+              endDate: item.end_date ?? null,
+              prospectusType: item.prospectus_type ?? null,
+              performanceTypeDesc: item.performance_type_desc,
+              referencePeriod: item.reference_period,
+              performanceValue: item.performance_value ?? null,
+              lastUpdDate: item.last_upd_date ?? null,
+            }));
+            upsertFundPerformance(projId, perfRows);
+            fundsWithPerformance++;
+          }
+        }
+
+        if (doAllocation) {
+          const allocItems = await getAssetAllocation(projId);
+          if (allocItems.length > 0) {
+            const allocRows: FundAssetAllocationInsert[] = allocItems.map((item) => ({
+              projId: item.proj_id,
+              startDate: item.start_date,
+              endDate: item.end_date ?? null,
+              prospectusType: item.prospectus_type ?? null,
+              assetSeq: item.asset_seq,
+              assetName: item.asset_name ?? null,
+              assetRatio: item.asset_ratio ?? null,
+              lastUpdDate: item.last_upd_date ?? null,
+            }));
+            upsertFundAssetAllocation(projId, allocRows);
+            fundsWithAllocation++;
+          }
+        }
+
+        if (doHoldings) {
+          const holdingItems = await getTop5Holdings(projId);
+          if (holdingItems.length > 0) {
+            const holdingRows: FundTopHoldingInsert[] = holdingItems.map((item) => ({
+              projId: item.proj_id,
+              startDate: item.start_date,
+              endDate: item.end_date ?? null,
+              prospectusType: item.prospectus_type ?? null,
+              assetSeq: item.asset_seq,
+              assetName: item.asset_name ?? null,
+              assetRatio: item.asset_ratio ?? null,
+              lastUpdDate: item.last_upd_date ?? null,
+            }));
+            upsertFundTopHoldings(projId, holdingRows);
+            fundsWithHoldings++;
+          }
+        }
+
+        if (doPortfolio) {
+          // Full portfolio + asset-type summary in parallel.
+          const [portItems, portTypeItems] = await Promise.all([
+            getPortfolio(projId),
+            getPortfolioAssetType(projId),
+          ]);
+
+          if (portItems.length > 0) {
+            const portRows: FundPortfolioInsert[] = portItems.map((item) => ({
+              projId: item.proj_id,
+              period: item.period,
+              asOfDate: item.as_of_date ?? null,
+              assetliabId: item.assetliab_id ?? null,
+              assetliabDesc: item.assetliab_desc ?? null,
+              issueCode: item.issue_code ?? null,
+              isinCode: item.isin_code ?? null,
+              issuer: item.issuer ?? null,
+              assetliabValue: item.assetliab_value ?? null,
+              percentNav: item.percent_nav ?? null,
+              lastUpdDate: item.last_upd_date ?? null,
+            }));
+            upsertFundPortfolio(projId, portRows);
+            fundsWithPortfolio++;
+          }
+
+          if (portTypeItems.length > 0) {
+            const portTypeRows: FundPortfolioAssetTypeInsert[] = portTypeItems.map((item) => ({
+              projId: item.proj_id,
+              period: item.period,
+              assetliabCode: item.assetliab_code,
+              assetliabDesc: item.assetliab_desc ?? null,
+              marketValue: item.market_value ?? null,
+              percentNav: item.percent_nav ?? null,
+            }));
+            upsertFundPortfolioAssetType(projId, portTypeRows);
+          }
+        }
       }
 
       // 2b. Upsert catalog row (always — active and inactive).
@@ -215,6 +381,10 @@ export async function refreshFundCatalog(
     fundsActive,
     fundsWithFees,
     feeRowsUpserted,
+    fundsWithPerformance,
+    fundsWithAllocation,
+    fundsWithHoldings,
+    fundsWithPortfolio,
     errors,
   };
 }

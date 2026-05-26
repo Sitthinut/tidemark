@@ -16,6 +16,21 @@ vi.mock("../db/queries/funds", () => ({
   upsertFundFees: vi.fn(),
 }));
 
+vi.mock("../db/queries/fund-enrichment", () => ({
+  upsertFundPerformance: vi.fn(),
+  upsertFundAssetAllocation: vi.fn(),
+  upsertFundTopHoldings: vi.fn(),
+  upsertFundPortfolio: vi.fn(),
+  upsertFundPortfolioAssetType: vi.fn(),
+}));
+
+import {
+  upsertFundAssetAllocation,
+  upsertFundPerformance,
+  upsertFundPortfolio,
+  upsertFundPortfolioAssetType,
+  upsertFundTopHoldings,
+} from "../db/queries/fund-enrichment";
 import { upsertFund, upsertFundFees } from "../db/queries/funds";
 import type { SecFundFeeItem } from "../market/fund-fees";
 import type { SecFundProfile } from "../market/providers/sec-thailand";
@@ -79,6 +94,16 @@ describe("refreshFundCatalog", () => {
   beforeEach(() => {
     vi.mocked(upsertFund).mockReset();
     vi.mocked(upsertFundFees).mockReset();
+    vi.mocked(upsertFundPerformance).mockReset();
+    vi.mocked(upsertFundAssetAllocation).mockReset();
+    vi.mocked(upsertFundTopHoldings).mockReset();
+    vi.mocked(upsertFundPortfolio).mockReset();
+    vi.mocked(upsertFundPortfolioAssetType).mockReset();
+    // Ensure enrichment flags are off by default.
+    delete process.env.SEC_INGEST_PERFORMANCE;
+    delete process.env.SEC_INGEST_ALLOCATION;
+    delete process.env.SEC_INGEST_HOLDINGS;
+    delete process.env.SEC_INGEST_PORTFOLIO;
   });
 
   it("returns zero counts when no profiles are enumerated", async () => {
@@ -94,6 +119,10 @@ describe("refreshFundCatalog", () => {
       fundsActive: 0,
       fundsWithFees: 0,
       feeRowsUpserted: 0,
+      fundsWithPerformance: 0,
+      fundsWithAllocation: 0,
+      fundsWithHoldings: 0,
+      fundsWithPortfolio: 0,
       errors: [],
     });
     expect(upsertFund).not.toHaveBeenCalled();
@@ -433,5 +462,203 @@ describe("refreshFundCatalog", () => {
     expect(result.fundsWithFees).toBe(1); // only R1 has fee rows
     expect(result.feeRowsUpserted).toBe(1);
     expect(result.errors).toHaveLength(0);
+  });
+
+  // ─── Enrichment flag tests ─────────────────────────────────────────────────
+
+  it("does NOT call enrichment fetchers when all flags are OFF (default)", async () => {
+    const fetchPerformance = vi.fn().mockResolvedValue([]);
+    const fetchAllocation = vi.fn().mockResolvedValue([]);
+    const fetchHoldings = vi.fn().mockResolvedValue([]);
+    const fetchPortfolio = vi.fn().mockResolvedValue([]);
+    const fetchPortfolioAssetType = vi.fn().mockResolvedValue([]);
+
+    await refreshFundCatalog({
+      _enumerate: makeEnumerate([makeProfile()]),
+      _fetchFees: makeFetchFees([]),
+      _fetchAum: makeFetchAum(),
+      _fetchPerformance: fetchPerformance,
+      _fetchAssetAllocation: fetchAllocation,
+      _fetchTop5Holdings: fetchHoldings,
+      _fetchPortfolio: fetchPortfolio,
+      _fetchPortfolioAssetType: fetchPortfolioAssetType,
+    });
+
+    expect(fetchPerformance).not.toHaveBeenCalled();
+    expect(fetchAllocation).not.toHaveBeenCalled();
+    expect(fetchHoldings).not.toHaveBeenCalled();
+    expect(fetchPortfolio).not.toHaveBeenCalled();
+    expect(fetchPortfolioAssetType).not.toHaveBeenCalled();
+  });
+
+  it("calls performance fetcher and upserts when SEC_INGEST_PERFORMANCE=1", async () => {
+    process.env.SEC_INGEST_PERFORMANCE = "1";
+
+    const perfItem = {
+      proj_id: "1234",
+      fund_class_name: "main",
+      start_date: "2025-01-01",
+      end_date: null,
+      prospectus_type: "Monthly",
+      performance_type_desc: "ความผันผวนของกองทุนรวม",
+      reference_period: "1 year",
+      performance_value: "11.89",
+      last_upd_date: "2025-02-01T00:00:00Z",
+    };
+
+    const fetchPerformance = vi.fn().mockResolvedValue([perfItem]);
+
+    const result = await refreshFundCatalog({
+      _enumerate: makeEnumerate([makeProfile()]),
+      _fetchFees: makeFetchFees([]),
+      _fetchAum: makeFetchAum(),
+      _fetchPerformance: fetchPerformance,
+    });
+
+    expect(fetchPerformance).toHaveBeenCalledWith("1234");
+    expect(upsertFundPerformance).toHaveBeenCalledOnce();
+    expect(result.fundsWithPerformance).toBe(1);
+
+    const [projId, rows] = vi.mocked(upsertFundPerformance).mock.calls[0];
+    expect(projId).toBe("1234");
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      projId: "1234",
+      fundClassName: "main",
+      startDate: "2025-01-01",
+      endDate: null,
+      performanceTypeDesc: "ความผันผวนของกองทุนรวม",
+      referencePeriod: "1 year",
+      performanceValue: "11.89",
+    });
+  });
+
+  it("calls allocation fetcher and upserts when SEC_INGEST_ALLOCATION=1", async () => {
+    process.env.SEC_INGEST_ALLOCATION = "1";
+
+    const allocItem = {
+      proj_id: "1234",
+      start_date: "2025-01-01",
+      end_date: null,
+      prospectus_type: "Monthly",
+      asset_seq: 1,
+      asset_name: "หุ้นสามัญ",
+      asset_ratio: 95.68,
+      last_upd_date: "2025-02-01T00:00:00Z",
+    };
+
+    const fetchAllocation = vi.fn().mockResolvedValue([allocItem]);
+
+    const result = await refreshFundCatalog({
+      _enumerate: makeEnumerate([makeProfile()]),
+      _fetchFees: makeFetchFees([]),
+      _fetchAum: makeFetchAum(),
+      _fetchAssetAllocation: fetchAllocation,
+    });
+
+    expect(fetchAllocation).toHaveBeenCalledWith("1234");
+    expect(upsertFundAssetAllocation).toHaveBeenCalledOnce();
+    expect(result.fundsWithAllocation).toBe(1);
+  });
+
+  it("calls holdings fetcher and upserts when SEC_INGEST_HOLDINGS=1", async () => {
+    process.env.SEC_INGEST_HOLDINGS = "1";
+
+    const holdingItem = {
+      proj_id: "1234",
+      start_date: "2025-01-01",
+      end_date: null,
+      prospectus_type: "Monthly",
+      asset_seq: 1,
+      asset_name: "AOT",
+      asset_ratio: 5.3,
+      last_upd_date: "2025-02-01T00:00:00Z",
+    };
+
+    const fetchHoldings = vi.fn().mockResolvedValue([holdingItem]);
+
+    const result = await refreshFundCatalog({
+      _enumerate: makeEnumerate([makeProfile()]),
+      _fetchFees: makeFetchFees([]),
+      _fetchAum: makeFetchAum(),
+      _fetchTop5Holdings: fetchHoldings,
+    });
+
+    expect(fetchHoldings).toHaveBeenCalledWith("1234");
+    expect(upsertFundTopHoldings).toHaveBeenCalledOnce();
+    expect(result.fundsWithHoldings).toBe(1);
+  });
+
+  it("calls portfolio fetchers and upserts when SEC_INGEST_PORTFOLIO=1", async () => {
+    process.env.SEC_INGEST_PORTFOLIO = "1";
+
+    const portItem = {
+      proj_id: "1234",
+      period: "202412",
+      as_of_date: "2024-12-31",
+      assetliab_id: "101",
+      assetliab_desc: "หุ้นสามัญ",
+      issue_code: "ADVANC",
+      isin_code: "TH0268010Z03",
+      issuer: "ADVANCED INFO SERVICE",
+      assetliab_value: 100_000_000,
+      percent_nav: 5.0,
+      last_upd_date: "2025-02-21T00:00:00Z",
+    };
+
+    const portTypeItem = {
+      proj_id: "1234",
+      period: "202412",
+      assetliab_code: "101",
+      assetliab_desc: "หุ้น",
+      market_value: 100_000_000,
+      percent_nav: 91.18,
+    };
+
+    const fetchPortfolio = vi.fn().mockResolvedValue([portItem]);
+    const fetchPortfolioAssetType = vi.fn().mockResolvedValue([portTypeItem]);
+
+    const result = await refreshFundCatalog({
+      _enumerate: makeEnumerate([makeProfile()]),
+      _fetchFees: makeFetchFees([]),
+      _fetchAum: makeFetchAum(),
+      _fetchPortfolio: fetchPortfolio,
+      _fetchPortfolioAssetType: fetchPortfolioAssetType,
+    });
+
+    expect(fetchPortfolio).toHaveBeenCalledWith("1234");
+    expect(fetchPortfolioAssetType).toHaveBeenCalledWith("1234");
+    expect(upsertFundPortfolio).toHaveBeenCalledOnce();
+    expect(upsertFundPortfolioAssetType).toHaveBeenCalledOnce();
+    expect(result.fundsWithPortfolio).toBe(1);
+
+    const [, portRows] = vi.mocked(upsertFundPortfolio).mock.calls[0];
+    expect(portRows[0]).toMatchObject({
+      projId: "1234",
+      period: "202412",
+      assetliabId: "101",
+      issuer: "ADVANCED INFO SERVICE",
+      percentNav: 5.0,
+    });
+  });
+
+  it("skips enrichment for non-Registered funds even when flags are ON", async () => {
+    process.env.SEC_INGEST_PERFORMANCE = "1";
+    process.env.SEC_INGEST_PORTFOLIO = "1";
+
+    const fetchPerformance = vi.fn().mockResolvedValue([]);
+    const fetchPortfolio = vi.fn().mockResolvedValue([]);
+
+    await refreshFundCatalog({
+      _enumerate: makeEnumerate([makeProfile({ fund_status: "Liquidated" })]),
+      _fetchFees: makeFetchFees([]),
+      _fetchAum: makeFetchAum(null),
+      _fetchPerformance: fetchPerformance,
+      _fetchPortfolio: fetchPortfolio,
+    });
+
+    // shouldFetchFees("Liquidated") returns false → enrichment block is skipped.
+    expect(fetchPerformance).not.toHaveBeenCalled();
+    expect(fetchPortfolio).not.toHaveBeenCalled();
   });
 });

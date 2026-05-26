@@ -521,6 +521,146 @@ export async function fetchFundAum(
   return { aum: best.net_asset as number, aumDate: best.nav_date };
 }
 
+// ─── Fund enrichment fetch helpers ──────────────────────────────────────────
+// Each mirrors the fetchFundFees / secFetchPaginated pattern: same throttle,
+// retry, and 204→[] handling. All use latest=true (or bare proj_id for
+// portfolio) to return only the current effective snapshot.
+
+/** Raw item from /v2/fund/factsheet/performance (latest=true snapshot). */
+export interface SecFundPerformanceItem {
+  proj_id: string;
+  fund_class_name: string;
+  start_date: string;
+  end_date: string | null;
+  prospectus_type?: string | null;
+  performance_type_desc: string;
+  reference_period: string;
+  performance_value?: string | null;
+  last_upd_date?: string | null;
+}
+
+/** Raw item from /v2/fund/factsheet/asset-allocation (latest=true snapshot). */
+export interface SecFundAssetAllocationItem {
+  proj_id: string;
+  start_date: string;
+  end_date: string | null;
+  prospectus_type?: string | null;
+  asset_seq: number;
+  asset_name?: string | null;
+  asset_ratio?: number | null;
+  last_upd_date?: string | null;
+}
+
+/** Raw item from /v2/fund/factsheet/top5-holdings (latest=true snapshot). */
+export interface SecFundTop5HoldingItem {
+  proj_id: string;
+  start_date: string;
+  end_date: string | null;
+  prospectus_type?: string | null;
+  asset_seq: number;
+  asset_name?: string | null;
+  asset_ratio?: number | null;
+  last_upd_date?: string | null;
+}
+
+/** Raw item from /v2/fund/outstanding/portfolio (bare proj_id, latest period). */
+export interface SecFundPortfolioItem {
+  proj_id: string;
+  period: string;
+  as_of_date?: string | null;
+  assetliab_id?: string | null;
+  assetliab_desc?: string | null;
+  issue_code?: string | null;
+  isin_code?: string | null;
+  issuer?: string | null;
+  assetliab_value?: number | null;
+  percent_nav?: number | null;
+  last_upd_date?: string | null;
+}
+
+/** Raw item from /v2/fund/outstanding/portfolio-asset-type (latest period). */
+export interface SecFundPortfolioAssetTypeItem {
+  proj_id: string;
+  period: string;
+  assetliab_code: string;
+  assetliab_desc?: string | null;
+  market_value?: number | null;
+  percent_nav?: number | null;
+}
+
+/**
+ * Fetch all performance rows for one fund (latest effective factsheet only).
+ * Captures ALL four performance types: fund volatility, benchmark volatility,
+ * fund return, benchmark return (and peer average where present).
+ */
+export async function fetchFundPerformance(projId: string): Promise<SecFundPerformanceItem[]> {
+  const key = apiKey();
+  return secFetchPaginated<SecFundPerformanceItem>(
+    "/v2/fund/factsheet/performance",
+    { proj_id: projId, latest: "true" },
+    key,
+  );
+}
+
+/**
+ * Fetch asset allocation rows for one fund (latest effective factsheet only).
+ */
+export async function fetchFundAssetAllocation(
+  projId: string,
+): Promise<SecFundAssetAllocationItem[]> {
+  const key = apiKey();
+  return secFetchPaginated<SecFundAssetAllocationItem>(
+    "/v2/fund/factsheet/asset-allocation",
+    { proj_id: projId, latest: "true" },
+    key,
+  );
+}
+
+/**
+ * Fetch top-5 holdings for one fund (latest effective factsheet only).
+ */
+export async function fetchFundTop5Holdings(projId: string): Promise<SecFundTop5HoldingItem[]> {
+  const key = apiKey();
+  return secFetchPaginated<SecFundTop5HoldingItem>(
+    "/v2/fund/factsheet/top5-holdings",
+    { proj_id: projId, latest: "true" },
+    key,
+  );
+}
+
+/**
+ * Fetch the full quarterly portfolio for one fund (bare proj_id only —
+ * no date params; the API returns 400 with extra date params).
+ * Returns ALL items from the latest available quarter (the API returns the
+ * most recent quarter by default when no period filter is supplied).
+ * NOTE: large funds may have 100+ holdings; this endpoint is paginated.
+ * The full portfolio roughly doubles API calls per crawl compared to the
+ * other enrichment endpoints. Controlled by SEC_INGEST_PORTFOLIO flag.
+ */
+export async function fetchFundPortfolio(projId: string): Promise<SecFundPortfolioItem[]> {
+  const key = apiKey();
+  return secFetchPaginated<SecFundPortfolioItem>(
+    "/v2/fund/outstanding/portfolio",
+    { proj_id: projId },
+    key,
+  );
+}
+
+/**
+ * Fetch the monthly portfolio by asset type for one fund.
+ * Returns only the latest available month (no period filter).
+ */
+export async function fetchFundPortfolioAssetType(
+  projId: string,
+): Promise<SecFundPortfolioAssetTypeItem[]> {
+  const key = apiKey();
+  return secFetchPaginated<SecFundPortfolioAssetTypeItem>(
+    "/v2/fund/outstanding/portfolio-asset-type",
+    { proj_id: projId },
+    key,
+  );
+}
+
 /** Test-only — reset the per-symbol cache. */
 export function __resetSecThailandCache(): void {
   symbolCache.clear();

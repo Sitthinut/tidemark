@@ -47,5 +47,7 @@ export type SecFundFeeItem = {
   fee_type_desc: string;
   rate?: number | null;
   actual_value?: number | null;
+  /** Additional remarks / notes for this fee (if any). */
+  fee_other_desc?: string | null;
   last_upd_date?: string | null;
 };

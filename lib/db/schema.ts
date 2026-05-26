@@ -200,6 +200,148 @@ export const fundFees = sqliteTable(
   ],
 );
 
+// ───────────────────────────────────────────────────────────────────────────
+// SEC fund enrichment tables — populated by the fund-catalog refresh job when
+// the relevant SEC_INGEST_* env flags are set. Each stores only the LATEST
+// effective snapshot to keep the DB small (no full history).
+// ───────────────────────────────────────────────────────────────────────────
+
+// Fund performance — all performance types per fund/class from the factsheet
+// performance endpoint (/v2/fund/factsheet/performance). One row per
+// (projId, fundClassName, performanceTypeDesc, referencePeriod) — the latest
+// factsheet window only (latest=true in the API call).
+export const fundPerformance = sqliteTable(
+  "fund_performance",
+  {
+    projId: text("proj_id")
+      .notNull()
+      .references(() => fundCatalog.projId, { onDelete: "cascade" }),
+    fundClassName: text("fund_class_name").notNull(),
+    // Start/end date of the factsheet period (end IS NULL = currently active).
+    startDate: text("start_date").notNull(),
+    endDate: text("end_date"),
+    prospectusType: text("prospectus_type"),
+    // One of: "ความผันผวนของกองทุนรวม" | "ความผันผวนของดัชนีชี้วัด" |
+    //         "ผลการดำเนินงานของกองทุนรวม" | "ผลการดำเนินงานของดัชนีชี้วัด" | (peer avg)
+    performanceTypeDesc: text("performance_type_desc").notNull(),
+    referencePeriod: text("reference_period").notNull(),
+    performanceValue: text("performance_value"),
+    lastUpdDate: text("last_upd_date"),
+  },
+  (table) => [
+    primaryKey({
+      columns: [
+        table.projId,
+        table.fundClassName,
+        table.performanceTypeDesc,
+        table.referencePeriod,
+      ],
+    }),
+    index("idx_fund_performance_proj").on(table.projId),
+  ],
+);
+
+// Fund asset allocation — latest factsheet snapshot from
+// /v2/fund/factsheet/asset-allocation. One row per (projId, assetSeq) since
+// the API returns at most one latest effective snapshot per fund.
+export const fundAssetAllocation = sqliteTable(
+  "fund_asset_allocation",
+  {
+    projId: text("proj_id")
+      .notNull()
+      .references(() => fundCatalog.projId, { onDelete: "cascade" }),
+    startDate: text("start_date").notNull(),
+    endDate: text("end_date"),
+    prospectusType: text("prospectus_type"),
+    assetSeq: integer("asset_seq").notNull(),
+    assetName: text("asset_name"),
+    // Investment ratio as %NAV (e.g. 95.68).
+    assetRatio: real("asset_ratio"),
+    lastUpdDate: text("last_upd_date"),
+  },
+  (table) => [
+    primaryKey({ columns: [table.projId, table.assetSeq] }),
+    index("idx_fund_asset_alloc_proj").on(table.projId),
+  ],
+);
+
+// Top-5 holdings — latest factsheet snapshot from
+// /v2/fund/factsheet/top5-holdings. One row per (projId, assetSeq).
+export const fundTopHoldings = sqliteTable(
+  "fund_top_holdings",
+  {
+    projId: text("proj_id")
+      .notNull()
+      .references(() => fundCatalog.projId, { onDelete: "cascade" }),
+    startDate: text("start_date").notNull(),
+    endDate: text("end_date"),
+    prospectusType: text("prospectus_type"),
+    assetSeq: integer("asset_seq").notNull(),
+    assetName: text("asset_name"),
+    // Investment ratio as %NAV (e.g. 5.30).
+    assetRatio: real("asset_ratio"),
+    lastUpdDate: text("last_upd_date"),
+  },
+  (table) => [
+    primaryKey({ columns: [table.projId, table.assetSeq] }),
+    index("idx_fund_top_holdings_proj").on(table.projId),
+  ],
+);
+
+// Full quarterly portfolio — latest quarter only from
+// /v2/fund/outstanding/portfolio. One row per (projId, period, assetliabId).
+// NOTE: ingesting full portfolio data roughly doubles the API calls per crawl
+// (many funds have 100+ holdings each, requiring multiple paginated pages).
+// Recommend running on a less-than-nightly cadence (e.g. weekly) or scoping
+// to a subset of funds. Controlled by SEC_INGEST_PORTFOLIO env flag.
+export const fundPortfolio = sqliteTable(
+  "fund_portfolio",
+  {
+    projId: text("proj_id")
+      .notNull()
+      .references(() => fundCatalog.projId, { onDelete: "cascade" }),
+    // Reporting period in YYYYMM format (e.g. "202412").
+    period: text("period").notNull(),
+    asOfDate: text("as_of_date"),
+    // Asset/liability item identifier (e.g. "101").
+    assetliabId: text("assetliab_id"),
+    assetliabDesc: text("assetliab_desc"),
+    issueCode: text("issue_code"),
+    isinCode: text("isin_code"),
+    issuer: text("issuer"),
+    // Market value in THB.
+    assetliabValue: real("assetliab_value"),
+    // Percentage of NAV.
+    percentNav: real("percent_nav"),
+    lastUpdDate: text("last_upd_date"),
+  },
+  (table) => [
+    primaryKey({ columns: [table.projId, table.period, table.assetliabId] }),
+    index("idx_fund_portfolio_proj").on(table.projId),
+  ],
+);
+
+// Monthly portfolio by asset type — latest month from
+// /v2/fund/outstanding/portfolio-asset-type. One row per (projId, period, assetliabCode).
+export const fundPortfolioAssetType = sqliteTable(
+  "fund_portfolio_asset_type",
+  {
+    projId: text("proj_id")
+      .notNull()
+      .references(() => fundCatalog.projId, { onDelete: "cascade" }),
+    // Reporting period in YYYYMM format.
+    period: text("period").notNull(),
+    assetliabCode: text("assetliab_code").notNull(),
+    assetliabDesc: text("assetliab_desc"),
+    marketValue: real("market_value"),
+    percentNav: real("percent_nav"),
+  },
+  (table) => [
+    primaryKey({ columns: [table.projId, table.period, table.assetliabCode] }),
+    index("idx_fund_portfolio_asset_type_proj").on(table.projId),
+  ],
+);
+
 // Investment plan — one row per user. `id` autoincrements; a UNIQUE index on
 // `user_id` enforces a single plan per owner. SQLite treats multiple NULLs as
 // distinct in a UNIQUE index, which is fine: single-owner mode has exactly one

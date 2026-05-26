@@ -1,0 +1,258 @@
+// Unit tests for lib/db/queries/fund-enrichment.ts
+//
+// Strategy: mock the DB context (getDb) so tests run without a real SQLite
+// instance. Each test focuses on the upsert/read logic in isolation.
+
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+// ─── Mock the DB context ──────────────────────────────────────────────────────
+
+vi.mock("../context", () => ({
+  getDb: vi.fn(),
+}));
+
+import { getDb } from "../context";
+import type { FundPerformanceInsert, FundPortfolioInsert } from "./fund-enrichment";
+import {
+  getFundAssetAllocation,
+  getFundEnrichment,
+  getFundPerformance,
+  getFundPortfolio,
+  getFundPortfolioAssetType,
+  getFundTopHoldings,
+  upsertFundAssetAllocation,
+  upsertFundPerformance,
+  upsertFundPortfolio,
+  upsertFundPortfolioAssetType,
+  upsertFundTopHoldings,
+} from "./fund-enrichment";
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+/** Build a minimal mock DB transaction/chain. */
+function makeMockDb(rows: unknown[] = []) {
+  const run = vi.fn();
+  const all = vi.fn().mockReturnValue(rows);
+  const get = vi.fn().mockReturnValue(rows[0] ?? null);
+  const orderBy = vi.fn().mockReturnValue({ all });
+  const where = vi.fn().mockReturnValue({ all, orderBy, run });
+  const values = vi.fn().mockReturnValue({ run });
+  const insert = vi.fn().mockReturnValue({ values });
+  const deleteFrom = vi.fn().mockReturnValue({ where: vi.fn().mockReturnValue({ run }) });
+  const txFn = vi.fn((cb: (tx: typeof mockDb) => void) => cb(mockDb));
+  const mockDb = {
+    select: vi.fn().mockReturnValue({ from: vi.fn().mockReturnValue({ where }) }),
+    insert,
+    delete: deleteFrom,
+    transaction: txFn,
+  };
+  return mockDb;
+}
+
+// ─── Tests ────────────────────────────────────────────────────────────────────
+
+describe("fund-enrichment queries", () => {
+  let mockDb: ReturnType<typeof makeMockDb>;
+
+  beforeEach(() => {
+    mockDb = makeMockDb();
+    vi.mocked(getDb).mockReturnValue(mockDb as unknown as ReturnType<typeof getDb>);
+  });
+
+  // ─── upsertFundPerformance ─────────────────────────────────────────────────
+
+  describe("upsertFundPerformance", () => {
+    it("no-ops when rows array is empty", () => {
+      upsertFundPerformance("proj-1", []);
+      expect(mockDb.transaction).not.toHaveBeenCalled();
+    });
+
+    it("runs a transaction that deletes then inserts rows", () => {
+      const rows: FundPerformanceInsert[] = [
+        {
+          projId: "proj-1",
+          fundClassName: "main",
+          startDate: "2025-01-01",
+          endDate: null,
+          prospectusType: "Monthly",
+          performanceTypeDesc: "ความผันผวนของกองทุนรวม",
+          referencePeriod: "1 year",
+          performanceValue: "11.89",
+          lastUpdDate: "2025-02-01T00:00:00Z",
+        },
+      ];
+
+      upsertFundPerformance("proj-1", rows);
+
+      expect(mockDb.transaction).toHaveBeenCalledOnce();
+    });
+  });
+
+  // ─── upsertFundPortfolio ───────────────────────────────────────────────────
+
+  describe("upsertFundPortfolio", () => {
+    it("no-ops when rows array is empty", () => {
+      upsertFundPortfolio("proj-1", []);
+      expect(mockDb.transaction).not.toHaveBeenCalled();
+    });
+
+    it("runs a transaction for a portfolio row batch", () => {
+      const rows: FundPortfolioInsert[] = [
+        {
+          projId: "proj-1",
+          period: "202412",
+          asOfDate: "2024-12-31",
+          assetliabId: "101",
+          assetliabDesc: "หุ้นสามัญ",
+          issueCode: "AOT",
+          isinCode: "TH1234",
+          issuer: "AIRPORTS OF THAILAND",
+          assetliabValue: 105_000_000,
+          percentNav: 5.25,
+          lastUpdDate: "2025-02-21T00:00:00Z",
+        },
+      ];
+
+      upsertFundPortfolio("proj-1", rows);
+
+      expect(mockDb.transaction).toHaveBeenCalledOnce();
+    });
+  });
+
+  // ─── upsertFundAssetAllocation ─────────────────────────────────────────────
+
+  describe("upsertFundAssetAllocation", () => {
+    it("no-ops when rows array is empty", () => {
+      upsertFundAssetAllocation("proj-1", []);
+      expect(mockDb.transaction).not.toHaveBeenCalled();
+    });
+
+    it("runs a transaction for non-empty rows", () => {
+      upsertFundAssetAllocation("proj-1", [
+        {
+          projId: "proj-1",
+          startDate: "2025-01-01",
+          endDate: null,
+          prospectusType: "Monthly",
+          assetSeq: 1,
+          assetName: "หุ้นสามัญ",
+          assetRatio: 95.68,
+          lastUpdDate: "2025-02-01T00:00:00Z",
+        },
+      ]);
+      expect(mockDb.transaction).toHaveBeenCalledOnce();
+    });
+  });
+
+  // ─── upsertFundTopHoldings ────────────────────────────────────────────────
+
+  describe("upsertFundTopHoldings", () => {
+    it("no-ops when rows array is empty", () => {
+      upsertFundTopHoldings("proj-1", []);
+      expect(mockDb.transaction).not.toHaveBeenCalled();
+    });
+
+    it("runs a transaction for non-empty rows", () => {
+      upsertFundTopHoldings("proj-1", [
+        {
+          projId: "proj-1",
+          startDate: "2025-01-01",
+          endDate: null,
+          prospectusType: "Monthly",
+          assetSeq: 1,
+          assetName: "AOT",
+          assetRatio: 5.3,
+          lastUpdDate: "2025-02-01T00:00:00Z",
+        },
+      ]);
+      expect(mockDb.transaction).toHaveBeenCalledOnce();
+    });
+  });
+
+  // ─── upsertFundPortfolioAssetType ─────────────────────────────────────────
+
+  describe("upsertFundPortfolioAssetType", () => {
+    it("no-ops when rows array is empty", () => {
+      upsertFundPortfolioAssetType("proj-1", []);
+      expect(mockDb.transaction).not.toHaveBeenCalled();
+    });
+
+    it("runs a transaction for non-empty rows", () => {
+      upsertFundPortfolioAssetType("proj-1", [
+        {
+          projId: "proj-1",
+          period: "202412",
+          assetliabCode: "101",
+          assetliabDesc: "หุ้น",
+          marketValue: 1_000_000,
+          percentNav: 91.2,
+        },
+      ]);
+      expect(mockDb.transaction).toHaveBeenCalledOnce();
+    });
+  });
+
+  // ─── read helpers ─────────────────────────────────────────────────────────
+
+  describe("read helpers", () => {
+    it("getFundPerformance returns rows from DB", () => {
+      const rows = [{ projId: "proj-1", performanceTypeDesc: "vol" }];
+      const db = makeMockDb(rows);
+      vi.mocked(getDb).mockReturnValue(db as unknown as ReturnType<typeof getDb>);
+
+      const result = getFundPerformance("proj-1");
+      expect(result).toEqual(rows);
+    });
+
+    it("getFundAssetAllocation returns ordered rows from DB", () => {
+      const rows = [{ projId: "proj-1", assetSeq: 1 }];
+      const db = makeMockDb(rows);
+      vi.mocked(getDb).mockReturnValue(db as unknown as ReturnType<typeof getDb>);
+
+      const result = getFundAssetAllocation("proj-1");
+      expect(result).toEqual(rows);
+    });
+
+    it("getFundTopHoldings returns ordered rows from DB", () => {
+      const rows = [{ projId: "proj-1", assetSeq: 1 }];
+      const db = makeMockDb(rows);
+      vi.mocked(getDb).mockReturnValue(db as unknown as ReturnType<typeof getDb>);
+
+      const result = getFundTopHoldings("proj-1");
+      expect(result).toEqual(rows);
+    });
+
+    it("getFundPortfolio returns rows from DB", () => {
+      const rows = [{ projId: "proj-1", period: "202412" }];
+      const db = makeMockDb(rows);
+      vi.mocked(getDb).mockReturnValue(db as unknown as ReturnType<typeof getDb>);
+
+      const result = getFundPortfolio("proj-1");
+      expect(result).toEqual(rows);
+    });
+
+    it("getFundPortfolioAssetType returns rows from DB", () => {
+      const rows = [{ projId: "proj-1", period: "202412" }];
+      const db = makeMockDb(rows);
+      vi.mocked(getDb).mockReturnValue(db as unknown as ReturnType<typeof getDb>);
+
+      const result = getFundPortfolioAssetType("proj-1");
+      expect(result).toEqual(rows);
+    });
+
+    it("getFundEnrichment aggregates all five tables", () => {
+      // Empty DB — returns empty arrays for all tables.
+      const emptyDb = makeMockDb([]);
+      vi.mocked(getDb).mockReturnValue(emptyDb as unknown as ReturnType<typeof getDb>);
+
+      const result = getFundEnrichment("proj-1");
+      expect(result).toMatchObject({
+        performance: [],
+        assetAllocation: [],
+        topHoldings: [],
+        portfolio: [],
+        portfolioAssetType: [],
+      });
+    });
+  });
+});
