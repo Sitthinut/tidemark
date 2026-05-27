@@ -2282,7 +2282,7 @@ textarea.sheet-input {
   gap: 10px;
   padding: 10px 10px;
   border-radius: 10px;
-  border: 1px solid var(--line-soft);
+  border: 1px solid var(--line);
   background: var(--paper);
   margin-bottom: 6px;
   cursor: pointer;

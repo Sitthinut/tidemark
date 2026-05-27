@@ -185,7 +185,10 @@ export function PortfoliosPanel({ onClose }: { onClose: () => void }) {
                   <div className="num" style={{ fontSize: 12.5 }}>
                     {fmt(p.totalValue)}
                   </div>
-                  <div className="delta up num">+{p.perfPct.ytd.toFixed(1)}% YTD</div>
+                  <div className={`delta num ${p.perfPct.ytd >= 0 ? "up" : "down"}`}>
+                    {p.perfPct.ytd >= 0 ? "+" : ""}
+                    {p.perfPct.ytd.toFixed(1)}% YTD
+                  </div>
                 </div>
               </button>
               <button
