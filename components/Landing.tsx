@@ -820,7 +820,7 @@ function Footer() {
           </nav>
         </div>
         <div className="mt-footer-bottom">
-          <span>© {new Date().getFullYear()} Macrotide · personal-use experiment</span>
+          <span>© {new Date().getFullYear()} Macrotide</span>
         </div>
       </div>
     </footer>
