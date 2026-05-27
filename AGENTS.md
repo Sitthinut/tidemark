@@ -120,9 +120,11 @@ import a query from a client component — go through a fetcher.
 - Visitors who click "Try the demo" on `/login` get a `macrotide_demo` cookie.
 - Each session gets a private in-memory **app.db** seeded from
   [lib/mock/demo-seed.ts](./lib/mock/demo-seed.ts) (buckets/holdings/plan/
-  journal/models — no market data). Market reads go to the SHARED real
-  market.db, read-only: on a cache miss `cache.ts` fetches live but does NOT
-  persist, so demo prices against real NAVs without writing the shared file.
+  journal/models — no market data). Market data goes to the SHARED real
+  market.db, used exactly like a real user: reads and write-through cache fills
+  are identical, so a symbol fetched once serves every later session (demo or
+  not) and demo adds no redundant upstream calls. Isolation is in app.db (per
+  session); market.db is global reference data, safe and cheaper to share.
 - 1h idle TTL, hard cap 200 concurrent. Sweep runs on every request.
 - Chat is capped at 10 turns server-side (defends OpenRouter budget).
 - Demo state is intentionally ephemeral — never persist demo data to disk.

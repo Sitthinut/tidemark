@@ -1,6 +1,6 @@
 import "server-only";
 import { and, desc, eq, gte, sql } from "drizzle-orm";
-import { getMarketDb, isDemoRequest } from "@/lib/db/context";
+import { getMarketDb } from "@/lib/db/context";
 import { fundQuotes, navHistory } from "@/lib/db/schema";
 import type { SeriesInterval, SeriesRange } from "./providers/types";
 import { resolveProviderChain } from "./registry";
@@ -56,12 +56,12 @@ export async function getCachedSeries(
   range: SeriesRange = "6mo",
   interval: SeriesInterval = "1d",
 ): Promise<CachedSeries> {
-  // The market cache lives in market.db. Demo sessions share the owner's
-  // (real) market.db opened read-only — they serve from it and, on a miss,
-  // fetch live WITHOUT persisting (see persistFresh) so the shared file is
-  // never written by a demo request.
+  // The market cache lives in market.db, which demo sessions share with real
+  // users — reads and write-through fills are identical. A symbol fetched once
+  // serves every later session (demo or not), so demo adds no redundant
+  // upstream calls. (Demo isolation is in app.db, which is per-session; market
+  // data is global reference data, safe and beneficial to share.)
   const db = getMarketDb();
-  const demo = isDemoRequest();
   const key = cacheKey(source, ticker);
   const cachedQuote = db.select().from(fundQuotes).where(eq(fundQuotes.ticker, key)).get();
 
@@ -91,8 +91,6 @@ export async function getCachedSeries(
           continue; // empty result — try the next provider
         }
         recentFailures.delete(key);
-        // Demo sessions read the shared real market.db — never write to it.
-        if (demo) return liveOnly(ticker, fresh);
         return persistFresh(db, key, ticker, fresh);
       } catch (err) {
         lastErr = err; // upstream failed — fall through to the next provider
@@ -198,30 +196,6 @@ function persistFresh(
   };
 }
 
-/**
- * Shape a freshly-fetched series into a CachedSeries WITHOUT touching the DB.
- * Used by demo sessions, which read the shared real market.db read-only and
- * must not write the cache on a miss.
- */
-function liveOnly(
-  ticker: string,
-  fresh: {
-    quote: { price: number; previousClose: number };
-    series: { t: number; close: number }[];
-  },
-): CachedSeries {
-  if (fresh.series.length === 0) return { ticker, series: [], quote: null };
-  return {
-    ticker,
-    series: fresh.series.map((p) => ({ date: yyyyMmDd(p.t), close: p.close })),
-    quote: {
-      price: fresh.quote.price,
-      previousClose: fresh.quote.previousClose,
-      asOf: new Date().toISOString(),
-    },
-  };
-}
-
 function rangeStart(range: SeriesRange): string {
   const now = new Date();
   const days =
@@ -268,15 +242,11 @@ export async function refreshSymbols(
   range: SeriesRange = "6mo",
 ): Promise<{ source: string; ticker: string; ok: boolean; error?: string }[]> {
   const db = getMarketDb();
-  // Demo sessions read the shared real market.db read-only — skip the cache-
-  // busting delete so getCachedSeries falls through to a live, non-persisting
-  // fetch instead of evicting the owner's warm cache.
-  const demo = isDemoRequest();
   const results: { source: string; ticker: string; ok: boolean; error?: string }[] = [];
   for (const r of refs) {
     try {
       const key = cacheKey(r.source, r.ticker);
-      if (!demo) db.delete(fundQuotes).where(eq(fundQuotes.ticker, key)).run();
+      db.delete(fundQuotes).where(eq(fundQuotes.ticker, key)).run();
       await getCachedSeries(r.source, r.ticker, range);
       results.push({ ...r, ok: true });
     } catch (err) {

@@ -54,7 +54,8 @@ export async function withDb<T>(fn: (ctx: DbContext) => T | Promise<T>): Promise
         // Demo app.db is the session's isolated in-memory copy …
         appDb: session.db,
         appSqlite: session.sqlite,
-        // … but market data is the shared real market.db, read-only.
+        // … but market data is the shared real market.db, used read-write just
+        // like a real user so demo benefits from (and warms) the same cache.
         marketDb,
         marketSqlite,
         isDemo: true,

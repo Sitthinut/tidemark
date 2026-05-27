@@ -7,8 +7,8 @@ import * as appSchema from "./schema/app";
 
 // A demo session is its own in-memory app.db (system of record), seeded with
 // the persona's buckets/holdings/plans/journal. Market data is NOT seeded here:
-// the demo reads the shared real market.db (see lib/api/with-db.ts), so we only
-// replay the APP baseline into the session DB.
+// the demo shares the real market.db and its cache with real users (see
+// lib/api/with-db.ts), so we only replay the APP baseline into the session DB.
 const APP_MIGRATIONS_DIR = resolve("lib/db/migrations/app");
 const IDLE_TTL_MS = 60 * 60 * 1000; // 1h
 const SWEEP_INTERVAL_MS = 5 * 60 * 1000; // 5m
