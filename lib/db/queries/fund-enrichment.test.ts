@@ -1,6 +1,6 @@
 // Unit tests for lib/db/queries/fund-enrichment.ts
 //
-// Strategy: mock the DB context (getDb) so tests run without a real SQLite
+// Strategy: mock the DB context (getMarketDb) so tests run without a real SQLite
 // instance. Each test focuses on the upsert/read logic in isolation.
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -8,10 +8,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 // ─── Mock the DB context ──────────────────────────────────────────────────────
 
 vi.mock("../context", () => ({
-  getDb: vi.fn(),
+  getMarketDb: vi.fn(),
 }));
 
-import { getDb } from "../context";
+import { getMarketDb } from "../context";
 import type { FundPerformanceInsert, FundPortfolioInsert } from "./fund-enrichment";
 import {
   getFundAssetAllocation,
@@ -56,7 +56,7 @@ describe("fund-enrichment queries", () => {
 
   beforeEach(() => {
     mockDb = makeMockDb();
-    vi.mocked(getDb).mockReturnValue(mockDb as unknown as ReturnType<typeof getDb>);
+    vi.mocked(getMarketDb).mockReturnValue(mockDb as unknown as ReturnType<typeof getMarketDb>);
   });
 
   // ─── upsertFundPerformance ─────────────────────────────────────────────────
@@ -198,7 +198,7 @@ describe("fund-enrichment queries", () => {
     it("getFundPerformance returns rows from DB", () => {
       const rows = [{ projId: "proj-1", performanceTypeDesc: "vol" }];
       const db = makeMockDb(rows);
-      vi.mocked(getDb).mockReturnValue(db as unknown as ReturnType<typeof getDb>);
+      vi.mocked(getMarketDb).mockReturnValue(db as unknown as ReturnType<typeof getMarketDb>);
 
       const result = getFundPerformance("proj-1");
       expect(result).toEqual(rows);
@@ -207,7 +207,7 @@ describe("fund-enrichment queries", () => {
     it("getFundAssetAllocation returns ordered rows from DB", () => {
       const rows = [{ projId: "proj-1", assetSeq: 1 }];
       const db = makeMockDb(rows);
-      vi.mocked(getDb).mockReturnValue(db as unknown as ReturnType<typeof getDb>);
+      vi.mocked(getMarketDb).mockReturnValue(db as unknown as ReturnType<typeof getMarketDb>);
 
       const result = getFundAssetAllocation("proj-1");
       expect(result).toEqual(rows);
@@ -216,7 +216,7 @@ describe("fund-enrichment queries", () => {
     it("getFundTopHoldings returns ordered rows from DB", () => {
       const rows = [{ projId: "proj-1", assetSeq: 1 }];
       const db = makeMockDb(rows);
-      vi.mocked(getDb).mockReturnValue(db as unknown as ReturnType<typeof getDb>);
+      vi.mocked(getMarketDb).mockReturnValue(db as unknown as ReturnType<typeof getMarketDb>);
 
       const result = getFundTopHoldings("proj-1");
       expect(result).toEqual(rows);
@@ -225,7 +225,7 @@ describe("fund-enrichment queries", () => {
     it("getFundPortfolio returns rows from DB", () => {
       const rows = [{ projId: "proj-1", period: "202412" }];
       const db = makeMockDb(rows);
-      vi.mocked(getDb).mockReturnValue(db as unknown as ReturnType<typeof getDb>);
+      vi.mocked(getMarketDb).mockReturnValue(db as unknown as ReturnType<typeof getMarketDb>);
 
       const result = getFundPortfolio("proj-1");
       expect(result).toEqual(rows);
@@ -234,7 +234,7 @@ describe("fund-enrichment queries", () => {
     it("getFundPortfolioAssetType returns rows from DB", () => {
       const rows = [{ projId: "proj-1", period: "202412" }];
       const db = makeMockDb(rows);
-      vi.mocked(getDb).mockReturnValue(db as unknown as ReturnType<typeof getDb>);
+      vi.mocked(getMarketDb).mockReturnValue(db as unknown as ReturnType<typeof getMarketDb>);
 
       const result = getFundPortfolioAssetType("proj-1");
       expect(result).toEqual(rows);
@@ -243,7 +243,7 @@ describe("fund-enrichment queries", () => {
     it("getFundEnrichment aggregates all five tables", () => {
       // Empty DB — returns empty arrays for all tables.
       const emptyDb = makeMockDb([]);
-      vi.mocked(getDb).mockReturnValue(emptyDb as unknown as ReturnType<typeof getDb>);
+      vi.mocked(getMarketDb).mockReturnValue(emptyDb as unknown as ReturnType<typeof getMarketDb>);
 
       const result = getFundEnrichment("proj-1");
       expect(result).toMatchObject({

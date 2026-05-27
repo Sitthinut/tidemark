@@ -20,12 +20,15 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=3000
+      # Split DBs: app.db (system of record, backed up) + market.db (regenerable).
       - DB_PATH=/app/data/app.db
+      - MARKET_DB_PATH=/app/data/market.db
     ports:
       - "127.0.0.1:3100:3000"
     volumes:
-      # SQLite db + daily backups. Bind mount so the host's restic backup picks
-      # it up (mirrors the searxng/agent service convention).
+      # Both SQLite files + app.db's daily backups. Bind mount so the host's
+      # restic backup picks them up (mirrors the searxng/agent service
+      # convention). The same ./data volume holds app.db and market.db.
       - ./data:/app/data
     healthcheck:
       test:

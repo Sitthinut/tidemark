@@ -16,6 +16,7 @@ import Database from "better-sqlite3";
 import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/better-sqlite3";
 import { describe, expect, it } from "vitest";
+import { freshMarketDb } from "@/tests/db-helpers";
 import { getDb, runWithDbContext } from "../lib/db/context";
 import { createThread, findIdleThreads } from "../lib/db/queries/chat";
 import * as schema from "../lib/db/schema";
@@ -28,7 +29,7 @@ import { parseArgs } from "../scripts/close-stale-sessions";
 function freshDb() {
   const sqlite = new Database(":memory:");
   sqlite.pragma("foreign_keys = ON");
-  const migrationsDir = resolve("lib/db/migrations");
+  const migrationsDir = resolve("lib/db/migrations/app");
   const files = readdirSync(migrationsDir)
     .filter((f) => f.endsWith(".sql"))
     .sort();
@@ -38,12 +39,16 @@ function freshDb() {
     .replace(/--> statement-breakpoint/g, ";");
   sqlite.exec(sql);
   const db = drizzle(sqlite, { schema });
-  return { sqlite, db };
+  const market = freshMarketDb();
+  return { sqlite, db, marketDb: market.db, marketSqlite: market.sqlite };
 }
 
 function withFresh<T>(fn: () => T): T {
-  const { sqlite, db } = freshDb();
-  return runWithDbContext({ db, sqlite, isDemo: true, sessionId: "test" }, fn) as T;
+  const { sqlite, db, marketDb, marketSqlite } = freshDb();
+  return runWithDbContext(
+    { appDb: db, appSqlite: sqlite, marketDb, marketSqlite, isDemo: true, sessionId: "test" },
+    fn,
+  ) as T;
 }
 
 /** ISO timestamp `days` days before now. */

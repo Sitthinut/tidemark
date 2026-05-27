@@ -7,6 +7,7 @@ import { join, resolve } from "node:path";
 import Database from "better-sqlite3";
 import { drizzle } from "drizzle-orm/better-sqlite3";
 import { describe, expect, it } from "vitest";
+import { freshMarketDb } from "@/tests/db-helpers";
 import { runWithDbContext } from "../lib/db/context";
 import {
   getUserIndicatorSymbols,
@@ -17,7 +18,7 @@ import { DEFAULT_INDICATOR_SYMBOLS } from "../lib/market/indicators";
 
 function freshDb() {
   const sqlite = new Database(":memory:");
-  const dir = resolve("lib/db/migrations");
+  const dir = resolve("lib/db/migrations/app");
   const sql = readdirSync(dir)
     .filter((f) => f.endsWith(".sql"))
     .sort()
@@ -29,13 +30,27 @@ function freshDb() {
   // can use arbitrary user ids without seeding the user table — we're exercising
   // the scoping query logic, not FK enforcement.
   sqlite.pragma("foreign_keys = OFF");
-  return { sqlite, db: drizzle(sqlite, { schema }) };
+  const market = freshMarketDb();
+  return {
+    sqlite,
+    db: drizzle(sqlite, { schema }),
+    marketDb: market.db,
+    marketSqlite: market.sqlite,
+  };
 }
 
 /** Run `fn` against a fresh DB scoped to `userId` (null = single-owner mode). */
 function as<T>(db: ReturnType<typeof freshDb>, userId: string | null, fn: () => T): T {
   return runWithDbContext(
-    { db: db.db, sqlite: db.sqlite, isDemo: false, sessionId: "test", userId },
+    {
+      appDb: db.db,
+      appSqlite: db.sqlite,
+      marketDb: db.marketDb,
+      marketSqlite: db.marketSqlite,
+      isDemo: false,
+      sessionId: "test",
+      userId,
+    },
     fn,
   ) as T;
 }

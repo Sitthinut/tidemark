@@ -52,11 +52,30 @@ ask the user — never invent one and commit it as if it were real.
 
 ## DB routing — read this before touching any route handler
 
-Every API route that calls `getDb()` (which most queries do via
+The database is split along a lifecycle boundary into two SQLite files:
+
+- **app.db** (`DB_PATH`, default `data/app.db`) — system of record: accounts,
+  buckets, holdings, plans, journal, models, chat, preferences,
+  `user_market_indicators`. Precious; backed up nightly (`lib/db/backup.ts`).
+  Accessed via `getAppDb()` (alias `getDb()`).
+- **market.db** (`MARKET_DB_PATH`, default `data/market.db`) — regenerable
+  market data: fund catalog/fees, fund enrichment, feeder look-through, and the
+  NAV/quote cache (`nav_history`/`fund_quotes`). Rebuilt from upstream; NOT
+  backed up. Accessed via `getMarketDb()`.
+
+No FK or SQL join crosses the boundary. `holdings` links to market data only
+via the soft `quoteSource`+`ticker` cache key resolved in app code
+(`getCachedSeries`), never a join. A query module touching both (e.g.
+`lib/db/queries/series.ts`) reads each handle and joins app-side. The schema is
+split into `lib/db/schema/app.ts` + `lib/db/schema/market.ts`, re-exported from
+`lib/db/schema/index.ts`. Two drizzle configs (`drizzle.config.{app,market}.ts`)
+generate baselines under `lib/db/migrations/{app,market}/`.
+
+Every API route that calls `getDb()`/`getMarketDb()` (which most queries do via
 [lib/db/queries/](./lib/db/queries)) MUST run inside `withDb`. The wrapper
 reads the `macrotide_demo` cookie and opens an AsyncLocalStorage scope that
-routes the query to the right SQLite (owner singleton vs per-session demo
-in-memory).
+routes the query to the right handles (owner singletons vs per-session demo
+in-memory app.db; the market handle is always the shared real market.db).
 
 ```ts
 // app/api/foo/route.ts
@@ -99,8 +118,11 @@ import a query from a client component — go through a fetcher.
 ## Demo mode
 
 - Visitors who click "Try the demo" on `/login` get a `macrotide_demo` cookie.
-- Each session gets a private in-memory SQLite seeded from
-  [lib/mock/demo-seed.ts](./lib/mock/demo-seed.ts).
+- Each session gets a private in-memory **app.db** seeded from
+  [lib/mock/demo-seed.ts](./lib/mock/demo-seed.ts) (buckets/holdings/plan/
+  journal/models — no market data). Market reads go to the SHARED real
+  market.db, read-only: on a cache miss `cache.ts` fetches live but does NOT
+  persist, so demo prices against real NAVs without writing the shared file.
 - 1h idle TTL, hard cap 200 concurrent. Sweep runs on every request.
 - Chat is capped at 10 turns server-side (defends OpenRouter budget).
 - Demo state is intentionally ephemeral — never persist demo data to disk.
@@ -269,7 +291,8 @@ an env var). Sign-up consent is an inline notice under the create-account button
 
 | Var | Default | Read by | Notes |
 | --- | --- | --- | --- |
-| `DB_PATH` | `data/app.db` | [lib/db/client.ts](./lib/db/client.ts), [lib/mock/seed.ts](./lib/mock/seed.ts) | SQLite file path (relative paths resolved from CWD). Parent dir auto-created. |
+| `DB_PATH` | `data/app.db` | [lib/db/client.ts](./lib/db/client.ts), [lib/mock/seed.ts](./lib/mock/seed.ts) | app.db (system of record) path. Relative paths resolved from CWD; parent dir auto-created. |
+| `MARKET_DB_PATH` | `data/market.db` | [lib/db/client.ts](./lib/db/client.ts) | market.db (regenerable market data) path. Same `data/` volume as app.db; not backed up. |
 
 ### Quotas + tier gating
 
@@ -331,12 +354,19 @@ GitHub Actions CI runs typecheck + lint + build. The build step needs
 
 ## Migrations (Drizzle)
 
-- Schema lives in [lib/db/schema.ts](./lib/db/schema.ts).
-- Generate migrations with `npm run db:generate`. Migrations are forward-only;
-  in dev, prefer `drizzle-kit drop` + reseed over hand-editing past
-  migrations.
-- Migrations run on boot in [lib/db/client.ts](./lib/db/client.ts). Demo DBs
-  replay the same migrations on session create.
+- Schema lives in [lib/db/schema/](./lib/db/schema) — `app.ts` (app.db) +
+  `market.ts` (market.db), re-exported from `index.ts`. Put a new table in the
+  file matching its lifecycle (precious → app, regenerable → market).
+- Generate migrations with `npm run db:generate` (runs both
+  `db:generate:app` + `db:generate:market`). Each DB has its own config
+  (`drizzle.config.{app,market}.ts`) and migration dir
+  (`lib/db/migrations/{app,market}/`). Migrations are forward-only; in dev,
+  prefer `db:drop:app`/`db:drop:market` + reseed over hand-editing.
+  The FTS5 `chat_messages_fts` table (not expressible in drizzle) rides as a
+  hand-written custom migration on the app baseline.
+- Migrations run on boot in [lib/db/client.ts](./lib/db/client.ts) for both
+  handles. Demo DBs replay the APP baseline only on session create (market is
+  the shared real DB).
 - Adding a column to an app table? Most app tables already carry a nullable
   `user_id` (migration `0007`) for per-user scoping; design new ones the same way.
 
