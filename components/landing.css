@@ -377,7 +377,8 @@
 }
 @media (max-width: 720px) {
   .mt-hero-image {
-    aspect-ratio: 4 / 5;
+    /* taller portrait backdrop so the enlarged phone sits inside it */
+    aspect-ratio: 3 / 5;
     border-radius: var(--mt-r-xl);
   }
 }
@@ -388,9 +389,9 @@
 .mt-hero-phone {
   position: absolute;
   left: 50%;
-  top: 50%;
-  transform: translate(-50%, -50%);
-  width: 232px;
+  bottom: 20px;
+  transform: translateX(-50%);
+  width: 286px;
   z-index: 3;
   filter: drop-shadow(0 34px 60px rgba(20, 20, 18, 0.4));
 }
@@ -406,7 +407,7 @@
     display: none;
   }
   .mt-hero-phone {
-    width: min(220px, 66vw);
+    width: min(264px, 76vw);
   }
 }
 
