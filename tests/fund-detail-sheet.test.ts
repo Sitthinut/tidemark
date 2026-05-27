@@ -147,6 +147,7 @@ const MOCK_TOP_HOLDINGS: FundTopHoldingRow[] = [
 
 const MOCK_PORTFOLIO: FundPortfolioRow[] = [
   {
+    id: 1,
     projId: "M0017_2538",
     period: "202412",
     asOfDate: "2024-12-31",
@@ -160,6 +161,7 @@ const MOCK_PORTFOLIO: FundPortfolioRow[] = [
     lastUpdDate: "2024-12-31",
   },
   {
+    id: 2,
     projId: "M0017_2538",
     period: "202412",
     asOfDate: "2024-12-31",

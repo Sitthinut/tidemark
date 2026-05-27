@@ -59,8 +59,10 @@ export interface ISharesProductRef {
    *  in a master-fund name for this product to be a match candidate. Primary
    *  keywords are disjoint across asset classes (e.g. "s&p 500" vs "msci world"
    *  vs "nasdaq"), so a name can never be a candidate for two different asset
-   *  classes — this is what makes cross-asset mis-matches impossible. */
-  primaryKeyword: string;
+   *  classes — this is what makes cross-asset mis-matches impossible. Optional
+   *  on the type so ad-hoc refs (e.g. for buildCsvUrl) need not supply it, but
+   *  every ISHARES_PRODUCTS entry must (enforced by the registry test). */
+  primaryKeyword?: string;
   /** Extra disambiguating keywords (e.g. "ucits") used only to break ties
    *  between same-asset-class products (UCITS vs US-listed variants). */
   keywords?: string[];
@@ -148,7 +150,7 @@ export function matchISharesMaster(masterName: string): string | null {
   let best: { isin: string; score: number } | null = null;
   let tied = false;
   for (const [isin, ref] of Object.entries(ISHARES_PRODUCTS)) {
-    if (!name.includes(ref.primaryKeyword.toLowerCase())) continue;
+    if (!ref.primaryKeyword || !name.includes(ref.primaryKeyword.toLowerCase())) continue;
     const extra = ref.keywords?.filter((k) => name.includes(k.toLowerCase())).length ?? 0;
     const score = 1 + extra;
     if (!best || score > best.score) {

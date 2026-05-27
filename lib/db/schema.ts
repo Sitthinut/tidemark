@@ -297,6 +297,11 @@ export const fundTopHoldings = sqliteTable(
 export const fundPortfolio = sqliteTable(
   "fund_portfolio",
   {
+    // Surrogate key. A fund holds many securities that share an assetliab_id
+    // (it is an asset/liability CATEGORY, not a per-security id), so there is no
+    // natural composite key — (proj_id, period, assetliab_id) collides. The
+    // delete-then-insert-by-proj_id upsert provides idempotency across crawls.
+    id: integer("id").primaryKey({ autoIncrement: true }),
     projId: text("proj_id")
       .notNull()
       .references(() => fundCatalog.projId, { onDelete: "cascade" }),
@@ -315,10 +320,7 @@ export const fundPortfolio = sqliteTable(
     percentNav: real("percent_nav"),
     lastUpdDate: text("last_upd_date"),
   },
-  (table) => [
-    primaryKey({ columns: [table.projId, table.period, table.assetliabId] }),
-    index("idx_fund_portfolio_proj").on(table.projId),
-  ],
+  (table) => [index("idx_fund_portfolio_proj").on(table.projId)],
 );
 
 // Monthly portfolio by asset type — latest month from
