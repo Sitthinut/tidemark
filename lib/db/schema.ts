@@ -163,6 +163,12 @@ export const fundCatalog = sqliteTable(
     index("idx_fund_catalog_status").on(table.status),
     index("idx_fund_catalog_mgmt_style").on(table.managementStyle),
     index("idx_fund_catalog_tax").on(table.taxIncentiveType),
+    // Name columns the fund-finder search LIKE-matches on. A leading-wildcard
+    // LIKE ('%term%') can't use a btree index, but anchored/prefix matches and
+    // ordering on these columns do — and the schema should carry them anyway.
+    index("idx_fund_catalog_abbr_name").on(table.abbrName),
+    index("idx_fund_catalog_english_name").on(table.englishName),
+    index("idx_fund_catalog_thai_name").on(table.thaiName),
   ],
 );
 

@@ -110,6 +110,17 @@ export function getCurrentFees(projId: string): Partial<Record<FeeType, FundFee>
     )
     .all();
 
+  return pickCurrentFees(rows);
+}
+
+/**
+ * Reduce already-fetched fee rows (for a single fund) to the current record per
+ * type. Rows MUST be pre-sorted open-period-first, then newest start date — the
+ * same order `getCurrentFees`/`fetchCurrentFeesBatch` apply — so "first wins"
+ * picks the most current record. Shared by the per-fund and batched paths so
+ * both produce identical results.
+ */
+function pickCurrentFees(rows: FundFee[]): Partial<Record<FeeType, FundFee>> {
   const current: Partial<Record<FeeType, FundFee>> = {};
   for (const row of rows) {
     const ft = row.feeType as FeeType;
@@ -118,14 +129,54 @@ export function getCurrentFees(projId: string): Partial<Record<FeeType, FundFee>
   return current;
 }
 
+/** TER from a fund's current-fee map. Same semantics as `getCurrentTer`. */
+function terFromCurrentFees(current: Partial<Record<FeeType, FundFee>>): number | null {
+  const ter = current[TER_FEE_TYPE];
+  return ter?.actualRatePct ?? ter?.rateCeilingPct ?? null;
+}
+
 /**
  * The all-in fee (TER) a fund actually charges, as a percent, or `null` if the
  * SEC has not published a Total Fee and Expense figure for it. This is the
  * number the fee finder ranks and compares on.
  */
 export function getCurrentTer(projId: string): number | null {
-  const ter = getCurrentFees(projId)[TER_FEE_TYPE];
-  return ter?.actualRatePct ?? ter?.rateCeilingPct ?? null;
+  return terFromCurrentFees(getCurrentFees(projId));
+}
+
+/**
+ * Batched equivalent of `getCurrentFees` for many funds at once: one query over
+ * all `projIds` instead of one per fund (avoids the find_funds N+1). Returns a
+ * map of projId → current-fee-by-type. Each fund's rows are grouped and reduced
+ * with the exact same open-period-first / newest-start ordering and first-wins
+ * selection as `getCurrentFees`, so per-fund TER values are unchanged.
+ */
+function fetchCurrentFeesBatch(projIds: string[]): Map<string, Partial<Record<FeeType, FundFee>>> {
+  const result = new Map<string, Partial<Record<FeeType, FundFee>>>();
+  if (projIds.length === 0) return result;
+
+  const rows = getDb()
+    .select()
+    .from(fundFees)
+    .where(inArray(fundFees.projId, projIds))
+    .orderBy(
+      // open period (periodEnd IS NULL) first, then newest start date —
+      // matches getCurrentFees so first-wins picks the same record per fund.
+      sql`${fundFees.periodEnd} IS NULL DESC`,
+      sql`${fundFees.periodStart} DESC`,
+    )
+    .all();
+
+  const byProj = new Map<string, FundFee[]>();
+  for (const row of rows) {
+    const group = byProj.get(row.projId);
+    if (group) group.push(row);
+    else byProj.set(row.projId, [row]);
+  }
+  for (const [projId, group] of byProj) {
+    result.set(projId, pickCurrentFees(group));
+  }
+  return result;
 }
 
 export type FundWithTer = Fund & { ter: number | null };
@@ -202,7 +253,14 @@ export function findFunds(filter: FindFundsFilter = {}): FundWithTer[] {
   // isIndexStyle() without duplicating the PN/PM logic in SQL.
   const filtered = indexOnly ? funds.filter((f) => isIndexStyle(f.managementStyle)) : funds;
 
-  const withTer: FundWithTer[] = filtered.map((f) => ({ ...f, ter: getCurrentTer(f.projId) }));
+  // Fetch TER for all result funds in ONE query instead of one-per-fund (the
+  // find_funds N+1). `fetchCurrentFeesBatch` reproduces getCurrentFees's
+  // ordering + selection, so per-fund TER values are identical.
+  const feesByProj = fetchCurrentFeesBatch(filtered.map((f) => f.projId));
+  const withTer: FundWithTer[] = filtered.map((f) => ({
+    ...f,
+    ter: terFromCurrentFees(feesByProj.get(f.projId) ?? {}),
+  }));
   withTer.sort((a, b) => {
     if (a.ter == null) return b.ter == null ? 0 : 1; // nulls last
     if (b.ter == null) return -1;
