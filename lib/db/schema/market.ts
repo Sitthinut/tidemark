@@ -103,6 +103,12 @@ export const fundCatalog = sqliteTable(
       .default("active"),
     createdAt: text("created_at").notNull().default(sql`(CURRENT_TIMESTAMP)`),
     updatedAt: text("updated_at").notNull().default(sql`(CURRENT_TIMESTAMP)`),
+    // DERIVED CACHE (NOT authoritative — fund_fees holds the full history and is
+    // the source of truth). Current total-expense ratio %, maintained by
+    // upsertFundFees on every fee write so findFunds can sort/annotate by TER
+    // without re-deriving from the ~790k-row fee history. Recomputed wholesale,
+    // never hand-edited; null when the fund has no published total_expense fee.
+    currentTer: real("current_ter"),
   },
   (table) => [
     index("idx_fund_catalog_asset_class").on(table.assetClass),

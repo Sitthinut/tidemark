@@ -90,6 +90,26 @@ export function upsertFundFees(rows: FundFeeInsert[]): void {
         .run();
     }
   });
+
+  // Keep the derived fund_catalog.current_ter cache in sync with the fees just
+  // written, so findFunds can sort/annotate by TER without touching the full
+  // fee history. Picks the current total_expense row (open period first, then
+  // newest start) for exactly the funds in `rows`.
+  const projIds = [...new Set(rows.map((r) => r.projId))];
+  db.run(sql`
+    UPDATE ${fundCatalog} SET current_ter = (
+      SELECT COALESCE(${fundFees.actualRatePct}, ${fundFees.rateCeilingPct})
+      FROM ${fundFees}
+      WHERE ${fundFees.projId} = ${fundCatalog.projId}
+        AND ${fundFees.feeType} = ${TER_FEE_TYPE}
+      ORDER BY (${fundFees.periodEnd} IS NULL) DESC, ${fundFees.periodStart} DESC
+      LIMIT 1
+    )
+    WHERE ${fundCatalog.projId} IN (${sql.join(
+      projIds.map((p) => sql`${p}`),
+      sql`, `,
+    )})
+  `);
 }
 
 // ─── read side (find_funds tool, Select UI) ─────────────────────────────────
@@ -143,48 +163,6 @@ function terFromCurrentFees(current: Partial<Record<FeeType, FundFee>>): number 
  */
 export function getCurrentTer(projId: string): number | null {
   return terFromCurrentFees(getCurrentFees(projId));
-}
-
-/**
- * Current TER (total-expense %) for many funds at once — the only fee `findFunds`
- * needs. Selects ONLY the current total_expense row per fund directly in SQL via
- * a window function (`row_number()` over open-period-first / newest-start, the
- * same selection as `getCurrentFees`), instead of pulling every fund's full fee
- * history into JS and reducing there. fund_fees holds ~340 historical periods
- * per fund (≈790k rows), so picking the current row in SQL is the difference
- * between ~0.4s and ~4s across the full active catalog. TER value = actual rate,
- * else ceiling — identical to `terFromCurrentFees`.
- */
-function fetchCurrentTerBatch(projIds: string[]): Map<string, number | null> {
-  const result = new Map<string, number | null>();
-  if (projIds.length === 0) return result;
-
-  const db = getMarketDb();
-  const ranked = db
-    .select({
-      projId: fundFees.projId,
-      actualRatePct: fundFees.actualRatePct,
-      rateCeilingPct: fundFees.rateCeilingPct,
-      rn: sql<number>`row_number() over (partition by ${fundFees.projId} order by (${fundFees.periodEnd} is null) desc, ${fundFees.periodStart} desc)`.as(
-        "rn",
-      ),
-    })
-    .from(fundFees)
-    .where(and(eq(fundFees.feeType, TER_FEE_TYPE), inArray(fundFees.projId, projIds)))
-    .as("ranked");
-
-  const rows = db
-    .select({
-      projId: ranked.projId,
-      actualRatePct: ranked.actualRatePct,
-      rateCeilingPct: ranked.rateCeilingPct,
-    })
-    .from(ranked)
-    .where(eq(ranked.rn, 1))
-    .all();
-
-  for (const r of rows) result.set(r.projId, r.actualRatePct ?? r.rateCeilingPct ?? null);
-  return result;
 }
 
 export type FundWithTer = Fund & { ter: number | null };
@@ -275,13 +253,11 @@ export function findFunds(filter: FindFundsFilter = {}): FundWithTer[] {
   // isIndexStyle() without duplicating the PN/PM logic in SQL.
   const filtered = indexOnly ? funds.filter((f) => isIndexStyle(f.managementStyle)) : funds;
 
-  // Annotate each result with its current TER in ONE windowed query (picks the
-  // current total_expense row per fund in SQL — no per-fund N+1, no fetching the
-  // full fee history into JS).
-  const terByProj = fetchCurrentTerBatch(filtered.map((f) => f.projId));
+  // TER rides along with the catalog row (fund_catalog.current_ter — a derived
+  // cache maintained by upsertFundFees), so no fee query is needed here at all.
   const withTer: FundWithTer[] = filtered.map((f) => ({
     ...f,
-    ter: terByProj.get(f.projId) ?? null,
+    ter: f.currentTer ?? null,
   }));
 
   const byTer = (a: FundWithTer, b: FundWithTer) => {
