@@ -75,6 +75,7 @@ import {
   fetchFundTop5Holdings,
   type SecFundProfile,
 } from "../market/providers/sec-thailand";
+import { invalidateFundIndex } from "../search/fund-index";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -443,6 +444,11 @@ export async function refreshFundCatalog(
 
   // Wait for remaining in-flight tasks.
   await Promise.all(inFlight);
+
+  // Drop the cached search index so the next search rebuilds over the fresh
+  // catalog (the staleness signature also covers this, but invalidate eagerly
+  // so the first post-refresh query never serves a stale-then-rebuild result).
+  invalidateFundIndex();
 
   return {
     fundsSeen: total,

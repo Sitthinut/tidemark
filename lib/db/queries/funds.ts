@@ -9,9 +9,10 @@
 // after a per-fund fetch rather than in SQL — catalog scale is a few thousand
 // funds on a single-VM SQLite, so clarity beats a window-function query here.
 
-import { and, eq, inArray, like, or, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { isIndexStyle } from "../../market/fund-classify";
 import { type FeeType, TER_FEE_TYPE } from "../../market/fund-fees";
+import { searchFundIds } from "../../search/fund-index";
 import { getDb } from "../context";
 import { fundCatalog, fundFees } from "../schema";
 
@@ -209,10 +210,22 @@ export type FindFundsFilter = {
 };
 
 /**
- * Find funds matching an exposure filter, each annotated with its current TER
- * and sorted cheapest-first (funds with no published TER sort last). This is the
- * core of the fee-aware fund finder: "which funds give me this exposure for the
- * lowest fee?".
+ * Find funds matching an exposure filter, each annotated with its current TER.
+ *
+ * Ordering depends on whether there is a text query:
+ *   • No text query → cheapest-TER-first (the fee finder's "which funds give me
+ *     this exposure for the lowest fee?" ranking; funds with no published TER
+ *     sort last). Unchanged from before.
+ *   • Text query → RELEVANCE first. Candidates come from the in-memory
+ *     MiniSearch index (which matches abbr/name/policy AND the feeder master
+ *     name, with fuzzy + prefix + alias expansion), already ranked by match
+ *     quality. We preserve that order so a great name match isn't buried by a
+ *     marginally cheaper unrelated fund. TER still annotates every row and only
+ *     breaks ties between funds of equal relevance rank.
+ *
+ * Structured filters (activeOnly / assetClass / taxIncentive / region /
+ * indexOnly / excludeFixedTerm) and the batched cheapest-first TER fetch are
+ * applied identically in both paths, and the `FundWithTer[]` shape is unchanged.
  */
 export function findFunds(filter: FindFundsFilter = {}): FundWithTer[] {
   const {
@@ -231,16 +244,18 @@ export function findFunds(filter: FindFundsFilter = {}): FundWithTer[] {
   if (taxIncentive) conds.push(eq(fundCatalog.taxIncentiveType, taxIncentive));
   if (region) conds.push(eq(fundCatalog.investRegion, region));
   if (excludeFixedTerm) conds.push(eq(fundCatalog.isFixedTerm, false));
-  if (query) {
-    const q = `%${query}%`;
-    conds.push(
-      or(
-        like(fundCatalog.abbrName, q),
-        like(fundCatalog.thaiName, q),
-        like(fundCatalog.englishName, q),
-        like(fundCatalog.policyDesc, q),
-      ),
-    );
+
+  // Relevance rank by projId when a text query is present (0 = best match).
+  // Absent → all funds share rank 0 and we fall back to TER ordering below.
+  const queryStr = query?.trim();
+  let relevanceRank: Map<string, number> | null = null;
+  if (queryStr) {
+    const ranked = searchFundIds(queryStr);
+    if (ranked.length === 0) return []; // no text match → no results
+    relevanceRank = new Map(ranked.map((id, i) => [id, i]));
+    // Constrain the SQL fetch to the matched candidate set; the structured
+    // filters above still apply on top, so e.g. activeOnly is honored.
+    conds.push(inArray(fundCatalog.projId, ranked));
   }
 
   const funds = getDb()
@@ -261,11 +276,24 @@ export function findFunds(filter: FindFundsFilter = {}): FundWithTer[] {
     ...f,
     ter: terFromCurrentFees(feesByProj.get(f.projId) ?? {}),
   }));
-  withTer.sort((a, b) => {
+
+  const byTer = (a: FundWithTer, b: FundWithTer) => {
     if (a.ter == null) return b.ter == null ? 0 : 1; // nulls last
     if (b.ter == null) return -1;
     return a.ter - b.ter;
-  });
+  };
+
+  if (relevanceRank) {
+    // Relevance first; TER (then nulls-last) only breaks ties at equal rank.
+    withTer.sort((a, b) => {
+      const ra = relevanceRank.get(a.projId) ?? Number.MAX_SAFE_INTEGER;
+      const rb = relevanceRank.get(b.projId) ?? Number.MAX_SAFE_INTEGER;
+      return ra !== rb ? ra - rb : byTer(a, b);
+    });
+  } else {
+    withTer.sort(byTer);
+  }
+
   return withTer.slice(0, limit);
 }
 

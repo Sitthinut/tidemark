@@ -100,6 +100,69 @@ describe("buildPortfolioDisplayRows", () => {
     expect(out[0].members).toBeUndefined();
   });
 
+  it("collapses NAMED rows sharing an identity (issuer + desc) into one net row", () => {
+    // Reproduces TCMF-M / M0035_2543: dozens of PN-term notes from one issuer,
+    // each a separate named row, that previously rendered as a wall of dupes.
+    const rows = [
+      row({ id: 1, assetliabDesc: "พันธบัตร", issuer: "BANK OF THAILAND", percentNav: 61.7 }),
+      row({ id: 2, assetliabDesc: "PN Term", issuer: "UNIQUE ENGINEERING", percentNav: 0.8 }),
+      row({ id: 3, assetliabDesc: "PN Term", issuer: "UNIQUE ENGINEERING", percentNav: 0.9 }),
+      row({ id: 4, assetliabDesc: "PN Term", issuer: "UNIQUE ENGINEERING", percentNav: 0.67 }),
+    ];
+
+    const out = buildPortfolioDisplayRows(rows);
+
+    // 1 standalone bond + 1 collapsed PN-Term group = 2 display rows.
+    expect(out).toHaveLength(2);
+    expect(out[0].label).toBe("พันธบัตร"); // largest weight leads
+    expect(out[0].percentNav).toBeCloseTo(61.7);
+
+    const group = out.at(-1);
+    expect(group?.label).toBe("PN Term (net · 3)");
+    expect(group?.percentNav).toBeCloseTo(2.37);
+    expect(group?.members).toHaveLength(3);
+    expect(group?.issuer).toBe("UNIQUE ENGINEERING"); // shared issuer surfaced
+  });
+
+  it("collapses named rows sharing an ISIN even with differing issuer text", () => {
+    const out = buildPortfolioDisplayRows([
+      row({
+        id: 1,
+        assetliabDesc: "หน่วยลงทุน",
+        issuer: "JPMorgan",
+        isinCode: "IE00ABC",
+        percentNav: 50,
+      }),
+      row({
+        id: 2,
+        assetliabDesc: "หน่วยลงทุน",
+        issuer: "JP Morgan AM",
+        isinCode: "IE00ABC",
+        percentNav: 30,
+      }),
+    ]);
+    expect(out).toHaveLength(1);
+    expect(out[0].label).toBe("หน่วยลงทุน (net · 2)");
+    expect(out[0].percentNav).toBeCloseTo(80);
+    expect(out[0].isin).toBe("IE00ABC");
+  });
+
+  it("keeps a feeder's single master ETF as one normal (non-collapsed) row", () => {
+    const out = buildPortfolioDisplayRows([
+      row({
+        id: 1,
+        assetliabDesc: "หน่วยลงทุน",
+        issuer: "iShares Trust",
+        isinCode: "US123",
+        percentNav: 99.5,
+      }),
+    ]);
+    expect(out).toHaveLength(1);
+    expect(out[0].label).toBe("หน่วยลงทุน"); // no "(net · N)" suffix
+    expect(out[0].members).toBeUndefined();
+    expect(out[0].isin).toBe("US123");
+  });
+
   it("keeps an equity fund's stocks individual (each has an issuer)", () => {
     const out = buildPortfolioDisplayRows([
       row({

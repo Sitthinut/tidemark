@@ -1,12 +1,17 @@
 // Display transform for a fund's full portfolio (fund_portfolio rows).
 //
-// The SEC /outstanding/portfolio feed itemizes every derivative contract as its
-// own line. A currency-hedged feeder fund (e.g. K-US500X) holds one master ETF
-// plus a ladder of dozens of FX-forward contracts — each a separate row with no
-// issuer and no ISIN. Listing 60 near-zero forwards drowns the real holdings, so
-// we collapse those anonymous rows (no issuer, no ISIN) into one net row per
-// instrument description, keeping named securities (stocks, the master ETF, bank
-// deposits — all of which carry an issuer or ISIN) as individual lines.
+// The SEC /outstanding/portfolio feed itemizes every line as its own row, with
+// no de-duplication. Two failure modes drown the real holdings:
+//   1. A currency-hedged feeder fund (e.g. K-US500X) holds one master ETF plus a
+//      ladder of dozens of FX-forward contracts — each an anonymous row (no
+//      issuer, no ISIN).
+//   2. A money-market / bond fund (e.g. TCMF-M) holds the same security split
+//      across dozens of tranches — 47 promissory notes from one issuer, each a
+//      separate NAMED row with identical issuer + description.
+// Both render as a wall of near-identical lines. We collapse rows that share an
+// identity (ISIN if present, else issuer + description) into one net row,
+// summing %NAV, and keep single-member identities as individual lines (a
+// feeder's single master ETF must stay one normal row).
 //
 // Pure + framework-free so it can be unit-tested without React.
 
@@ -31,47 +36,76 @@ function hasIdentity(row: FundPortfolioRow): boolean {
 }
 
 /**
- * Build display rows from raw portfolio rows: named securities pass through
- * individually; anonymous rows (no issuer/ISIN — i.e. derivatives like FX
- * forwards) are grouped by their description and summed into one net row.
- * Sorted by weight descending so the real holdings lead and net hedges sink.
+ * Identity key used to collapse duplicate line-items. Prefer ISIN (a globally
+ * unique security id); otherwise fall back to issuer + instrument description so
+ * the dozens of "PN Term" notes from a single issuer fold into one row. Anonymous
+ * rows (no issuer/ISIN — FX forwards) group by their description alone.
+ */
+function identityKey(row: FundPortfolioRow): string {
+  const isin = row.isinCode?.trim();
+  if (isin) return `isin:${isin}`;
+  if (hasIdentity(row)) {
+    const issuer = row.issuer?.trim() ?? "";
+    const desc = row.assetliabDesc?.trim() ?? "";
+    return `id:${issuer}|${desc}`;
+  }
+  return `anon:${row.assetliabDesc ?? row.assetliabId ?? "อื่นๆ"}`;
+}
+
+/** Best label for a group — instrument description, falling back to issuer. */
+function groupLabel(first: FundPortfolioRow): string {
+  return first.assetliabDesc ?? first.issuer ?? "—";
+}
+
+/**
+ * Build display rows from raw portfolio rows: every row is grouped by an identity
+ * key (ISIN, else issuer + description, else description for anonymous rows).
+ * Single-member identities pass through as individual lines; any identity with
+ * more than one member collapses into one net row (label "<desc> (net · N)")
+ * summing %NAV, with its members attached for inline expansion. Sorted by weight
+ * descending so the real holdings lead and net hedges sink.
  */
 export function buildPortfolioDisplayRows(rows: FundPortfolioRow[]): PortfolioDisplayRow[] {
-  const named: PortfolioDisplayRow[] = [];
-  const anonGroups = new Map<string, FundPortfolioRow[]>();
-
+  const groups = new Map<string, FundPortfolioRow[]>();
+  // Preserve first-seen order of keys so deterministic ties keep input order.
   for (const row of rows) {
-    if (hasIdentity(row)) {
-      named.push({
-        key: `n-${row.id}`,
-        label: row.assetliabDesc ?? row.issuer ?? "—",
-        issuer: row.issuer ?? null,
-        isin: row.isinCode ?? null,
-        percentNav: row.percentNav ?? null,
-      });
-    } else {
-      const groupKey = row.assetliabDesc ?? row.assetliabId ?? "อื่นๆ";
-      const bucket = anonGroups.get(groupKey);
-      if (bucket) bucket.push(row);
-      else anonGroups.set(groupKey, [row]);
-    }
+    const key = identityKey(row);
+    const bucket = groups.get(key);
+    if (bucket) bucket.push(row);
+    else groups.set(key, [row]);
   }
 
-  const collapsed: PortfolioDisplayRow[] = [];
-  for (const [desc, members] of anonGroups) {
-    const sum = members.reduce((acc, m) => acc + (m.percentNav ?? 0), 0);
+  const display: PortfolioDisplayRow[] = [];
+  for (const [key, members] of groups) {
+    const first = members[0];
     const multi = members.length > 1;
-    collapsed.push({
-      key: `g-${desc}`,
-      label: multi ? `${desc} (net · ${members.length})` : desc,
-      issuer: null,
-      isin: null,
+    const named = hasIdentity(first);
+    if (!multi) {
+      // Single line — render as-is, keeping its identity (issuer/ISIN) intact.
+      display.push({
+        key: named ? `n-${first.id}` : `g-${key}`,
+        label: named ? (first.assetliabDesc ?? first.issuer ?? "—") : groupLabel(first),
+        issuer: named ? (first.issuer ?? null) : null,
+        isin: named ? (first.isinCode ?? null) : null,
+        percentNav: first.percentNav ?? null,
+      });
+      continue;
+    }
+    // Collapsed net row across the group's members.
+    const sum = members.reduce((acc, m) => acc + (m.percentNav ?? 0), 0);
+    display.push({
+      key: `g-${key}`,
+      label: `${groupLabel(first)} (net · ${members.length})`,
+      // Surface the shared issuer/ISIN on a named collapse so the row still
+      // reads as a real security, not an anonymous bucket.
+      issuer: named ? (first.issuer ?? null) : null,
+      isin: named ? (first.isinCode ?? null) : null,
       percentNav: sum,
-      members: multi ? members : undefined,
+      members,
     });
   }
 
-  return [...named, ...collapsed].sort(
+  return display.sort(
     (a, b) =>
       (b.percentNav ?? Number.NEGATIVE_INFINITY) - (a.percentNav ?? Number.NEGATIVE_INFINITY),
   );

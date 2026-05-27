@@ -326,7 +326,13 @@ export const fundPortfolio = sqliteTable(
     percentNav: real("percent_nav"),
     lastUpdDate: text("last_upd_date"),
   },
-  (table) => [index("idx_fund_portfolio_proj").on(table.projId)],
+  (table) => [
+    index("idx_fund_portfolio_proj").on(table.projId),
+    // The read side filters by (proj_id, period) and resolves the latest period
+    // via a MAX(period) subquery over this 800k+ row table. A composite index on
+    // (proj_id, period) turns that scan into an index range/seek.
+    index("idx_fund_portfolio_proj_period").on(table.projId, table.period),
+  ],
 );
 
 // Monthly portfolio by asset type — latest month from
@@ -347,6 +353,11 @@ export const fundPortfolioAssetType = sqliteTable(
   (table) => [
     primaryKey({ columns: [table.projId, table.period, table.assetliabCode] }),
     index("idx_fund_portfolio_asset_type_proj").on(table.projId),
+    // Mirrors fund_portfolio: the read side seeks by (proj_id, period) and a
+    // MAX(period) subquery. The composite PK's (proj_id, period) prefix already
+    // serves this, but the explicit index keeps the two portfolio tables
+    // symmetric and survives any future PK change.
+    index("idx_fund_portfolio_asset_type_proj_period").on(table.projId, table.period),
   ],
 );
 
