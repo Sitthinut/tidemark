@@ -20,6 +20,25 @@ export interface CliArgs {
   dryRun: boolean;
 }
 
+// Per-fund errors are mostly transient upstream blips (the Thai SEC API
+// occasionally 400s an individual factsheet sub-endpoint). A handful out of
+// thousands of funds is normal and must NOT fail the whole job — otherwise
+// systemd marks a 99.9%-successful crawl as failed and pages every night.
+// We fail the job only when errors look systemic: more than ERROR_FLOOR funds
+// AND more than ERROR_RATE of those processed. Both must be exceeded so that
+// tiny runs (e.g. --limit=5 in dev) aren't tripped by a single error.
+export const ERROR_FLOOR = 10;
+export const ERROR_RATE = 0.05;
+
+/**
+ * Decide whether the run's error count is bad enough to fail the job (exit 1).
+ * Pure — safe to unit-test. Returns false (tolerate) when fundsSeen is 0.
+ */
+export function exceedsErrorThreshold(errorCount: number, fundsSeen: number): boolean {
+  if (fundsSeen <= 0) return false;
+  return errorCount > ERROR_FLOOR && errorCount / fundsSeen > ERROR_RATE;
+}
+
 /**
  * Parse CLI argv into typed options.
  * Pure function — no I/O; safe to unit-test in isolation.
@@ -89,7 +108,16 @@ async function main() {
     for (const { projId, error } of result.errors) {
       console.log(`    - ${projId}: ${error}`);
     }
-    process.exit(1);
+    if (exceedsErrorThreshold(result.errors.length, result.fundsSeen)) {
+      console.error(
+        `Error rate ${result.errors.length}/${result.fundsSeen} exceeds threshold ` +
+          `(>${ERROR_FLOOR} and >${ERROR_RATE * 100}%) — failing the job.`,
+      );
+      process.exit(1);
+    }
+    console.log(
+      `  ${result.errors.length}/${result.fundsSeen} errors — within tolerance, exiting 0.`,
+    );
   }
 }
 
