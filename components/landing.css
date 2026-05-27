@@ -287,13 +287,32 @@
   margin: 0 10px;
   color: var(--muted-2);
 }
+/* Stage = photo as a fill background + the phone centered in normal flow.
+   Fixed top/bottom padding sizes the stage to the phone; responsive below. */
 .mt-hero-stage {
   margin-top: 72px;
   position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 24px;
+  border-radius: var(--mt-r-2xl);
+  overflow: hidden;
+}
+@media (max-width: 980px) {
+  .mt-hero-stage {
+    padding: 48px 20px;
+  }
 }
 @media (max-width: 720px) {
   .mt-hero-stage {
+    /* snug background hugging the phone with equal padding on all 4 sides */
     margin-top: 48px;
+    width: fit-content;
+    max-width: 100%;
+    margin-inline: auto;
+    padding: 18px;
+    border-radius: var(--mt-r-xl);
   }
 }
 
@@ -370,27 +389,22 @@
   display: none;
 }
 
+/* Photo becomes the stage's fill background, behind the phone. */
 .mt-hero-image {
-  aspect-ratio: 16 / 9;
+  position: absolute;
+  inset: 0;
   width: 100%;
-  border-radius: var(--mt-r-2xl);
-}
-@media (max-width: 720px) {
-  .mt-hero-image {
-    /* taller portrait backdrop so the enlarged phone sits inside it */
-    aspect-ratio: 3 / 5;
-    border-radius: var(--mt-r-xl);
-  }
+  height: 100%;
+  border: 0;
+  border-radius: 0;
+  z-index: 0;
 }
 
 /* Hero phone: the @sneas/telephone <iphone-16-max> web component (real SVG
    iPhone frame + status bar + home indicator) wraps our live screen DOM.
    We just position and size the wrapper; the component scales to its width. */
 .mt-hero-phone {
-  position: absolute;
-  left: 50%;
-  bottom: 20px;
-  transform: translateX(-50%);
+  position: relative;
   width: 286px;
   z-index: 3;
   filter: drop-shadow(0 34px 60px rgba(20, 20, 18, 0.4));
@@ -407,7 +421,7 @@
     display: none;
   }
   .mt-hero-phone {
-    width: min(264px, 76vw);
+    width: min(248px, 66vw);
   }
 }
 
