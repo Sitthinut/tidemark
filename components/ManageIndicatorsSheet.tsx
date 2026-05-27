@@ -1,22 +1,8 @@
 "use client";
 
-import {
-  closestCenter,
-  DndContext,
-  type DragEndEvent,
-  KeyboardSensor,
-  PointerSensor,
-  useSensor,
-  useSensors,
-} from "@dnd-kit/core";
-import {
-  arrayMove,
-  SortableContext,
-  sortableKeyboardCoordinates,
-  useSortable,
-  verticalListSortingStrategy,
-} from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
+import { move } from "@dnd-kit/helpers";
+import { DragDropProvider } from "@dnd-kit/react";
+import { useSortable } from "@dnd-kit/react/sortable";
 import { useEffect, useMemo, useState } from "react";
 import { Icon } from "@/components/Icon";
 import { useMarketIndicatorPrefs } from "@/lib/fetchers/portfolio";
@@ -41,29 +27,22 @@ const GROUP_ORDER: IndicatorGroup[] = [
 function SortableRow({
   sym,
   def,
+  index,
   onRemove,
 }: {
   sym: string;
   def: IndicatorDef | undefined;
+  index: number;
   onRemove: () => void;
 }) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
-    id: sym,
-  });
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-    opacity: isDragging ? 0.6 : 1,
-    zIndex: isDragging ? 1 : undefined,
-  };
+  const { ref, handleRef, isDragging } = useSortable({ id: sym, index });
   return (
-    <div ref={setNodeRef} style={style} className="mi-row">
+    <div ref={ref} className={`mi-row${isDragging ? " mi-row--dragging" : ""}`}>
       <button
+        ref={handleRef}
         type="button"
         className="icon-btn mi-drag-handle"
         aria-label={`Reorder ${def?.label ?? sym}`}
-        {...attributes}
-        {...listeners}
       >
         <Icon name="grip-vertical" size={14} />
       </button>
@@ -82,11 +61,6 @@ export function ManageIndicatorsSheet({ open, onClose }: ManageIndicatorsSheetPr
   const { data } = useMarketIndicatorPrefs();
   const [working, setWorking] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
-
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
-    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
-  );
 
   // (Re)seed the working list from the server selection each time we open.
   // biome-ignore lint/correctness/useExhaustiveDependencies: re-seed only on open
@@ -124,16 +98,6 @@ export function ManageIndicatorsSheet({ open, onClose }: ManageIndicatorsSheetPr
 
   if (!open) return null;
 
-  const onDragEnd = (e: DragEndEvent) => {
-    const { active, over } = e;
-    if (!over || active.id === over.id) return;
-    setWorking((w) => {
-      const from = w.indexOf(active.id as string);
-      const to = w.indexOf(over.id as string);
-      if (from < 0 || to < 0) return w;
-      return arrayMove(w, from, to);
-    });
-  };
   const remove = (sym: string) => setWorking((w) => w.filter((s) => s !== sym));
   const add = (sym: string) => setWorking((w) => (w.includes(sym) ? w : [...w, sym]));
 
@@ -169,18 +133,17 @@ export function ManageIndicatorsSheet({ open, onClose }: ManageIndicatorsSheetPr
               No indicators selected — you&apos;ll see the default set.
             </div>
           )}
-          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
-            <SortableContext items={working} strategy={verticalListSortingStrategy}>
-              {working.map((sym) => (
-                <SortableRow
-                  key={sym}
-                  sym={sym}
-                  def={bySymbol.get(sym)}
-                  onRemove={() => remove(sym)}
-                />
-              ))}
-            </SortableContext>
-          </DndContext>
+          <DragDropProvider onDragEnd={(event) => setWorking((w) => move(w, event))}>
+            {working.map((sym, i) => (
+              <SortableRow
+                key={sym}
+                sym={sym}
+                index={i}
+                def={bySymbol.get(sym)}
+                onRemove={() => remove(sym)}
+              />
+            ))}
+          </DragDropProvider>
         </div>
 
         {/* Add picker */}

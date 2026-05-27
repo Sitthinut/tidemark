@@ -2431,10 +2431,26 @@ textarea.sheet-input {
   align-items: center;
   gap: 8px;
   padding: 8px 10px;
-  border: 1px solid var(--line-soft);
+  border: 1px solid transparent;
   border-radius: 12px;
-  background: var(--card-soft);
+  background: transparent;
   touch-action: none;
+  transition:
+    background 0.12s,
+    border-color 0.12s,
+    box-shadow 0.12s;
+}
+/* Grey wash on hover so the pointed-at row (and its remove button) stands out. */
+.mi-row:hover {
+  background: var(--card-soft);
+}
+/* Lifted while being dragged — fills white + shadow so it pops off the list. */
+.mi-row--dragging {
+  position: relative;
+  z-index: 2;
+  background: var(--paper);
+  border-color: var(--line-soft);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.14);
 }
 .mi-drag-handle {
   cursor: grab;
