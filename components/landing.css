@@ -397,17 +397,48 @@
   z-index: 0;
 }
 
-/* Hero phone: the @sneas/telephone <iphone-16-max> web component (real SVG
-   iPhone frame + status bar + home indicator) wraps our live screen DOM.
-   We just position and size the wrapper; the component scales to its width. */
+/* Hero phone: the <PhoneFrame> component (vendored iPhone-frame SVG +
+   transparent screen cutout) overlays our live screen DOM. We just position
+   and size the wrapper; the frame scales to its width. */
+/* PhoneFrame internals (replaces the @sneas/telephone web component). The
+   screen radius scales with the frame width via a container-query unit so it
+   stays a perfect rounded-rect at any size (upstream used a JS ResizeObserver). */
+.phone-frame {
+  display: inline-block;
+  position: relative;
+  pointer-events: none;
+  container-type: inline-size;
+}
+.phone-screenshot {
+  position: absolute;
+  left: 3.4%;
+  right: 3.4%;
+  top: 1.32%;
+  bottom: 1.32%;
+  overflow: hidden;
+  border-radius: 12.2126cqw;
+  pointer-events: all;
+}
+.phone-bezel {
+  width: 100%;
+  position: relative;
+  top: 0;
+  line-height: 0;
+}
+.phone-bezel svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
 .mt-hero-phone {
   position: relative;
   width: 286px;
   z-index: 3;
   filter: drop-shadow(0 34px 60px rgba(20, 20, 18, 0.4));
 }
-.mt-hero-phone iphone-16-max,
-.mt-phone-device iphone-16-max {
+.mt-hero-phone .phone-frame,
+.mt-phone-device .phone-frame {
   display: block;
   width: 100%;
 }

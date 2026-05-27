@@ -15,30 +15,11 @@
 
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import {
-  type CSSProperties,
-  type DetailedHTMLProps,
-  type HTMLAttributes,
-  type ReactNode,
-  useEffect,
-  useState,
-} from "react";
+import { type CSSProperties, type ReactNode, useEffect, useState } from "react";
 
 import { BrandMark } from "./BrandMark";
+import { PhoneFrame } from "./PhoneFrame";
 import "./landing.css";
-
-// `<iphone-16-max>` is a custom element from @sneas/telephone (MIT). Registered
-// client-side in <Landing> below; declared here so JSX/TS accepts it. React 19
-// reads React.JSX (not the global JSX namespace), so augment the "react" module.
-declare module "react" {
-  namespace JSX {
-    interface IntrinsicElements {
-      "iphone-16-max": DetailedHTMLProps<HTMLAttributes<HTMLElement>, HTMLElement> & {
-        mode?: "light" | "dark";
-      };
-    }
-  }
-}
 
 /* ============================================================
  * <ImageSlot> — placeholder for real screenshots / abstract images
@@ -222,9 +203,9 @@ function Hero({ onSignIn, onDemo, demoBusy }: HeroProps) {
             />
           </ImageSlot>
           <div className="mt-hero-phone" aria-hidden="true">
-            <iphone-16-max mode="dark">
+            <PhoneFrame mode="dark">
               <PhonePortfolio />
-            </iphone-16-max>
+            </PhoneFrame>
           </div>
           <div className="mt-hero-overlays" aria-hidden="true">
             <div className="mt-hero-overlay mt-overlay-tl">
@@ -602,9 +583,9 @@ function AdvisorSpotlight() {
         <div className="mt-bigrow">
           <div className="mt-phone-wrap">
             <div className="mt-phone-device" aria-hidden="true">
-              <iphone-16-max mode="light">
+              <PhoneFrame mode="light">
                 <PhoneAdvisor />
-              </iphone-16-max>
+              </PhoneFrame>
             </div>
           </div>
           <div className="mt-bigrow-copy">
@@ -833,12 +814,6 @@ function Footer() {
 export default function Landing() {
   const router = useRouter();
   const [demoBusy, setDemoBusy] = useState(false);
-
-  // Register the iPhone frame web component (client-only; the module touches
-  // customElements/HTMLElement, so it must not run during SSR).
-  useEffect(() => {
-    import("@sneas/telephone/iphone-16-max").catch(() => {});
-  }, []);
 
   function onSignIn() {
     router.push("/login");
