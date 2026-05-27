@@ -15,10 +15,30 @@
 
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { type CSSProperties, type ReactNode, useEffect, useState } from "react";
+import {
+  type CSSProperties,
+  type DetailedHTMLProps,
+  type HTMLAttributes,
+  type ReactNode,
+  useEffect,
+  useState,
+} from "react";
 
 import { BrandMark } from "./BrandMark";
 import "./landing.css";
+
+// `<iphone-16-max>` is a custom element from @sneas/telephone (MIT). Registered
+// client-side in <Landing> below; declared here so JSX/TS accepts it. React 19
+// reads React.JSX (not the global JSX namespace), so augment the "react" module.
+declare module "react" {
+  namespace JSX {
+    interface IntrinsicElements {
+      "iphone-16-max": DetailedHTMLProps<HTMLAttributes<HTMLElement>, HTMLElement> & {
+        mode?: "light" | "dark";
+      };
+    }
+  }
+}
 
 /* ============================================================
  * <ImageSlot> — placeholder for real screenshots / abstract images
@@ -201,11 +221,10 @@ function Hero({ onSignIn, onDemo, demoBusy }: HeroProps) {
               sizes="(max-width: 720px) calc(100vw - 44px), min(100vw - 64px, 1120px)"
             />
           </ImageSlot>
-          <div className="mt-hero-phone mt-iphone" aria-hidden="true">
-            <PhoneButtons />
-            <div className="mt-hero-phone-screen">
+          <div className="mt-hero-phone" aria-hidden="true">
+            <iphone-16-max mode="dark">
               <PhonePortfolio />
-            </div>
+            </iphone-16-max>
           </div>
           <div className="mt-hero-overlays" aria-hidden="true">
             <div className="mt-hero-overlay mt-overlay-tl">
@@ -401,42 +420,6 @@ function ProposalMock() {
  * Coded phone screens — realistic mobile mockups (not screenshots).
  * Decorative; numbers mirror the demo portfolio.
  * ============================================================ */
-function StatusBar() {
-  return (
-    <div className="mt-statusbar" aria-hidden="true">
-      <span className="mt-sb-time">9:41</span>
-      <span className="mt-sb-icons">
-        <svg width="17" height="11" viewBox="0 0 17 11" fill="var(--ink)">
-          <rect x="0" y="7" width="3" height="4" rx="0.6" />
-          <rect x="4.5" y="5" width="3" height="6" rx="0.6" />
-          <rect x="9" y="2.5" width="3" height="8.5" rx="0.6" />
-          <rect x="13.5" y="0" width="3" height="11" rx="0.6" />
-        </svg>
-        <svg width="15" height="11" viewBox="0 0 15 11" fill="var(--ink)">
-          <path d="M7.5 2C4.6 2 2 3.2 0 5.2l1.4 1.5C3 5 5.1 4 7.5 4s4.5 1 6.1 2.7L15 5.2C13 3.2 10.4 2 7.5 2z" />
-          <circle cx="7.5" cy="9" r="1.7" />
-        </svg>
-        <svg width="25" height="12" viewBox="0 0 25 12" fill="none">
-          <rect x="0.5" y="0.5" width="21" height="11" rx="3" stroke="var(--ink)" opacity="0.5" />
-          <rect x="2" y="2" width="16" height="8" rx="1.5" fill="var(--ink)" />
-          <rect x="23" y="4" width="1.5" height="4" rx="0.75" fill="var(--ink)" opacity="0.5" />
-        </svg>
-      </span>
-    </div>
-  );
-}
-
-function PhoneButtons() {
-  return (
-    <>
-      <span className="mt-pbtn mt-pbtn-action" />
-      <span className="mt-pbtn mt-pbtn-volup" />
-      <span className="mt-pbtn mt-pbtn-voldn" />
-      <span className="mt-pbtn mt-pbtn-power" />
-    </>
-  );
-}
-
 function PhoneTabs({ active }: { active: "Portfolio" | "Chat" }) {
   return (
     <div className="mt-tabbar">
@@ -453,7 +436,6 @@ function PhoneTabs({ active }: { active: "Portfolio" | "Chat" }) {
 function PhonePortfolio() {
   return (
     <div className="mt-screen mt-screen-dark" aria-hidden="true">
-      <StatusBar />
       <div className="mt-screen-head">
         <span className="mt-screen-title">Portfolio</span>
         <span className="mt-screen-ava">DU</span>
@@ -500,7 +482,6 @@ function PhonePortfolio() {
         </div>
       </div>
       <PhoneTabs active="Portfolio" />
-      <span className="mt-home-indicator" />
     </div>
   );
 }
@@ -508,7 +489,6 @@ function PhonePortfolio() {
 function PhoneAdvisor() {
   return (
     <div className="mt-screen" aria-hidden="true">
-      <StatusBar />
       <div className="mt-screen-head">
         <span className="mt-screen-title">Advisor</span>
         <span className="mt-screen-new">+ New chat</span>
@@ -545,7 +525,6 @@ function PhoneAdvisor() {
         <span className="mt-chat-send">➤</span>
       </div>
       <PhoneTabs active="Chat" />
-      <span className="mt-home-indicator" />
     </div>
   );
 }
@@ -622,11 +601,10 @@ function AdvisorSpotlight() {
       <div className="mt-container">
         <div className="mt-bigrow">
           <div className="mt-phone-wrap">
-            <div className="mt-phone-device mt-iphone" aria-hidden="true">
-              <PhoneButtons />
-              <div className="mt-phone-device-screen">
+            <div className="mt-phone-device" aria-hidden="true">
+              <iphone-16-max mode="light">
                 <PhoneAdvisor />
-              </div>
+              </iphone-16-max>
             </div>
           </div>
           <div className="mt-bigrow-copy">
@@ -850,6 +828,12 @@ function Footer() {
 export default function Landing() {
   const router = useRouter();
   const [demoBusy, setDemoBusy] = useState(false);
+
+  // Register the iPhone frame web component (client-only; the module touches
+  // customElements/HTMLElement, so it must not run during SSR).
+  useEffect(() => {
+    import("@sneas/telephone/iphone-16-max").catch(() => {});
+  }, []);
 
   function onSignIn() {
     router.push("/login");

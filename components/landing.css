@@ -382,48 +382,22 @@
   }
 }
 
-/* Phone mockup straddling the top edge of the hero image */
+/* Hero phone: the @sneas/telephone <iphone-16-max> web component (real SVG
+   iPhone frame + status bar + home indicator) wraps our live screen DOM.
+   We just position and size the wrapper; the component scales to its width. */
 .mt-hero-phone {
   position: absolute;
   left: 50%;
   top: 50%;
-  /* centered over the hero image */
   transform: translate(-50%, -50%);
-  width: 220px;
-  aspect-ratio: 9 / 19;
-  border-radius: 34px;
-  padding: 8px;
-  background: linear-gradient(180deg, #1a1916 0%, #14130f 100%);
-  box-shadow:
-    0 32px 64px -28px rgba(20, 20, 18, 0.45),
-    0 10px 22px -10px rgba(20, 20, 18, 0.22);
+  width: 232px;
   z-index: 3;
+  filter: drop-shadow(0 34px 60px rgba(20, 20, 18, 0.4));
 }
-.mt-hero-phone::before {
-  content: "";
-  position: absolute;
-  top: 14px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 70px;
-  height: 17px;
-  border-radius: 999px;
-  background: #14130f;
-  z-index: 2;
-}
-.mt-hero-phone-screen {
-  position: relative;
-  width: 100%;
-  height: 100%;
-  border-radius: 27px;
-  overflow: hidden;
-  background: var(--paper);
-}
-.mt-hero-phone-screen img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
+.mt-hero-phone iphone-16-max,
+.mt-phone-device iphone-16-max {
   display: block;
+  width: 100%;
 }
 @media (max-width: 720px) {
   /* On mobile the floating stat cards collide with the phone — hide them and
@@ -432,18 +406,7 @@
     display: none;
   }
   .mt-hero-phone {
-    width: min(208px, 62vw);
-    border-radius: 38px;
-    padding: 8px;
-    transform: translate(-50%, -50%);
-  }
-  .mt-hero-phone::before {
-    top: 13px;
-    width: 66px;
-    height: 16px;
-  }
-  .mt-hero-phone-screen {
-    border-radius: 30px;
+    width: min(220px, 66vw);
   }
 }
 
@@ -880,43 +843,13 @@
   background: var(--accent);
   color: #04130c;
 }
-.mt-statusbar {
-  flex: 0 0 auto;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 9px 16px 2px;
-}
-.mt-sb-time {
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--ink);
-  font-variant-numeric: tabular-nums;
-  letter-spacing: 0.01em;
-}
-.mt-sb-icons {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-.mt-home-indicator {
-  position: absolute;
-  bottom: 6px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 34%;
-  height: 4px;
-  border-radius: 999px;
-  background: var(--ink);
-  opacity: 0.9;
-  z-index: 5;
-}
 .mt-screen-head {
   flex: 0 0 auto;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 5px 14px 8px;
+  /* top padding clears the frame's status bar + Dynamic Island */
+  padding: 13% 14px 8px;
 }
 .mt-screen-title {
   font-size: 13px;
@@ -1154,82 +1087,16 @@
   background: var(--accent);
 }
 
-/* Advisor-spotlight phone device */
+/* Advisor-spotlight phone: same <iphone-16-max> web-component frame as the hero */
 .mt-phone-device {
   position: relative;
-  width: min(264px, 86%);
-  aspect-ratio: 9 / 19;
-  border-radius: 40px;
-  padding: 9px;
-  background: linear-gradient(180deg, #1a1916 0%, #14130f 100%);
-  box-shadow:
-    0 36px 70px -30px rgba(20, 20, 18, 0.42),
-    0 10px 22px -10px rgba(20, 20, 18, 0.2);
-}
-.mt-phone-device::before {
-  content: "";
-  position: absolute;
-  top: 14px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 80px;
-  height: 18px;
-  border-radius: 999px;
-  background: #14130f;
-  z-index: 3;
-}
-.mt-phone-device-screen {
-  position: relative;
-  width: 100%;
-  height: 100%;
-  border-radius: 32px;
-  overflow: hidden;
-  background: var(--bg);
+  width: min(272px, 86%);
+  filter: drop-shadow(0 34px 60px rgba(20, 20, 18, 0.36));
 }
 @media (max-width: 880px) {
   .mt-phone-device {
-    width: min(248px, 72%);
+    width: min(256px, 72%);
   }
-}
-
-/* Shared iPhone realism: titanium edge, side buttons, home indicator */
-.mt-iphone {
-  background: linear-gradient(155deg, #3a3733 0%, #1a1916 22%, #131210 60%, #2c2925 100%);
-  box-shadow:
-    inset 0 0 0 1.5px #060606,
-    inset 0 1px 1.5px rgba(255, 255, 255, 0.14),
-    0 40px 72px -30px rgba(20, 20, 18, 0.5),
-    0 12px 24px -10px rgba(20, 20, 18, 0.24);
-}
-.mt-pbtn {
-  position: absolute;
-  background: linear-gradient(180deg, #2a2723, #100f0d);
-  border-radius: 2px;
-  z-index: 0;
-}
-.mt-pbtn-action {
-  left: -2px;
-  top: 19%;
-  width: 3px;
-  height: 4.5%;
-}
-.mt-pbtn-volup {
-  left: -2px;
-  top: 29%;
-  width: 3px;
-  height: 8%;
-}
-.mt-pbtn-voldn {
-  left: -2px;
-  top: 39.5%;
-  width: 3px;
-  height: 8%;
-}
-.mt-pbtn-power {
-  right: -2px;
-  top: 32%;
-  width: 3px;
-  height: 12%;
 }
 
 /* Enriched floating hero cards */
