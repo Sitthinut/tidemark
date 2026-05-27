@@ -306,12 +306,9 @@
 }
 @media (max-width: 720px) {
   .mt-hero-stage {
-    /* snug background hugging the phone with equal padding on all 4 sides */
+    /* same full-width-fill logic as tablet, just tighter padding */
     margin-top: 48px;
-    width: fit-content;
-    max-width: 100%;
-    margin-inline: auto;
-    padding: 18px;
+    padding: 40px 16px;
     border-radius: var(--mt-r-xl);
   }
 }
