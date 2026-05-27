@@ -193,7 +193,7 @@ function Hero({ onSignIn, onDemo, demoBusy }: HeroProps) {
             spec="aspect-ratio 16 / 9 · prefer 2400×1350 · JPG or WebP"
           >
             <Image
-              src="/landing/hero-tide.png"
+              src="/landing/hero-tide.jpg"
               alt=""
               width={1672}
               height={941}
@@ -201,6 +201,18 @@ function Hero({ onSignIn, onDemo, demoBusy }: HeroProps) {
               sizes="(max-width: 720px) calc(100vw - 44px), min(100vw - 64px, 1120px)"
             />
           </ImageSlot>
+          <div className="mt-hero-phone" aria-hidden="true">
+            <div className="mt-hero-phone-screen">
+              <Image
+                src="/landing/advisor-mobile.png"
+                alt=""
+                width={390}
+                height={814}
+                priority
+                sizes="220px"
+              />
+            </div>
+          </div>
           <div className="mt-hero-overlays" aria-hidden="true">
             <div className="mt-hero-overlay mt-overlay-tl">
               <div className="mt-ov-label">Health score</div>
