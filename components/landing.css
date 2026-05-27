@@ -426,19 +426,24 @@
   display: block;
 }
 @media (max-width: 720px) {
+  /* On mobile the floating stat cards collide with the phone — hide them and
+     let the (larger) phone carry the hero on its own. */
+  .mt-hero-overlays {
+    display: none;
+  }
   .mt-hero-phone {
-    width: 150px;
-    border-radius: 26px;
-    padding: 6px;
+    width: min(208px, 62vw);
+    border-radius: 38px;
+    padding: 8px;
     transform: translate(-50%, -50%);
   }
   .mt-hero-phone::before {
-    top: 11px;
-    width: 60px;
-    height: 14px;
+    top: 13px;
+    width: 66px;
+    height: 16px;
   }
   .mt-hero-phone-screen {
-    border-radius: 21px;
+    border-radius: 30px;
   }
 }
 
@@ -855,12 +860,63 @@
   background: var(--bg);
   text-align: left;
 }
+/* Dark-mode screen: redefine tokens so every child adapts automatically. */
+.mt-screen-dark {
+  --bg: #0d0f0e;
+  --paper: #181b1a;
+  --card-soft: #181b1a;
+  --ink: #f3f2ed;
+  --ink-soft: #d3d2cb;
+  --muted: #8e8d85;
+  --muted-2: #56554f;
+  --line: #2a2e2c;
+  --line-soft: #232624;
+  --accent-soft: rgba(16, 168, 107, 0.22);
+  --accent-ink: #57d79f;
+  --accent-2-soft: rgba(10, 166, 148, 0.22);
+  --accent-2-ink: #4fcabb;
+}
+.mt-screen-dark .mt-screen-ava {
+  background: var(--accent);
+  color: #04130c;
+}
+.mt-statusbar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 9px 16px 2px;
+}
+.mt-sb-time {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.01em;
+}
+.mt-sb-icons {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.mt-home-indicator {
+  position: absolute;
+  bottom: 6px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 34%;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--ink);
+  opacity: 0.9;
+  z-index: 5;
+}
 .mt-screen-head {
   flex: 0 0 auto;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 30px 14px 8px;
+  padding: 5px 14px 8px;
 }
 .mt-screen-title {
   font-size: 13px;
@@ -1074,7 +1130,7 @@
   justify-content: space-around;
   border-top: 1px solid var(--line);
   background: var(--paper);
-  padding: 7px 4px 9px;
+  padding: 7px 4px 16px;
 }
 .mt-tab {
   display: flex;
@@ -1134,6 +1190,46 @@
   .mt-phone-device {
     width: min(248px, 72%);
   }
+}
+
+/* Shared iPhone realism: titanium edge, side buttons, home indicator */
+.mt-iphone {
+  background: linear-gradient(155deg, #3a3733 0%, #1a1916 22%, #131210 60%, #2c2925 100%);
+  box-shadow:
+    inset 0 0 0 1.5px #060606,
+    inset 0 1px 1.5px rgba(255, 255, 255, 0.14),
+    0 40px 72px -30px rgba(20, 20, 18, 0.5),
+    0 12px 24px -10px rgba(20, 20, 18, 0.24);
+}
+.mt-pbtn {
+  position: absolute;
+  background: linear-gradient(180deg, #2a2723, #100f0d);
+  border-radius: 2px;
+  z-index: 0;
+}
+.mt-pbtn-action {
+  left: -2px;
+  top: 19%;
+  width: 3px;
+  height: 4.5%;
+}
+.mt-pbtn-volup {
+  left: -2px;
+  top: 29%;
+  width: 3px;
+  height: 8%;
+}
+.mt-pbtn-voldn {
+  left: -2px;
+  top: 39.5%;
+  width: 3px;
+  height: 8%;
+}
+.mt-pbtn-power {
+  right: -2px;
+  top: 32%;
+  width: 3px;
+  height: 12%;
 }
 
 /* Enriched floating hero cards */

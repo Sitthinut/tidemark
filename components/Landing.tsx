@@ -159,7 +159,7 @@ function Hero({ onSignIn, onDemo, demoBusy }: HeroProps) {
 
         <p className="mt-lede">
           Macrotide reads your Thai mutual-fund holdings and shows you what your index is really
-          doing — and what your fees really cost. Proposes, never trades.
+          doing, and what your fees really cost. Proposes, never trades.
         </p>
 
         <div className="mt-cta-row">
@@ -201,7 +201,8 @@ function Hero({ onSignIn, onDemo, demoBusy }: HeroProps) {
               sizes="(max-width: 720px) calc(100vw - 44px), min(100vw - 64px, 1120px)"
             />
           </ImageSlot>
-          <div className="mt-hero-phone" aria-hidden="true">
+          <div className="mt-hero-phone mt-iphone" aria-hidden="true">
+            <PhoneButtons />
             <div className="mt-hero-phone-screen">
               <PhonePortfolio />
             </div>
@@ -269,7 +270,7 @@ function TrustStrip() {
   const items = [
     "Open source (MIT)",
     "Self-hostable on your VM",
-    "Reads holdings — never trades",
+    "Reads holdings, never trades",
     "Thai SEC fund data",
   ];
   return (
@@ -400,6 +401,42 @@ function ProposalMock() {
  * Coded phone screens — realistic mobile mockups (not screenshots).
  * Decorative; numbers mirror the demo portfolio.
  * ============================================================ */
+function StatusBar() {
+  return (
+    <div className="mt-statusbar" aria-hidden="true">
+      <span className="mt-sb-time">9:41</span>
+      <span className="mt-sb-icons">
+        <svg width="17" height="11" viewBox="0 0 17 11" fill="var(--ink)">
+          <rect x="0" y="7" width="3" height="4" rx="0.6" />
+          <rect x="4.5" y="5" width="3" height="6" rx="0.6" />
+          <rect x="9" y="2.5" width="3" height="8.5" rx="0.6" />
+          <rect x="13.5" y="0" width="3" height="11" rx="0.6" />
+        </svg>
+        <svg width="15" height="11" viewBox="0 0 15 11" fill="var(--ink)">
+          <path d="M7.5 2C4.6 2 2 3.2 0 5.2l1.4 1.5C3 5 5.1 4 7.5 4s4.5 1 6.1 2.7L15 5.2C13 3.2 10.4 2 7.5 2z" />
+          <circle cx="7.5" cy="9" r="1.7" />
+        </svg>
+        <svg width="25" height="12" viewBox="0 0 25 12" fill="none">
+          <rect x="0.5" y="0.5" width="21" height="11" rx="3" stroke="var(--ink)" opacity="0.5" />
+          <rect x="2" y="2" width="16" height="8" rx="1.5" fill="var(--ink)" />
+          <rect x="23" y="4" width="1.5" height="4" rx="0.75" fill="var(--ink)" opacity="0.5" />
+        </svg>
+      </span>
+    </div>
+  );
+}
+
+function PhoneButtons() {
+  return (
+    <>
+      <span className="mt-pbtn mt-pbtn-action" />
+      <span className="mt-pbtn mt-pbtn-volup" />
+      <span className="mt-pbtn mt-pbtn-voldn" />
+      <span className="mt-pbtn mt-pbtn-power" />
+    </>
+  );
+}
+
 function PhoneTabs({ active }: { active: "Portfolio" | "Chat" }) {
   return (
     <div className="mt-tabbar">
@@ -415,7 +452,8 @@ function PhoneTabs({ active }: { active: "Portfolio" | "Chat" }) {
 
 function PhonePortfolio() {
   return (
-    <div className="mt-screen" aria-hidden="true">
+    <div className="mt-screen mt-screen-dark" aria-hidden="true">
+      <StatusBar />
       <div className="mt-screen-head">
         <span className="mt-screen-title">Portfolio</span>
         <span className="mt-screen-ava">DU</span>
@@ -462,6 +500,7 @@ function PhonePortfolio() {
         </div>
       </div>
       <PhoneTabs active="Portfolio" />
+      <span className="mt-home-indicator" />
     </div>
   );
 }
@@ -469,6 +508,7 @@ function PhonePortfolio() {
 function PhoneAdvisor() {
   return (
     <div className="mt-screen" aria-hidden="true">
+      <StatusBar />
       <div className="mt-screen-head">
         <span className="mt-screen-title">Advisor</span>
         <span className="mt-screen-new">+ New chat</span>
@@ -479,7 +519,7 @@ function PhoneAdvisor() {
           <span className="mt-chat-dot" /> Advisor · 06:34 AM
         </div>
         <div className="mt-chat-bubble">
-          Your US sleeve is running hot — 6pp over target. Want me to draft a trim back to plan?
+          Your US sleeve is running hot, 6pp over target. Want me to draft a trim back to plan?
         </div>
         <div className="mt-proposal-card mt-proposal-card-sm">
           <div className="mt-proposal-head">
@@ -505,6 +545,7 @@ function PhoneAdvisor() {
         <span className="mt-chat-send">➤</span>
       </div>
       <PhoneTabs active="Chat" />
+      <span className="mt-home-indicator" />
     </div>
   );
 }
@@ -523,7 +564,7 @@ function WhatItDoes() {
           </h2>
           <p className="mt-section-lead">
             Three things, available now in the running app. Anything still planned is on the roadmap
-            — and described that way.
+            and described that way.
           </p>
         </div>
 
@@ -535,7 +576,7 @@ function WhatItDoes() {
             <div className="mt-feature-body">
               <h3 className="mt-feature-title">Honest portfolio analysis</h3>
               <p className="mt-feature-text">
-                Allocation, drift, blended fee, concentration, and cash drag — rolled into a
+                Allocation, drift, blended fee, concentration, and cash drag, rolled into a
                 transparent 0–100 health score.
               </p>
             </div>
@@ -548,7 +589,7 @@ function WhatItDoes() {
             <div className="mt-feature-body">
               <h3 className="mt-feature-title">Performance vs your index</h3>
               <p className="mt-feature-text">
-                Real, aligned benchmark series — SET, S&amp;P 500, Nasdaq, Nikkei — over the same
+                Real, aligned benchmark series (SET, S&amp;P 500, Nasdaq, Nikkei) over the same
                 window as your portfolio.
               </p>
             </div>
@@ -562,7 +603,7 @@ function WhatItDoes() {
               <h3 className="mt-feature-title">Advisor that proposes</h3>
               <p className="mt-feature-text">
                 An Advisor that reads your real portfolio. Every write is an accept-only proposal
-                card — you stay in the loop.
+                card. You stay in the loop.
               </p>
             </div>
           </article>
@@ -581,7 +622,8 @@ function AdvisorSpotlight() {
       <div className="mt-container">
         <div className="mt-bigrow">
           <div className="mt-phone-wrap">
-            <div className="mt-phone-device" aria-hidden="true">
+            <div className="mt-phone-device mt-iphone" aria-hidden="true">
+              <PhoneButtons />
               <div className="mt-phone-device-screen">
                 <PhoneAdvisor />
               </div>
@@ -591,7 +633,7 @@ function AdvisorSpotlight() {
             <div className="mt-kicker">The Advisor · reads on phone, laptop, anywhere</div>
             <h3 className="mt-h3">Reads your portfolio. Proposes, never trades.</h3>
             <p className="mt-p">
-              The Advisor calls scoped tools against your real holdings — it doesn't guess at an
+              The Advisor calls scoped tools against your real holdings. It doesn't guess at an
               "average" investor. Every write is surfaced as a proposal card you accept or reject.
               Nothing happens silently, and no order is ever placed.
             </p>
@@ -622,7 +664,7 @@ const PILLARS: Array<{
   {
     num: "01",
     name: "Learn",
-    body: "Short, evidence-based reads on index investing — woven into the Advisor.",
+    body: "Short, evidence-based reads on index investing, woven into the Advisor.",
     tag: "planned",
     tagLabel: "On the roadmap",
   },
@@ -742,7 +784,7 @@ function FinalCta({ onSignIn, onDemo, demoBusy }: HeroProps) {
           matching your index.
         </h2>
         <p className="mt-section-lead" style={{ marginInline: "auto" }}>
-          Sign in with a passkey — or poke around the no-signup demo. Either way, you'll know your
+          Sign in with a passkey, or poke around the no-signup demo. Either way, you'll know your
           blended fee in under a minute.
         </p>
         <div className="mt-cta-row" style={{ justifyContent: "center", marginTop: 32 }}>
@@ -794,7 +836,7 @@ function Footer() {
           </div>
         </div>
         <div className="mt-footer-bottom">
-          <span>© 2026 Macrotide — personal-use experiment</span>
+          <span>© 2026 Macrotide · personal-use experiment</span>
           <span>Thai SEC Open API · long-term index investing</span>
         </div>
       </div>
