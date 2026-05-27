@@ -804,14 +804,20 @@ function Footer() {
               investment decisions.
             </small>
           </div>
-          <div className="mt-footer-links">
-            <a href="https://github.com/Sitthinut/macrotide/blob/main/README.md">README</a>
-            <a href="https://github.com/Sitthinut/macrotide/blob/main/ROADMAP.md">Roadmap</a>
-            <a href="https://github.com/Sitthinut/macrotide/tree/main/docs">Docs</a>
-            <a href="https://github.com/Sitthinut/macrotide">GitHub</a>
-            <a href="https://github.com/Sitthinut/macrotide/blob/main/LICENSE">MIT License</a>
-            <a href="https://github.com/Sitthinut/macrotide/blob/main/SECURITY.md">Security</a>
-          </div>
+          <nav className="mt-footer-links" aria-label="Footer">
+            <div className="mt-footer-col">
+              <span className="mt-footer-col-h">Docs</span>
+              <a href="https://github.com/Sitthinut/macrotide/blob/main/README.md">README</a>
+              <a href="https://github.com/Sitthinut/macrotide/blob/main/ROADMAP.md">Roadmap</a>
+              <a href="https://github.com/Sitthinut/macrotide/tree/main/docs">Guides</a>
+            </div>
+            <div className="mt-footer-col">
+              <span className="mt-footer-col-h">Project</span>
+              <a href="https://github.com/Sitthinut/macrotide">GitHub</a>
+              <a href="https://github.com/Sitthinut/macrotide/blob/main/LICENSE">MIT License</a>
+              <a href="https://github.com/Sitthinut/macrotide/blob/main/SECURITY.md">Security</a>
+            </div>
+          </nav>
         </div>
         <div className="mt-footer-bottom">
           <span>© {new Date().getFullYear()} Macrotide · personal-use experiment</span>
