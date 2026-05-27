@@ -268,6 +268,114 @@ function TrustStrip() {
 }
 
 /* ============================================================
+ * Feature mockups — coded mini-UIs (not screenshots).
+ *
+ * Each zooms into the single element that sells the feature, so it stays
+ * legible at card size. Numbers mirror the demo portfolio; they illustrate
+ * shipped capability, not live data.
+ * ============================================================ */
+function HealthMock() {
+  const rows: Array<{ name: string; val: string; pct: number; tone: "ok" | "warn" }> = [
+    { name: "Allocation drift", val: "43.8pp", pct: 70, tone: "warn" },
+    { name: "Blended fee", val: "0.74% / yr", pct: 55, tone: "warn" },
+    { name: "Concentration", val: "28%", pct: 38, tone: "ok" },
+    { name: "Cash drag", val: "3.4%", pct: 22, tone: "ok" },
+  ];
+  return (
+    <div className="mt-mock mt-mock-health" aria-hidden="true">
+      <div className="mt-mock-top">
+        <span className="mt-mock-label">Portfolio health</span>
+        <span className="mt-mock-pill">Good</span>
+      </div>
+      <div className="mt-mock-score">
+        78<span className="mt-mock-score-unit">/ 100</span>
+      </div>
+      <div className="mt-mock-rows">
+        {rows.map((r) => (
+          <div className="mt-mock-row" key={r.name}>
+            <span className="mt-mock-row-name">{r.name}</span>
+            <span className={`mt-mock-bar mt-mock-bar-${r.tone}`}>
+              <span style={{ width: `${r.pct}%` }} />
+            </span>
+            <span className="mt-mock-row-val">{r.val}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function PerformanceMock() {
+  // two hand-tuned series over the same window; portfolio (green) vs S&P 500 (dashed)
+  const you = "M2,74 L24,70 L46,72 L70,60 L94,62 L118,50 L142,52 L168,38 L192,40 L216,26 L240,18";
+  const bench = "M2,76 L24,73 L46,74 L70,68 L94,69 L118,61 L142,63 L168,55 L192,57 L216,49 L240,44";
+  return (
+    <div className="mt-mock mt-mock-perf" aria-hidden="true">
+      <div className="mt-mock-top">
+        <span className="mt-mock-label">Performance · 1Y</span>
+      </div>
+      <div className="mt-perf-readout">
+        <span className="mt-perf-chip mt-perf-you">
+          <span className="mt-perf-key" /> You <strong>+18.6%</strong>
+        </span>
+        <span className="mt-perf-chip mt-perf-bench">
+          <span className="mt-perf-key" /> S&amp;P 500 <strong>+11.2%</strong>
+        </span>
+      </div>
+      <svg
+        className="mt-perf-svg"
+        viewBox="0 0 242 84"
+        preserveAspectRatio="none"
+        role="img"
+        aria-label="Portfolio outperforming the S&P 500 over one year"
+      >
+        <defs>
+          <linearGradient id="mtPerfFill" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="var(--accent)" stopOpacity="0.18" />
+            <stop offset="100%" stopColor="var(--accent)" stopOpacity="0" />
+          </linearGradient>
+        </defs>
+        <path d={`${you} L240,84 L2,84 Z`} fill="url(#mtPerfFill)" stroke="none" />
+        <path
+          d={bench}
+          fill="none"
+          stroke="var(--muted-2)"
+          strokeWidth="1.5"
+          strokeDasharray="3 3"
+        />
+        <path d={you} fill="none" stroke="var(--accent)" strokeWidth="2" strokeLinecap="round" />
+      </svg>
+    </div>
+  );
+}
+
+function ProposalMock() {
+  return (
+    <div className="mt-mock mt-mock-proposal" aria-hidden="true">
+      <div className="mt-mock-top">
+        <span className="mt-mock-label">Advisor · proposal</span>
+      </div>
+      <div className="mt-proposal-card">
+        <div className="mt-proposal-head">
+          <span className="mt-proposal-kind">Plan edit</span>
+          Trim overweight US
+        </div>
+        <div className="mt-proposal-diff">
+          <span className="mt-diff-fund">K-USA-A(A)</span>
+          <span className="mt-diff-amt">−฿57,400</span>
+        </div>
+        <div className="mt-proposal-note">Brings US exposure back toward your target weight.</div>
+        <div className="mt-proposal-actions">
+          <span className="mt-mini-btn mt-mini-accept">Accept</span>
+          <span className="mt-mini-btn mt-mini-reject">Reject</span>
+        </div>
+      </div>
+      <div className="mt-proposal-foot">Accept-only · no order is ever placed</div>
+    </div>
+  );
+}
+
+/* ============================================================
  * What it does — three feature cards (live only)
  * ============================================================ */
 function WhatItDoes() {
@@ -287,20 +395,9 @@ function WhatItDoes() {
 
         <div className="mt-feature-grid">
           <article className="mt-feature">
-            <ImageSlot
-              kind="real"
-              className="mt-feature-img"
-              prompt="Real app screenshot — Portfolio screen showing the health score (a single 0–100 number with a short breakdown), blended fee as a headline, and a compact allocation drift list. Light theme, Geist font. Macrotide app, dashboard view."
-              spec="aspect 4 / 3 · 1200×900 · PNG"
-            >
-              <Image
-                src="/landing/portfolio.png"
-                alt="Macrotide portfolio dashboard"
-                width={804}
-                height={1070}
-                sizes="(max-width: 880px) calc(100vw - 44px), 363px"
-              />
-            </ImageSlot>
+            <div className="mt-feature-img mt-feature-mock">
+              <HealthMock />
+            </div>
             <div className="mt-feature-body">
               <h3 className="mt-feature-title">Honest portfolio analysis</h3>
               <p className="mt-feature-text">
@@ -311,20 +408,9 @@ function WhatItDoes() {
           </article>
 
           <article className="mt-feature">
-            <ImageSlot
-              kind="real"
-              className="mt-feature-img"
-              prompt="Real app screenshot — Performance vs index. A clean line chart of the user's portfolio vs S&P 500 (or SET) over 1Y, with a small comparison readout above the chart. Light theme, Geist font."
-              spec="aspect 4 / 3 · 1200×900 · PNG"
-            >
-              <Image
-                src="/landing/performance.png"
-                alt="Macrotide performance chart"
-                width={804}
-                height={1070}
-                sizes="(max-width: 880px) calc(100vw - 44px), 363px"
-              />
-            </ImageSlot>
+            <div className="mt-feature-img mt-feature-mock">
+              <PerformanceMock />
+            </div>
             <div className="mt-feature-body">
               <h3 className="mt-feature-title">Performance vs your index</h3>
               <p className="mt-feature-text">
@@ -335,20 +421,9 @@ function WhatItDoes() {
           </article>
 
           <article className="mt-feature">
-            <ImageSlot
-              kind="real"
-              className="mt-feature-img"
-              prompt="Real app screenshot — Advisor chat with one accept-only proposal card (plan edit) visible mid-conversation. Show the Accept / Reject buttons clearly. Light theme, Geist font."
-              spec="aspect 4 / 3 · 1200×900 · PNG"
-            >
-              <Image
-                src="/landing/advisor-chat.png"
-                alt="Macrotide advisor chat beside portfolio"
-                width={1440}
-                height={1070}
-                sizes="(max-width: 880px) calc(100vw - 44px), 363px"
-              />
-            </ImageSlot>
+            <div className="mt-feature-img mt-feature-mock">
+              <ProposalMock />
+            </div>
             <div className="mt-feature-body">
               <h3 className="mt-feature-title">Advisor that proposes</h3>
               <p className="mt-feature-text">
