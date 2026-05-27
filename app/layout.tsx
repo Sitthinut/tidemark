@@ -2,9 +2,15 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Macrotide · AI Investment Companion",
+  title: "Macrotide - An honest mirror for your index portfolio",
   description:
-    "Open-source AI companion for Thai index investors. See your funds in one place and chat with an AI that knows your holdings.",
+    "Open-source AI companion for Thai index investors. See your funds in one place, know your blended fee, and chat with an advisor that knows your holdings. Proposes, never trades.",
+  openGraph: {
+    title: "Macrotide - An honest mirror for your index portfolio",
+    description:
+      "Open-source AI companion for Thai index investors. See your funds in one place, know your blended fee, and chat with an advisor that knows your holdings.",
+    type: "website",
+  },
 };
 
 export const viewport: Viewport = {
