@@ -9,6 +9,7 @@ import { join, resolve } from "node:path";
 import Database from "better-sqlite3";
 import { drizzle } from "drizzle-orm/better-sqlite3";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { freshMarketDb } from "@/tests/db-helpers";
 import { runWithDbContext } from "../context";
 import * as schema from "../schema";
 import { accountTier, user } from "../schema";
@@ -24,7 +25,7 @@ import {
 function freshDb() {
   const sqlite = new Database(":memory:");
   sqlite.pragma("foreign_keys = ON");
-  const migrationsDir = resolve("lib/db/migrations");
+  const migrationsDir = resolve("lib/db/migrations/app");
   const files = readdirSync(migrationsDir)
     .filter((f) => f.endsWith(".sql"))
     .sort();
@@ -34,11 +35,12 @@ function freshDb() {
     .replace(/--> statement-breakpoint/g, ";");
   sqlite.exec(sql);
   const db = drizzle(sqlite, { schema });
-  return { sqlite, db };
+  const market = freshMarketDb();
+  return { sqlite, db, marketDb: market.db, marketSqlite: market.sqlite };
 }
 
 function withFresh<T>(fn: () => T): T {
-  const { sqlite, db } = freshDb();
+  const { sqlite, db, marketDb, marketSqlite } = freshDb();
   // Seed the FK target — usage + account_tier both reference user(id).
   const now = new Date();
   db.insert(user)
@@ -51,7 +53,18 @@ function withFresh<T>(fn: () => T): T {
       updatedAt: now,
     })
     .run();
-  return runWithDbContext({ db, sqlite, isDemo: false, sessionId: "test", userId: "u1" }, fn) as T;
+  return runWithDbContext(
+    {
+      appDb: db,
+      appSqlite: sqlite,
+      marketDb,
+      marketSqlite,
+      isDemo: false,
+      sessionId: "test",
+      userId: "u1",
+    },
+    fn,
+  ) as T;
 }
 
 describe("dailyTokenBudget", () => {
@@ -91,7 +104,7 @@ describe("getTier", () => {
 
   it("returns the stored tier when a row exists", () => {
     // Insert a 'trusted' row, then read it back inside the same context.
-    const { sqlite, db } = freshDb();
+    const { sqlite, db, marketDb, marketSqlite } = freshDb();
     const now = new Date();
     db.insert(user)
       .values({
@@ -106,9 +119,20 @@ describe("getTier", () => {
     db.insert(accountTier)
       .values({ userId: "u1", tier: "trusted", grantedAt: now.toISOString() })
       .run();
-    runWithDbContext({ db, sqlite, isDemo: false, sessionId: "test", userId: "u1" }, () => {
-      expect(getTier("u1")).toBe("trusted");
-    });
+    runWithDbContext(
+      {
+        appDb: db,
+        appSqlite: sqlite,
+        marketDb,
+        marketSqlite,
+        isDemo: false,
+        sessionId: "test",
+        userId: "u1",
+      },
+      () => {
+        expect(getTier("u1")).toBe("trusted");
+      },
+    );
   });
 });
 

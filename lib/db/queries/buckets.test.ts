@@ -3,6 +3,7 @@ import { join, resolve } from "node:path";
 import Database from "better-sqlite3";
 import { drizzle } from "drizzle-orm/better-sqlite3";
 import { describe, expect, it } from "vitest";
+import { freshMarketDb } from "@/tests/db-helpers";
 import { runWithDbContext } from "../context";
 import * as schema from "../schema";
 import { createBucket, deleteBucket, getBucket, listBuckets, updateBucket } from "./buckets";
@@ -10,7 +11,7 @@ import { createBucket, deleteBucket, getBucket, listBuckets, updateBucket } from
 function freshDb() {
   const sqlite = new Database(":memory:");
   sqlite.pragma("foreign_keys = ON");
-  const migrationsDir = resolve("lib/db/migrations");
+  const migrationsDir = resolve("lib/db/migrations/app");
   const files = readdirSync(migrationsDir)
     .filter((f) => f.endsWith(".sql"))
     .sort();
@@ -20,7 +21,8 @@ function freshDb() {
     .replace(/--> statement-breakpoint/g, ";");
   sqlite.exec(sql);
   const db = drizzle(sqlite, { schema });
-  return { sqlite, db };
+  const market = freshMarketDb();
+  return { sqlite, db, marketDb: market.db, marketSqlite: market.sqlite };
 }
 
 const NEW_BUCKET = {
@@ -37,8 +39,11 @@ const NEW_BUCKET = {
 };
 
 function withFresh<T>(fn: () => T): T {
-  const { sqlite, db } = freshDb();
-  return runWithDbContext({ db, sqlite, isDemo: true, sessionId: "test" }, fn) as T;
+  const { sqlite, db, marketDb, marketSqlite } = freshDb();
+  return runWithDbContext(
+    { appDb: db, appSqlite: sqlite, marketDb, marketSqlite, isDemo: true, sessionId: "test" },
+    fn,
+  ) as T;
 }
 
 describe("buckets queries", () => {
@@ -84,22 +89,52 @@ describe("buckets queries", () => {
   });
 
   it("AsyncLocalStorage isolates DB contexts", () => {
-    const { sqlite: sa, db: dba } = freshDb();
-    const { sqlite: sb, db: dbb } = freshDb();
+    const { sqlite: sa, db: dba, marketDb: marketDbA, marketSqlite: marketSqliteA } = freshDb();
+    const { sqlite: sb, db: dbb, marketDb: marketDbB, marketSqlite: marketSqliteB } = freshDb();
 
-    runWithDbContext({ db: dba, sqlite: sa, isDemo: true, sessionId: "A" }, () => {
-      createBucket(NEW_BUCKET);
-    });
+    runWithDbContext(
+      {
+        appDb: dba,
+        appSqlite: sa,
+        marketDb: marketDbA,
+        marketSqlite: marketSqliteA,
+        isDemo: true,
+        sessionId: "A",
+      },
+      () => {
+        createBucket(NEW_BUCKET);
+      },
+    );
 
     // Bucket should not exist in the second DB.
-    runWithDbContext({ db: dbb, sqlite: sb, isDemo: true, sessionId: "B" }, () => {
-      expect(getBucket("test-core")).toBeUndefined();
-      expect(listBuckets()).toHaveLength(0);
-    });
+    runWithDbContext(
+      {
+        appDb: dbb,
+        appSqlite: sb,
+        marketDb: marketDbB,
+        marketSqlite: marketSqliteB,
+        isDemo: true,
+        sessionId: "B",
+      },
+      () => {
+        expect(getBucket("test-core")).toBeUndefined();
+        expect(listBuckets()).toHaveLength(0);
+      },
+    );
 
     // ...but should in the first.
-    runWithDbContext({ db: dba, sqlite: sa, isDemo: true, sessionId: "A" }, () => {
-      expect(getBucket("test-core")).toBeDefined();
-    });
+    runWithDbContext(
+      {
+        appDb: dba,
+        appSqlite: sa,
+        marketDb: marketDbA,
+        marketSqlite: marketSqliteA,
+        isDemo: true,
+        sessionId: "A",
+      },
+      () => {
+        expect(getBucket("test-core")).toBeDefined();
+      },
+    );
   });
 });

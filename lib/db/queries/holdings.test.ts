@@ -8,6 +8,7 @@ import { join, resolve } from "node:path";
 import Database from "better-sqlite3";
 import { drizzle } from "drizzle-orm/better-sqlite3";
 import { describe, expect, it } from "vitest";
+import { freshMarketDb } from "@/tests/db-helpers";
 import { type DbContext, runWithDbContext } from "../context";
 import * as schema from "../schema";
 import { createBucket } from "./buckets";
@@ -16,7 +17,7 @@ import { createHolding, listHoldings, renameHoldingSource } from "./holdings";
 function freshDb() {
   const sqlite = new Database(":memory:");
   sqlite.pragma("foreign_keys = ON");
-  const migrationsDir = resolve("lib/db/migrations");
+  const migrationsDir = resolve("lib/db/migrations/app");
   const files = readdirSync(migrationsDir)
     .filter((f) => f.endsWith(".sql"))
     .sort();
@@ -25,7 +26,13 @@ function freshDb() {
     .join("\n")
     .replace(/--> statement-breakpoint/g, ";");
   sqlite.exec(sql);
-  return { sqlite, db: drizzle(sqlite, { schema }) };
+  const market = freshMarketDb();
+  return {
+    sqlite,
+    db: drizzle(sqlite, { schema }),
+    marketDb: market.db,
+    marketSqlite: market.sqlite,
+  };
 }
 
 const BUCKET = {
@@ -46,8 +53,16 @@ function seedHolding(bucketId: string, ticker: string, source: string | null) {
 
 describe("renameHoldingSource", () => {
   it("renames the label only within the given buckets", () => {
-    const { sqlite, db } = freshDb();
-    const ctx: DbContext = { db, sqlite, isDemo: false, sessionId: "s", userId: null };
+    const { sqlite, db, marketDb, marketSqlite } = freshDb();
+    const ctx: DbContext = {
+      appDb: db,
+      appSqlite: sqlite,
+      marketDb,
+      marketSqlite,
+      isDemo: false,
+      sessionId: "s",
+      userId: null,
+    };
     runWithDbContext(ctx, () => {
       createBucket({ ...BUCKET, id: "b1" });
       createBucket({ ...BUCKET, id: "b2" });
@@ -63,8 +78,16 @@ describe("renameHoldingSource", () => {
   });
 
   it("clears the label when the new value is empty", () => {
-    const { sqlite, db } = freshDb();
-    const ctx: DbContext = { db, sqlite, isDemo: false, sessionId: "s", userId: null };
+    const { sqlite, db, marketDb, marketSqlite } = freshDb();
+    const ctx: DbContext = {
+      appDb: db,
+      appSqlite: sqlite,
+      marketDb,
+      marketSqlite,
+      isDemo: false,
+      sessionId: "s",
+      userId: null,
+    };
     runWithDbContext(ctx, () => {
       createBucket({ ...BUCKET, id: "b1" });
       seedHolding("b1", "VOO", "SCB");
@@ -74,8 +97,16 @@ describe("renameHoldingSource", () => {
   });
 
   it("is a no-op when given no buckets", () => {
-    const { sqlite, db } = freshDb();
-    const ctx: DbContext = { db, sqlite, isDemo: false, sessionId: "s", userId: null };
+    const { sqlite, db, marketDb, marketSqlite } = freshDb();
+    const ctx: DbContext = {
+      appDb: db,
+      appSqlite: sqlite,
+      marketDb,
+      marketSqlite,
+      isDemo: false,
+      sessionId: "s",
+      userId: null,
+    };
     runWithDbContext(ctx, () => {
       expect(renameHoldingSource([], "SCB", "Y")).toBe(0);
     });

@@ -1,6 +1,6 @@
 // Unit tests for lib/db/queries/feeder-enrichment.ts
 //
-// Strategy: mock the DB context (getDb) so tests run without a real SQLite
+// Strategy: mock the DB context (getMarketDb) so tests run without a real SQLite
 // instance. Tests cover upsert and read helpers.
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -8,10 +8,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 // ─── Mock the DB context ──────────────────────────────────────────────────────
 
 vi.mock("../context", () => ({
-  getDb: vi.fn(),
+  getMarketDb: vi.fn(),
 }));
 
-import { getDb } from "../context";
+import { getMarketDb } from "../context";
 import {
   getFeederEnrichment,
   getFeederLookThroughHoldings,
@@ -51,7 +51,7 @@ describe("feeder-enrichment queries", () => {
 
   beforeEach(() => {
     mockDb = makeMockDb();
-    vi.mocked(getDb).mockReturnValue(mockDb as unknown as ReturnType<typeof getDb>);
+    vi.mocked(getMarketDb).mockReturnValue(mockDb as unknown as ReturnType<typeof getMarketDb>);
   });
 
   // ─── upsertFeederMasterMap ─────────────────────────────────────────────────
@@ -108,7 +108,7 @@ describe("feeder-enrichment queries", () => {
   describe("getFeederMasterMap", () => {
     it("returns null when no row found", () => {
       const db = makeMockDb([]);
-      vi.mocked(getDb).mockReturnValue(db as unknown as ReturnType<typeof getDb>);
+      vi.mocked(getMarketDb).mockReturnValue(db as unknown as ReturnType<typeof getMarketDb>);
       const result = getFeederMasterMap("M0001_2555");
       expect(result).toBeNull();
     });
@@ -116,7 +116,7 @@ describe("feeder-enrichment queries", () => {
     it("returns the first row when found", () => {
       const row = { projId: "M0001_2555", masterIsin: "IE00B5BMR087" };
       const db = makeMockDb([row]);
-      vi.mocked(getDb).mockReturnValue(db as unknown as ReturnType<typeof getDb>);
+      vi.mocked(getMarketDb).mockReturnValue(db as unknown as ReturnType<typeof getMarketDb>);
       const result = getFeederMasterMap("M0001_2555");
       expect(result).toEqual(row);
     });
@@ -125,7 +125,7 @@ describe("feeder-enrichment queries", () => {
   describe("getFeederLookThroughHoldings", () => {
     it("returns empty array when no rows", () => {
       const db = makeMockDb([]);
-      vi.mocked(getDb).mockReturnValue(db as unknown as ReturnType<typeof getDb>);
+      vi.mocked(getMarketDb).mockReturnValue(db as unknown as ReturnType<typeof getMarketDb>);
       const result = getFeederLookThroughHoldings("M0001_2555");
       expect(result).toEqual([]);
     });
@@ -133,7 +133,7 @@ describe("feeder-enrichment queries", () => {
     it("returns rows from DB", () => {
       const rows = [{ projId: "M0001_2555", rank: 1, name: "Apple Inc", weightPct: 7.23 }];
       const db = makeMockDb(rows);
-      vi.mocked(getDb).mockReturnValue(db as unknown as ReturnType<typeof getDb>);
+      vi.mocked(getMarketDb).mockReturnValue(db as unknown as ReturnType<typeof getMarketDb>);
       const result = getFeederLookThroughHoldings("M0001_2555");
       expect(result).toEqual(rows);
     });
@@ -142,7 +142,7 @@ describe("feeder-enrichment queries", () => {
   describe("getFeederEnrichment", () => {
     it("returns null masterMap and empty array when no data", () => {
       const db = makeMockDb([]);
-      vi.mocked(getDb).mockReturnValue(db as unknown as ReturnType<typeof getDb>);
+      vi.mocked(getMarketDb).mockReturnValue(db as unknown as ReturnType<typeof getMarketDb>);
       const result = getFeederEnrichment("M0001_2555");
       expect(result).toMatchObject({
         masterMap: null,

@@ -13,7 +13,7 @@ import { and, eq, inArray, sql } from "drizzle-orm";
 import { isIndexStyle } from "../../market/fund-classify";
 import { type FeeType, TER_FEE_TYPE } from "../../market/fund-fees";
 import { searchFundIds } from "../../search/fund-index";
-import { getDb } from "../context";
+import { getMarketDb } from "../context";
 import { fundCatalog, fundFees } from "../schema";
 
 export type Fund = typeof fundCatalog.$inferSelect;
@@ -25,7 +25,7 @@ export type FundFeeInsert = typeof fundFees.$inferInsert;
 
 /** Insert or update one fund. Touches `updatedAt` on conflict. */
 export function upsertFund(input: FundInsert): Fund {
-  return getDb()
+  return getMarketDb()
     .insert(fundCatalog)
     .values(input)
     .onConflictDoUpdate({
@@ -66,7 +66,7 @@ export function upsertFund(input: FundInsert): Fund {
  */
 export function upsertFundFees(rows: FundFeeInsert[]): void {
   if (rows.length === 0) return;
-  const db = getDb();
+  const db = getMarketDb();
   db.transaction((tx) => {
     for (const row of rows) {
       tx.insert(fundFees)
@@ -100,7 +100,7 @@ export function upsertFundFees(rows: FundFeeInsert[]): void {
  * are absent from the map.
  */
 export function getCurrentFees(projId: string): Partial<Record<FeeType, FundFee>> {
-  const rows = getDb()
+  const rows = getMarketDb()
     .select()
     .from(fundFees)
     .where(eq(fundFees.projId, projId))
@@ -156,7 +156,7 @@ function fetchCurrentFeesBatch(projIds: string[]): Map<string, Partial<Record<Fe
   const result = new Map<string, Partial<Record<FeeType, FundFee>>>();
   if (projIds.length === 0) return result;
 
-  const rows = getDb()
+  const rows = getMarketDb()
     .select()
     .from(fundFees)
     .where(inArray(fundFees.projId, projIds))
@@ -258,7 +258,7 @@ export function findFunds(filter: FindFundsFilter = {}): FundWithTer[] {
     conds.push(inArray(fundCatalog.projId, ranked));
   }
 
-  const funds = getDb()
+  const funds = getMarketDb()
     .select()
     .from(fundCatalog)
     .where(conds.length ? and(...conds) : undefined)
@@ -304,7 +304,7 @@ export function findFunds(filter: FindFundsFilter = {}): FundWithTer[] {
  * suggestion. Returns only funds strictly cheaper than the reference, capped.
  */
 export function getCheaperAlternatives(projId: string, limit = 5): FundWithTer[] {
-  const ref = getDb().select().from(fundCatalog).where(eq(fundCatalog.projId, projId)).get();
+  const ref = getMarketDb().select().from(fundCatalog).where(eq(fundCatalog.projId, projId)).get();
   if (!ref) return [];
   const refTer = getCurrentTer(projId);
   if (refTer == null) return [];
@@ -321,12 +321,16 @@ export function getCheaperAlternatives(projId: string, limit = 5): FundWithTer[]
 /** Look up catalog rows for a set of fund symbols (e.g. the user's holdings). */
 export function getFundsByAbbr(abbrNames: string[]): Fund[] {
   if (abbrNames.length === 0) return [];
-  return getDb().select().from(fundCatalog).where(inArray(fundCatalog.abbrName, abbrNames)).all();
+  return getMarketDb()
+    .select()
+    .from(fundCatalog)
+    .where(inArray(fundCatalog.abbrName, abbrNames))
+    .all();
 }
 
 /** Count of funds in the catalog (used by the refresh job to log coverage). */
 export function countFunds(activeOnly = false): number {
-  const row = getDb()
+  const row = getMarketDb()
     .select({ n: sql<number>`count(*)` })
     .from(fundCatalog)
     .where(activeOnly ? eq(fundCatalog.status, "active") : undefined)

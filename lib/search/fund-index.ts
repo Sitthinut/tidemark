@@ -18,8 +18,8 @@
 
 import { eq, sql } from "drizzle-orm";
 import MiniSearch from "minisearch";
-import type { Db } from "../db/context";
-import { getDb } from "../db/context";
+import type { MarketDb } from "../db/context";
+import { getMarketDb } from "../db/context";
 import { feederMasterMap, fundCatalog } from "../db/schema";
 
 // ─── Index nickname / alias expansion ────────────────────────────────────────
@@ -112,7 +112,7 @@ function newIndex(): MiniSearch<FundDoc> {
   });
 }
 
-function buildDocs(db: Db): FundDoc[] {
+function buildDocs(db: MarketDb): FundDoc[] {
   // Master name from the feeder_master_map table (richer than the catalog
   // column for some funds), joined onto every catalog row.
   const rows = db
@@ -149,10 +149,10 @@ interface IndexEntry {
 
 // Keyed by DB handle so the owner DB and any demo/per-request DB each get their
 // own index (demo DBs are short-lived; the owner index dominates).
-const cache = new WeakMap<Db, IndexEntry>();
+const cache = new WeakMap<MarketDb, IndexEntry>();
 
 /** Cheap staleness signature — changes when the catalog is refreshed. */
-function catalogSignature(db: Db): string {
+function catalogSignature(db: MarketDb): string {
   const row = db
     .select({
       n: sql<number>`count(*)`,
@@ -163,7 +163,7 @@ function catalogSignature(db: Db): string {
   return `${row?.n ?? 0}:${row?.maxUpd ?? ""}`;
 }
 
-function getIndex(db: Db): MiniSearch<FundDoc> {
+function getIndex(db: MarketDb): MiniSearch<FundDoc> {
   const signature = catalogSignature(db);
   const cached = cache.get(db);
   if (cached && cached.signature === signature) return cached.index;
@@ -180,7 +180,7 @@ function getIndex(db: Db): MiniSearch<FundDoc> {
  * by the nightly catalog refresh; the staleness signature already covers the
  * common case, so this is a belt-and-braces hook.
  */
-export function invalidateFundIndex(db: Db = getDb()): void {
+export function invalidateFundIndex(db: MarketDb = getMarketDb()): void {
   cache.delete(db);
 }
 
@@ -191,7 +191,7 @@ export function invalidateFundIndex(db: Db = getDb()): void {
  * (best match first). Robust to an empty catalog (demo mode) — returns []. The
  * query is alias-expanded before searching so index nicknames resolve.
  */
-export function searchFundIds(query: string, db: Db = getDb()): string[] {
+export function searchFundIds(query: string, db: MarketDb = getMarketDb()): string[] {
   const trimmed = query.trim();
   if (!trimmed) return [];
   const index = getIndex(db);

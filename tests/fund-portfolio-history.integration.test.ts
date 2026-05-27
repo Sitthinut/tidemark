@@ -12,7 +12,8 @@ import Database from "better-sqlite3";
 import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/better-sqlite3";
 import { describe, expect, it } from "vitest";
-import { getDb, runWithDbContext } from "../lib/db/context";
+import { freshMarketDb } from "@/tests/db-helpers";
+import { getMarketDb, runWithDbContext } from "../lib/db/context";
 import {
   getFundPortfolio,
   getFundPortfolioAssetType,
@@ -25,7 +26,7 @@ import { fundCatalog, fundPortfolio } from "../lib/db/schema";
 function freshDb() {
   const sqlite = new Database(":memory:");
   sqlite.pragma("foreign_keys = ON");
-  const dir = resolve("lib/db/migrations");
+  const dir = resolve("lib/db/migrations/app");
   const sql = readdirSync(dir)
     .filter((f) => f.endsWith(".sql"))
     .sort()
@@ -33,18 +34,27 @@ function freshDb() {
     .join("\n")
     .replace(/--> statement-breakpoint/g, ";");
   sqlite.exec(sql);
-  return { sqlite, db: drizzle(sqlite, { schema }) };
+  const market = freshMarketDb();
+  return {
+    sqlite,
+    db: drizzle(sqlite, { schema }),
+    marketDb: market.db,
+    marketSqlite: market.sqlite,
+  };
 }
 
 function withFresh<T>(fn: () => T): T {
-  const { sqlite, db } = freshDb();
-  return runWithDbContext({ db, sqlite, isDemo: true, sessionId: "test" }, fn) as T;
+  const { sqlite, db, marketDb, marketSqlite } = freshDb();
+  return runWithDbContext(
+    { appDb: db, appSqlite: sqlite, marketDb, marketSqlite, isDemo: true, sessionId: "test" },
+    fn,
+  ) as T;
 }
 
 describe("fund portfolio history (incremental ingest + latest-period display)", () => {
   it("adds new periods, preserves and never rewrites existing ones", () => {
     withFresh(() => {
-      getDb().insert(fundCatalog).values({ projId: "P1" }).run();
+      getMarketDb().insert(fundCatalog).values({ projId: "P1" }).run();
 
       // First crawl: period 202509 (one holding + a 903 grand-total row).
       upsertFundPortfolio("P1", [
@@ -73,7 +83,11 @@ describe("fund portfolio history (incremental ingest + latest-period display)", 
       ]);
 
       // Raw: both periods retained (4 rows), and 202509 keeps its ORIGINAL value.
-      const raw = getDb().select().from(fundPortfolio).where(eq(fundPortfolio.projId, "P1")).all();
+      const raw = getMarketDb()
+        .select()
+        .from(fundPortfolio)
+        .where(eq(fundPortfolio.projId, "P1"))
+        .all();
       expect(raw).toHaveLength(4);
       const old = raw.find((r) => r.period === "202509" && r.assetliabId === "108");
       expect(old?.percentNav).toBe(100); // not overwritten by the 999 re-fetch
@@ -90,7 +104,7 @@ describe("fund portfolio history (incremental ingest + latest-period display)", 
 
   it("an empty re-fetch never wipes stored asset-type history", () => {
     withFresh(() => {
-      getDb().insert(fundCatalog).values({ projId: "P2" }).run();
+      getMarketDb().insert(fundCatalog).values({ projId: "P2" }).run();
       upsertFundPortfolioAssetType("P2", [
         { projId: "P2", period: "202601", assetliabCode: "108", percentNav: 99 },
         { projId: "P2", period: "202601", assetliabCode: "903", percentNav: 100 },

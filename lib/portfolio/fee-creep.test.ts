@@ -5,6 +5,7 @@ import { join, resolve } from "node:path";
 import Database from "better-sqlite3";
 import { drizzle } from "drizzle-orm/better-sqlite3";
 import { describe, expect, it } from "vitest";
+import { freshMarketDb } from "@/tests/db-helpers";
 import { type DbContext, runWithDbContext } from "../db/context";
 import {
   type FundFeeInsert,
@@ -21,7 +22,7 @@ import { computeFeeCreep } from "./fee-creep";
 function freshDb() {
   const sqlite = new Database(":memory:");
   sqlite.pragma("foreign_keys = ON");
-  const migrationsDir = resolve("lib/db/migrations");
+  const migrationsDir = resolve("lib/db/migrations/app");
   const files = readdirSync(migrationsDir)
     .filter((f) => f.endsWith(".sql"))
     .sort();
@@ -30,14 +31,28 @@ function freshDb() {
     .join("\n")
     .replace(/--> statement-breakpoint/g, ";");
   sqlite.exec(sql);
-  return { sqlite, db: drizzle(sqlite, { schema }) };
+  const market = freshMarketDb();
+  return {
+    sqlite,
+    db: drizzle(sqlite, { schema }),
+    marketDb: market.db,
+    marketSqlite: market.sqlite,
+  };
 }
 
 let _ctx: DbContext;
 
 function withDb(fn: () => void) {
-  const { sqlite, db } = freshDb();
-  _ctx = { db, sqlite, isDemo: false, sessionId: "s", userId: null };
+  const { sqlite, db, marketDb, marketSqlite } = freshDb();
+  _ctx = {
+    appDb: db,
+    appSqlite: sqlite,
+    marketDb,
+    marketSqlite,
+    isDemo: false,
+    sessionId: "s",
+    userId: null,
+  };
   // Seed a default bucket so holdings FK is satisfied.
   db.insert(schema.buckets)
     .values({

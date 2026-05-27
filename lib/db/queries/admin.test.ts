@@ -3,6 +3,7 @@ import { join, resolve } from "node:path";
 import Database from "better-sqlite3";
 import { drizzle } from "drizzle-orm/better-sqlite3";
 import { beforeEach, describe, expect, it } from "vitest";
+import { freshMarketDb } from "@/tests/db-helpers";
 import { type DbContext, runWithDbContext } from "../context";
 import * as schema from "../schema";
 import { accountTier, usage, user } from "../schema";
@@ -11,7 +12,7 @@ import { listUsers, setUserTier } from "./admin";
 function freshDb() {
   const sqlite = new Database(":memory:");
   sqlite.pragma("foreign_keys = ON");
-  const migrationsDir = resolve("lib/db/migrations");
+  const migrationsDir = resolve("lib/db/migrations/app");
   const files = readdirSync(migrationsDir)
     .filter((f) => f.endsWith(".sql"))
     .sort();
@@ -21,7 +22,8 @@ function freshDb() {
     .replace(/--> statement-breakpoint/g, ";");
   sqlite.exec(sql);
   const db = drizzle(sqlite, { schema });
-  return { sqlite, db };
+  const market = freshMarketDb();
+  return { sqlite, db, marketDb: market.db, marketSqlite: market.sqlite };
 }
 
 type Db = ReturnType<typeof freshDb>["db"];
@@ -41,11 +43,21 @@ function seedUser(db: Db, id: string, createdAt: Date) {
 
 let sqlite: ReturnType<typeof freshDb>["sqlite"];
 let db: Db;
+let marketDb: ReturnType<typeof freshDb>["marketDb"];
+let marketSqlite: ReturnType<typeof freshDb>["marketSqlite"];
 let ctx: DbContext;
 
 beforeEach(() => {
-  ({ sqlite, db } = freshDb());
-  ctx = { db, sqlite, isDemo: false, sessionId: "owner", userId: null };
+  ({ sqlite, db, marketDb, marketSqlite } = freshDb());
+  ctx = {
+    appDb: db,
+    appSqlite: sqlite,
+    marketDb,
+    marketSqlite,
+    isDemo: false,
+    sessionId: "owner",
+    userId: null,
+  };
 });
 
 describe("listUsers", () => {

@@ -1,6 +1,6 @@
 import "server-only";
 import { and, desc, eq, gte, sql } from "drizzle-orm";
-import { getDb } from "@/lib/db/context";
+import { getMarketDb } from "@/lib/db/context";
 import { fundQuotes, navHistory } from "@/lib/db/schema";
 import type { SeriesInterval, SeriesRange } from "./providers/types";
 import { resolveProviderChain } from "./registry";
@@ -56,9 +56,12 @@ export async function getCachedSeries(
   range: SeriesRange = "6mo",
   interval: SeriesInterval = "1d",
 ): Promise<CachedSeries> {
-  // Resolve the per-request DB so demo sessions write to their isolated
-  // in-memory copy instead of the owner singleton.
-  const db = getDb();
+  // The market cache lives in market.db, which demo sessions share with real
+  // users — reads and write-through fills are identical. A symbol fetched once
+  // serves every later session (demo or not), so demo adds no redundant
+  // upstream calls. (Demo isolation is in app.db, which is per-session; market
+  // data is global reference data, safe and beneficial to share.)
+  const db = getMarketDb();
   const key = cacheKey(source, ticker);
   const cachedQuote = db.select().from(fundQuotes).where(eq(fundQuotes.ticker, key)).get();
 
@@ -105,7 +108,7 @@ export async function getCachedSeries(
 
 /** Read the cached series + quote for a key (used for fresh and stale serves). */
 function readCached(
-  db: ReturnType<typeof getDb>,
+  db: ReturnType<typeof getMarketDb>,
   key: string,
   ticker: string,
   range: SeriesRange,
@@ -131,7 +134,7 @@ function readCached(
 
 /** Upsert a freshly-fetched series into the cache and return it. */
 function persistFresh(
-  db: ReturnType<typeof getDb>,
+  db: ReturnType<typeof getMarketDb>,
   key: string,
   ticker: string,
   fresh: {
@@ -238,7 +241,7 @@ export async function refreshSymbols(
   refs: Array<{ source: string; ticker: string }>,
   range: SeriesRange = "6mo",
 ): Promise<{ source: string; ticker: string; ok: boolean; error?: string }[]> {
-  const db = getDb();
+  const db = getMarketDb();
   const results: { source: string; ticker: string; ok: boolean; error?: string }[] = [];
   for (const r of refs) {
     try {
@@ -264,7 +267,7 @@ export function listCachedSymbols(): {
   updatedAt: string;
   navCount: number;
 }[] {
-  const db = getDb();
+  const db = getMarketDb();
   const rows = db
     .select({
       key: fundQuotes.ticker,

@@ -11,6 +11,7 @@ import { join, resolve } from "node:path";
 import Database from "better-sqlite3";
 import { drizzle } from "drizzle-orm/better-sqlite3";
 import { describe, expect, it } from "vitest";
+import { freshMarketDb } from "@/tests/db-helpers";
 import { type DbContext, runWithDbContext } from "../db/context";
 import { createBucket } from "../db/queries/buckets";
 import { getHolding, listHoldings } from "../db/queries/holdings";
@@ -21,7 +22,7 @@ import { applyHoldingProposal } from "./apply-holding-proposal";
 function freshDb() {
   const sqlite = new Database(":memory:");
   sqlite.pragma("foreign_keys = ON");
-  const migrationsDir = resolve("lib/db/migrations");
+  const migrationsDir = resolve("lib/db/migrations/app");
   const files = readdirSync(migrationsDir)
     .filter((f) => f.endsWith(".sql"))
     .sort();
@@ -31,7 +32,8 @@ function freshDb() {
     .replace(/--> statement-breakpoint/g, ";");
   sqlite.exec(sql);
   const db = drizzle(sqlite, { schema });
-  return { sqlite, db };
+  const market = freshMarketDb();
+  return { sqlite, db, marketDb: market.db, marketSqlite: market.sqlite };
 }
 
 function seedUsers(db: ReturnType<typeof freshDb>["db"]) {
@@ -79,8 +81,16 @@ const HOLDING = {
 
 describe("applyHoldingProposal — per-user scoping", () => {
   it("writes the holding to the caller's own bucket (single-owner / null context)", () => {
-    const { sqlite, db } = freshDb();
-    const ctx: DbContext = { db, sqlite, isDemo: false, sessionId: "s", userId: null };
+    const { sqlite, db, marketDb, marketSqlite } = freshDb();
+    const ctx: DbContext = {
+      appDb: db,
+      appSqlite: sqlite,
+      marketDb,
+      marketSqlite,
+      isDemo: false,
+      sessionId: "s",
+      userId: null,
+    };
     runWithDbContext(ctx, () => {
       createBucket({ ...BUCKET, id: "b" });
       const result = applyHoldingProposal({ bucketId: "b", ...HOLDING });
@@ -93,10 +103,26 @@ describe("applyHoldingProposal — per-user scoping", () => {
   });
 
   it("REJECTS a bucketId owned by another user (bucket_not_found)", () => {
-    const { sqlite, db } = freshDb();
+    const { sqlite, db, marketDb, marketSqlite } = freshDb();
     seedUsers(db);
-    const asU1: DbContext = { db, sqlite, isDemo: false, sessionId: "s", userId: "u1" };
-    const asU2: DbContext = { db, sqlite, isDemo: false, sessionId: "s", userId: "u2" };
+    const asU1: DbContext = {
+      appDb: db,
+      appSqlite: sqlite,
+      marketDb,
+      marketSqlite,
+      isDemo: false,
+      sessionId: "s",
+      userId: "u1",
+    };
+    const asU2: DbContext = {
+      appDb: db,
+      appSqlite: sqlite,
+      marketDb,
+      marketSqlite,
+      isDemo: false,
+      sessionId: "s",
+      userId: "u2",
+    };
 
     // u1 owns bucket b1.
     runWithDbContext(asU1, () => createBucket({ ...BUCKET, id: "b1", name: "B1" }));
@@ -115,10 +141,26 @@ describe("applyHoldingProposal — per-user scoping", () => {
   });
 
   it("falls back to the CALLER's own first bucket, never another user's", () => {
-    const { sqlite, db } = freshDb();
+    const { sqlite, db, marketDb, marketSqlite } = freshDb();
     seedUsers(db);
-    const asU1: DbContext = { db, sqlite, isDemo: false, sessionId: "s", userId: "u1" };
-    const asU2: DbContext = { db, sqlite, isDemo: false, sessionId: "s", userId: "u2" };
+    const asU1: DbContext = {
+      appDb: db,
+      appSqlite: sqlite,
+      marketDb,
+      marketSqlite,
+      isDemo: false,
+      sessionId: "s",
+      userId: "u1",
+    };
+    const asU2: DbContext = {
+      appDb: db,
+      appSqlite: sqlite,
+      marketDb,
+      marketSqlite,
+      isDemo: false,
+      sessionId: "s",
+      userId: "u2",
+    };
 
     runWithDbContext(asU1, () => createBucket({ ...BUCKET, id: "b1", name: "B1" }));
     runWithDbContext(asU2, () => createBucket({ ...BUCKET, id: "b2", name: "B2" }));
@@ -138,9 +180,17 @@ describe("applyHoldingProposal — per-user scoping", () => {
   });
 
   it("fails cleanly with no_bucket when the caller has no buckets", () => {
-    const { sqlite, db } = freshDb();
+    const { sqlite, db, marketDb, marketSqlite } = freshDb();
     seedUsers(db);
-    const asU1: DbContext = { db, sqlite, isDemo: false, sessionId: "s", userId: "u1" };
+    const asU1: DbContext = {
+      appDb: db,
+      appSqlite: sqlite,
+      marketDb,
+      marketSqlite,
+      isDemo: false,
+      sessionId: "s",
+      userId: "u1",
+    };
     runWithDbContext(asU1, () => {
       const result = applyHoldingProposal({ bucketId: null, ...HOLDING });
       expect(result.ok).toBe(false);
@@ -149,8 +199,16 @@ describe("applyHoldingProposal — per-user scoping", () => {
   });
 
   it("rejects invalid payloads (no ticker / non-positive units)", () => {
-    const { sqlite, db } = freshDb();
-    const ctx: DbContext = { db, sqlite, isDemo: false, sessionId: "s", userId: null };
+    const { sqlite, db, marketDb, marketSqlite } = freshDb();
+    const ctx: DbContext = {
+      appDb: db,
+      appSqlite: sqlite,
+      marketDb,
+      marketSqlite,
+      isDemo: false,
+      sessionId: "s",
+      userId: null,
+    };
     runWithDbContext(ctx, () => {
       createBucket({ ...BUCKET, id: "b" });
       expect(

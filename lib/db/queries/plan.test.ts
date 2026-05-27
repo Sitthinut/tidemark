@@ -6,6 +6,7 @@ import { join, resolve } from "node:path";
 import Database from "better-sqlite3";
 import { drizzle } from "drizzle-orm/better-sqlite3";
 import { describe, expect, it } from "vitest";
+import { freshMarketDb } from "@/tests/db-helpers";
 import { type DbContext, runWithDbContext } from "../context";
 import * as schema from "../schema";
 import { user } from "../schema";
@@ -14,7 +15,7 @@ import { getPlan, upsertPlan } from "./plan";
 function freshDb() {
   const sqlite = new Database(":memory:");
   sqlite.pragma("foreign_keys = ON");
-  const migrationsDir = resolve("lib/db/migrations");
+  const migrationsDir = resolve("lib/db/migrations/app");
   const files = readdirSync(migrationsDir)
     .filter((f) => f.endsWith(".sql"))
     .sort();
@@ -24,7 +25,8 @@ function freshDb() {
     .replace(/--> statement-breakpoint/g, ";");
   sqlite.exec(sql);
   const db = drizzle(sqlite, { schema });
-  return { sqlite, db };
+  const market = freshMarketDb();
+  return { sqlite, db, marketDb: market.db, marketSqlite: market.sqlite };
 }
 
 function seedUsers(db: ReturnType<typeof freshDb>["db"]) {
@@ -53,8 +55,16 @@ function seedUsers(db: ReturnType<typeof freshDb>["db"]) {
 
 describe("per-user plans", () => {
   it("single-owner (null context): one NULL-owned plan, upsert updates in place", () => {
-    const { sqlite, db } = freshDb();
-    const ctx: DbContext = { db, sqlite, isDemo: false, sessionId: "owner", userId: null };
+    const { sqlite, db, marketDb, marketSqlite } = freshDb();
+    const ctx: DbContext = {
+      appDb: db,
+      appSqlite: sqlite,
+      marketDb,
+      marketSqlite,
+      isDemo: false,
+      sessionId: "owner",
+      userId: null,
+    };
     runWithDbContext(ctx, () => {
       expect(getPlan()).toBeUndefined();
       const created = upsertPlan({ markdown: "v1" });
@@ -72,10 +82,26 @@ describe("per-user plans", () => {
   });
 
   it("two users have independent plans; one cannot overwrite the other", () => {
-    const { sqlite, db } = freshDb();
+    const { sqlite, db, marketDb, marketSqlite } = freshDb();
     seedUsers(db);
-    const asU1: DbContext = { db, sqlite, isDemo: false, sessionId: "s", userId: "u1" };
-    const asU2: DbContext = { db, sqlite, isDemo: false, sessionId: "s", userId: "u2" };
+    const asU1: DbContext = {
+      appDb: db,
+      appSqlite: sqlite,
+      marketDb,
+      marketSqlite,
+      isDemo: false,
+      sessionId: "s",
+      userId: "u1",
+    };
+    const asU2: DbContext = {
+      appDb: db,
+      appSqlite: sqlite,
+      marketDb,
+      marketSqlite,
+      isDemo: false,
+      sessionId: "s",
+      userId: "u2",
+    };
 
     runWithDbContext(asU1, () => {
       expect(upsertPlan({ markdown: "u1 plan" }).userId).toBe("u1");
@@ -97,10 +123,26 @@ describe("per-user plans", () => {
   });
 
   it("a logged-in user does not see the NULL-owned (single-owner) plan", () => {
-    const { sqlite, db } = freshDb();
+    const { sqlite, db, marketDb, marketSqlite } = freshDb();
     seedUsers(db);
-    const asNull: DbContext = { db, sqlite, isDemo: false, sessionId: "s", userId: null };
-    const asU1: DbContext = { db, sqlite, isDemo: false, sessionId: "s", userId: "u1" };
+    const asNull: DbContext = {
+      appDb: db,
+      appSqlite: sqlite,
+      marketDb,
+      marketSqlite,
+      isDemo: false,
+      sessionId: "s",
+      userId: null,
+    };
+    const asU1: DbContext = {
+      appDb: db,
+      appSqlite: sqlite,
+      marketDb,
+      marketSqlite,
+      isDemo: false,
+      sessionId: "s",
+      userId: "u1",
+    };
 
     runWithDbContext(asNull, () => upsertPlan({ markdown: "legacy" }));
     runWithDbContext(asU1, () => {

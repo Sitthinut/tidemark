@@ -11,6 +11,7 @@ import { join, resolve } from "node:path";
 import Database from "better-sqlite3";
 import { drizzle } from "drizzle-orm/better-sqlite3";
 import { describe, expect, it } from "vitest";
+import { freshMarketDb } from "@/tests/db-helpers";
 import { type DbContext, runWithDbContext } from "../context";
 import * as schema from "../schema";
 import { user } from "../schema";
@@ -20,7 +21,7 @@ import { createModelPortfolio, listModelPortfolios } from "./models";
 function freshDb() {
   const sqlite = new Database(":memory:");
   sqlite.pragma("foreign_keys = ON");
-  const migrationsDir = resolve("lib/db/migrations");
+  const migrationsDir = resolve("lib/db/migrations/app");
   const files = readdirSync(migrationsDir)
     .filter((f) => f.endsWith(".sql"))
     .sort();
@@ -30,7 +31,8 @@ function freshDb() {
     .replace(/--> statement-breakpoint/g, ";");
   sqlite.exec(sql);
   const db = drizzle(sqlite, { schema });
-  return { sqlite, db };
+  const market = freshMarketDb();
+  return { sqlite, db, marketDb: market.db, marketSqlite: market.sqlite };
 }
 
 function seedUsers(db: ReturnType<typeof freshDb>["db"]) {
@@ -72,8 +74,16 @@ const BUCKET = {
 
 describe("per-user row scoping (fail-closed)", () => {
   it("null context behaves like single-owner: NULL-owned rows visible", () => {
-    const { sqlite, db } = freshDb();
-    const ctx: DbContext = { db, sqlite, isDemo: false, sessionId: "owner", userId: null };
+    const { sqlite, db, marketDb, marketSqlite } = freshDb();
+    const ctx: DbContext = {
+      appDb: db,
+      appSqlite: sqlite,
+      marketDb,
+      marketSqlite,
+      isDemo: false,
+      sessionId: "owner",
+      userId: null,
+    };
     runWithDbContext(ctx, () => {
       const created = createBucket(BUCKET);
       expect(created.userId).toBeNull();
@@ -82,12 +92,36 @@ describe("per-user row scoping (fail-closed)", () => {
   });
 
   it("a logged-in user sees ONLY their own rows — not shared NULL rows, not others'", () => {
-    const { sqlite, db } = freshDb();
+    const { sqlite, db, marketDb, marketSqlite } = freshDb();
     seedUsers(db);
 
-    const asNull: DbContext = { db, sqlite, isDemo: false, sessionId: "s", userId: null };
-    const asU1: DbContext = { db, sqlite, isDemo: false, sessionId: "s", userId: "u1" };
-    const asU2: DbContext = { db, sqlite, isDemo: false, sessionId: "s", userId: "u2" };
+    const asNull: DbContext = {
+      appDb: db,
+      appSqlite: sqlite,
+      marketDb,
+      marketSqlite,
+      isDemo: false,
+      sessionId: "s",
+      userId: null,
+    };
+    const asU1: DbContext = {
+      appDb: db,
+      appSqlite: sqlite,
+      marketDb,
+      marketSqlite,
+      isDemo: false,
+      sessionId: "s",
+      userId: "u1",
+    };
+    const asU2: DbContext = {
+      appDb: db,
+      appSqlite: sqlite,
+      marketDb,
+      marketSqlite,
+      isDemo: false,
+      sessionId: "s",
+      userId: "u2",
+    };
 
     // A NULL-owned (pre-backfill) row + one row per user.
     runWithDbContext(asNull, () => createBucket({ ...BUCKET, id: "shared", name: "Shared" }));
@@ -105,10 +139,26 @@ describe("per-user row scoping (fail-closed)", () => {
   });
 
   it("a second user cannot see the first user's rows", () => {
-    const { sqlite, db } = freshDb();
+    const { sqlite, db, marketDb, marketSqlite } = freshDb();
     seedUsers(db);
-    const asU1: DbContext = { db, sqlite, isDemo: false, sessionId: "s", userId: "u1" };
-    const asU2: DbContext = { db, sqlite, isDemo: false, sessionId: "s", userId: "u2" };
+    const asU1: DbContext = {
+      appDb: db,
+      appSqlite: sqlite,
+      marketDb,
+      marketSqlite,
+      isDemo: false,
+      sessionId: "s",
+      userId: "u1",
+    };
+    const asU2: DbContext = {
+      appDb: db,
+      appSqlite: sqlite,
+      marketDb,
+      marketSqlite,
+      isDemo: false,
+      sessionId: "s",
+      userId: "u2",
+    };
 
     runWithDbContext(asU1, () => createBucket({ ...BUCKET, id: "b1", name: "B1" }));
     runWithDbContext(asU2, () => createBucket({ ...BUCKET, id: "b2", name: "B2" }));
@@ -125,12 +175,36 @@ describe("per-user row scoping (fail-closed)", () => {
   });
 
   it("built-in (shared, NULL-owned) model portfolios stay visible to a logged-in user", () => {
-    const { sqlite, db } = freshDb();
+    const { sqlite, db, marketDb, marketSqlite } = freshDb();
     seedUsers(db);
     const now = new Date().toISOString();
-    const asNull: DbContext = { db, sqlite, isDemo: false, sessionId: "s", userId: null };
-    const asU1: DbContext = { db, sqlite, isDemo: false, sessionId: "s", userId: "u1" };
-    const asU2: DbContext = { db, sqlite, isDemo: false, sessionId: "s", userId: "u2" };
+    const asNull: DbContext = {
+      appDb: db,
+      appSqlite: sqlite,
+      marketDb,
+      marketSqlite,
+      isDemo: false,
+      sessionId: "s",
+      userId: null,
+    };
+    const asU1: DbContext = {
+      appDb: db,
+      appSqlite: sqlite,
+      marketDb,
+      marketSqlite,
+      isDemo: false,
+      sessionId: "s",
+      userId: "u1",
+    };
+    const asU2: DbContext = {
+      appDb: db,
+      appSqlite: sqlite,
+      marketDb,
+      marketSqlite,
+      isDemo: false,
+      sessionId: "s",
+      userId: "u2",
+    };
 
     const base = { allocation: [], createdAt: now };
     // Built-in: null-owned + built_in = true (the genuinely-shared library).

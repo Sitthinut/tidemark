@@ -3,6 +3,7 @@ import { join, resolve } from "node:path";
 import Database from "better-sqlite3";
 import { drizzle } from "drizzle-orm/better-sqlite3";
 import { describe, expect, it } from "vitest";
+import { freshMarketDb } from "@/tests/db-helpers";
 import { runWithDbContext } from "../context";
 import * as schema from "../schema";
 import { modelPortfolios, user } from "../schema";
@@ -17,7 +18,7 @@ import {
 function freshDb() {
   const sqlite = new Database(":memory:");
   sqlite.pragma("foreign_keys = ON");
-  const migrationsDir = resolve("lib/db/migrations");
+  const migrationsDir = resolve("lib/db/migrations/app");
   const files = readdirSync(migrationsDir)
     .filter((f) => f.endsWith(".sql"))
     .sort();
@@ -40,13 +41,22 @@ function freshDb() {
       })
       .run();
   }
-  return { sqlite, db };
+  const market = freshMarketDb();
+  return { sqlite, db, marketDb: market.db, marketSqlite: market.sqlite };
 }
 
 /** Run `fn` with a fresh in-memory DB as the given user (null = single-owner). */
 function withUser<T>(userId: string | null, db: ReturnType<typeof freshDb>, fn: () => T): T {
   return runWithDbContext(
-    { db: db.db, sqlite: db.sqlite, isDemo: true, sessionId: "test", userId },
+    {
+      appDb: db.db,
+      appSqlite: db.sqlite,
+      marketDb: db.marketDb,
+      marketSqlite: db.marketSqlite,
+      isDemo: true,
+      sessionId: "test",
+      userId,
+    },
     fn,
   ) as T;
 }

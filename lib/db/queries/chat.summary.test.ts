@@ -3,6 +3,7 @@ import { join, resolve } from "node:path";
 import Database from "better-sqlite3";
 import { drizzle } from "drizzle-orm/better-sqlite3";
 import { describe, expect, it } from "vitest";
+import { freshMarketDb } from "@/tests/db-helpers";
 import { runWithDbContext } from "../context";
 import * as schema from "../schema";
 import {
@@ -17,7 +18,7 @@ import {
 function freshDb() {
   const sqlite = new Database(":memory:");
   sqlite.pragma("foreign_keys = ON");
-  const migrationsDir = resolve("lib/db/migrations");
+  const migrationsDir = resolve("lib/db/migrations/app");
   const files = readdirSync(migrationsDir)
     .filter((f) => f.endsWith(".sql"))
     .sort();
@@ -26,12 +27,21 @@ function freshDb() {
     .join("\n")
     .replace(/--> statement-breakpoint/g, ";");
   sqlite.exec(sql);
-  return { sqlite, db: drizzle(sqlite, { schema }) };
+  const market = freshMarketDb();
+  return {
+    sqlite,
+    db: drizzle(sqlite, { schema }),
+    marketDb: market.db,
+    marketSqlite: market.sqlite,
+  };
 }
 
 function withFresh<T>(fn: () => T | Promise<T>): Promise<T> {
-  const { sqlite, db } = freshDb();
-  return runWithDbContext({ db, sqlite, isDemo: true, sessionId: "test" }, fn) as Promise<T>;
+  const { sqlite, db, marketDb, marketSqlite } = freshDb();
+  return runWithDbContext(
+    { appDb: db, appSqlite: sqlite, marketDb, marketSqlite, isDemo: true, sessionId: "test" },
+    fn,
+  ) as Promise<T>;
 }
 
 describe("context-summary persistence (migration-free)", () => {
