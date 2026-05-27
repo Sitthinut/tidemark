@@ -5,7 +5,7 @@
 // Write side: upsert helpers called by the fund-catalog refresh job.
 // Read side: typed getters for API routes and the advisor tool.
 
-import { eq } from "drizzle-orm";
+import { and, eq, ne, sql } from "drizzle-orm";
 import { getDb } from "../context";
 import {
   fundAssetAllocation,
@@ -14,6 +14,11 @@ import {
   fundPortfolioAssetType,
   fundTopHoldings,
 } from "../schema";
+
+// SEC assetliab code for the "net asset value" / grand-total summary line
+// (มูลค่าทรัพย์สินสุทธิ in portfolio, รวม in asset-type). It is a 100% total,
+// not a holding — both /outstanding endpoints emit it, and no consumer wants it.
+const TOTAL_ASSETLIAB_CODE = "903";
 
 // ─── Inferred row types ───────────────────────────────────────────────────────
 
@@ -82,25 +87,35 @@ export function upsertFundTopHoldings(projId: string, rows: FundTopHoldingInsert
 }
 
 /**
- * Replace all portfolio rows for a fund. Since we store only the LATEST
- * quarter, we delete all existing rows for this fund first, then insert
- * the new batch. This ensures stale holdings from previous quarters are
- * pruned even when the period key is the same (e.g. API restatement).
+ * Incrementally store portfolio rows for a fund: insert only the periods not
+ * already present, preserving prior periods and NEVER deleting. The SEC
+ * /outstanding endpoints return years of history; past periods are immutable,
+ * so we accumulate them as a time series rather than rewriting nightly — and a
+ * flaky or empty (HTTP 204) response can't wipe what we already have. The read
+ * side (getFundPortfolio) surfaces only the latest period for display.
  */
 export function upsertFundPortfolio(projId: string, rows: FundPortfolioInsert[]): void {
   if (rows.length === 0) return;
   const db = getDb();
   db.transaction((tx) => {
-    tx.delete(fundPortfolio).where(eq(fundPortfolio.projId, projId)).run();
+    const existing = new Set(
+      tx
+        .select({ period: fundPortfolio.period })
+        .from(fundPortfolio)
+        .where(eq(fundPortfolio.projId, projId))
+        .all()
+        .map((r) => r.period),
+    );
     for (const row of rows) {
-      tx.insert(fundPortfolio).values(row).run();
+      if (!existing.has(row.period)) tx.insert(fundPortfolio).values(row).run();
     }
   });
 }
 
 /**
- * Replace all portfolio-asset-type rows for a fund. Same strategy as
- * upsertFundPortfolio — delete-then-insert for a clean latest snapshot.
+ * Incrementally store portfolio-asset-type rows — same additive strategy as
+ * upsertFundPortfolio: insert only new periods, never delete the monthly
+ * history (it backs asset-mix-over-time).
  */
 export function upsertFundPortfolioAssetType(
   projId: string,
@@ -109,9 +124,16 @@ export function upsertFundPortfolioAssetType(
   if (rows.length === 0) return;
   const db = getDb();
   db.transaction((tx) => {
-    tx.delete(fundPortfolioAssetType).where(eq(fundPortfolioAssetType.projId, projId)).run();
+    const existing = new Set(
+      tx
+        .select({ period: fundPortfolioAssetType.period })
+        .from(fundPortfolioAssetType)
+        .where(eq(fundPortfolioAssetType.projId, projId))
+        .all()
+        .map((r) => r.period),
+    );
     for (const row of rows) {
-      tx.insert(fundPortfolioAssetType).values(row).run();
+      if (!existing.has(row.period)) tx.insert(fundPortfolioAssetType).values(row).run();
     }
   });
 }
@@ -143,17 +165,49 @@ export function getFundTopHoldings(projId: string): FundTopHoldingRow[] {
     .all();
 }
 
-/** Full portfolio for one fund (latest quarter). */
+/**
+ * Full portfolio for one fund — LATEST period only.
+ * The SEC /v2/fund/outstanding/portfolio endpoint returns every reported
+ * quarter (years of history), not just the most recent one, so we filter to
+ * the max period here — otherwise the UI stacks multiple quarters that each
+ * sum to 100%. Defensive against the ingest storing more than one period.
+ */
 export function getFundPortfolio(projId: string): FundPortfolioRow[] {
-  return getDb().select().from(fundPortfolio).where(eq(fundPortfolio.projId, projId)).all();
+  return getDb()
+    .select()
+    .from(fundPortfolio)
+    .where(
+      and(
+        eq(fundPortfolio.projId, projId),
+        ne(fundPortfolio.assetliabId, TOTAL_ASSETLIAB_CODE),
+        eq(
+          fundPortfolio.period,
+          sql`(select max(${fundPortfolio.period}) from ${fundPortfolio} where ${fundPortfolio.projId} = ${projId})`,
+        ),
+      ),
+    )
+    .all();
 }
 
-/** Portfolio by asset type for one fund (latest month). */
+/**
+ * Portfolio by asset type for one fund — LATEST month only.
+ * Same as getFundPortfolio: the endpoint returns every reported month, so we
+ * filter to the max period to avoid stacking dozens of 100% breakdowns.
+ */
 export function getFundPortfolioAssetType(projId: string): FundPortfolioAssetTypeRow[] {
   return getDb()
     .select()
     .from(fundPortfolioAssetType)
-    .where(eq(fundPortfolioAssetType.projId, projId))
+    .where(
+      and(
+        eq(fundPortfolioAssetType.projId, projId),
+        ne(fundPortfolioAssetType.assetliabCode, TOTAL_ASSETLIAB_CODE),
+        eq(
+          fundPortfolioAssetType.period,
+          sql`(select max(${fundPortfolioAssetType.period}) from ${fundPortfolioAssetType} where ${fundPortfolioAssetType.projId} = ${projId})`,
+        ),
+      ),
+    )
     .all();
 }
 

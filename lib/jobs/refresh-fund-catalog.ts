@@ -313,6 +313,10 @@ export async function refreshFundCatalog(
             getPortfolioAssetType(projId),
           ]);
 
+          // Both /outstanding endpoints return EVERY reported period (years of
+          // history). We store it all incrementally (upsert* inserts only new
+          // periods, never deletes) so the accumulated series backs future
+          // time-series features; the read side shows only the latest period.
           if (portItems.length > 0) {
             const portRows: FundPortfolioInsert[] = portItems.map((item) => ({
               projId: item.proj_id,

@@ -305,6 +305,12 @@ Deliberate "laters," revisited on real need rather than on a schedule:
   limits, deduction interplay) so the advisor can reason about them. Strong
   Thai-specific differentiator; gated on a real user need and careful "not tax
   advice" framing.
+- **Asset-mix drift over time** *(Analyze)* — chart a fund's monthly asset-type
+  breakdown (equity / cash / derivatives) across years to show how its exposure
+  has shifted — a signal of strategy change or style drift. The data is already
+  accumulating: the crawl stores every monthly `fund_portfolio_asset_type`
+  period incrementally (the detail sheet shows only the latest). This item is
+  the time-series view on top of that history; gated on a real need.
 
 ## Why this build order
 

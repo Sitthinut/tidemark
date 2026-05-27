@@ -22,6 +22,7 @@ import type {
 } from "@/lib/db/queries/fund-enrichment";
 import type { FundWithTer } from "@/lib/db/queries/funds";
 import { useResource } from "@/lib/fetchers/swr";
+import { buildPortfolioDisplayRows } from "@/lib/portfolio/portfolio-display";
 
 // ─── API response type ────────────────────────────────────────────────────────
 
@@ -59,6 +60,14 @@ const PERIOD_ORDER: string[] = ["3M", "6M", "YTD", "1Y", "SI", "3Y", "5Y"];
 function periodSortKey(period: string): number {
   const idx = PERIOD_ORDER.indexOf(period.toUpperCase());
   return idx >= 0 ? idx : 99;
+}
+
+// Format a YYYYMM reporting period (stored as e.g. "202603" or "202603.0")
+// as "2026/03". Strips any non-digits first so the API's trailing ".0" is gone.
+function formatYearMonth(period: string | null | undefined): string | null {
+  if (!period) return null;
+  const digits = period.replace(/\D/g, "");
+  return digits.length >= 6 ? `${digits.slice(0, 4)}/${digits.slice(4, 6)}` : digits || null;
 }
 
 // ─── formatting helpers ───────────────────────────────────────────────────────
@@ -357,19 +366,23 @@ const PORTFOLIO_PREVIEW = 10;
 
 function PortfolioSection({ rows }: { rows: FundPortfolioRow[] }) {
   const [expanded, setExpanded] = useState(false);
+  const [openGroups, setOpenGroups] = useState<Set<string>>(() => new Set());
   if (rows.length === 0) return null;
 
-  const visible = expanded ? rows : rows.slice(0, PORTFOLIO_PREVIEW);
-  const hidden = rows.length - PORTFOLIO_PREVIEW;
+  // Collapse anonymous derivative rows (FX forwards) into net rows so the real
+  // holdings lead; the SEC feed lists each contract separately.
+  const display = buildPortfolioDisplayRows(rows);
+  const visible = expanded ? display : display.slice(0, PORTFOLIO_PREVIEW);
+  const hidden = display.length - PORTFOLIO_PREVIEW;
 
   // derive the period label from the first row
   const period = rows[0]?.period;
-  const periodLabel = period ? `${period.slice(0, 4)}/${period.slice(4)}` : null;
+  const periodLabel = formatYearMonth(period);
 
   return (
     <>
       <SectionHeader
-        title={`Portfolio${periodLabel ? ` (${periodLabel})` : ""} · ${rows.length} holdings`}
+        title={`Portfolio${periodLabel ? ` (${periodLabel})` : ""} · ${display.length} holdings`}
       />
       <div style={{ overflowX: "auto" }}>
         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11 }}>
@@ -422,67 +435,124 @@ function PortfolioSection({ rows }: { rows: FundPortfolioRow[] }) {
             </tr>
           </thead>
           <tbody>
-            {visible.map((row) => (
-              <tr key={`${row.period}-${row.assetliabId}`}>
-                <td
-                  style={{
-                    padding: "4px 4px",
-                    color: "var(--ink-soft)",
-                    fontSize: 11.5,
-                    borderBottom: "1px solid var(--line-soft)",
-                    maxWidth: 200,
-                    overflow: "hidden",
-                    textOverflow: "ellipsis",
-                    whiteSpace: "nowrap",
-                  }}
-                  title={[row.assetliabDesc, row.issuer].filter(Boolean).join(" · ") || undefined}
-                >
-                  <span style={{ display: "block", overflow: "hidden", textOverflow: "ellipsis" }}>
-                    {row.assetliabDesc ?? row.issuer ?? "—"}
-                  </span>
-                  {row.issuer && row.assetliabDesc && (
+            {visible.flatMap((row) => {
+              const isGroup = (row.members?.length ?? 0) > 0;
+              const isOpen = isGroup && openGroups.has(row.key);
+              const toggle = () =>
+                setOpenGroups((prev) => {
+                  const next = new Set(prev);
+                  if (next.has(row.key)) next.delete(row.key);
+                  else next.add(row.key);
+                  return next;
+                });
+              const main = (
+                <tr key={row.key}>
+                  <td
+                    style={{
+                      padding: "4px 4px",
+                      color: "var(--ink-soft)",
+                      fontSize: 11.5,
+                      borderBottom: "1px solid var(--line-soft)",
+                      maxWidth: 200,
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                      cursor: isGroup ? "pointer" : undefined,
+                    }}
+                    title={[row.label, row.issuer].filter(Boolean).join(" · ") || undefined}
+                    onClick={isGroup ? toggle : undefined}
+                  >
                     <span
-                      style={{
-                        fontSize: 10.5,
-                        color: "var(--muted)",
-                        fontFamily: "var(--font-mono)",
-                        display: "block",
-                        overflow: "hidden",
-                        textOverflow: "ellipsis",
-                      }}
+                      style={{ display: "block", overflow: "hidden", textOverflow: "ellipsis" }}
                     >
-                      {row.issuer}
+                      {isGroup && (
+                        <span style={{ color: "var(--muted)", marginRight: 4 }}>
+                          {isOpen ? "▾" : "▸"}
+                        </span>
+                      )}
+                      {row.label}
                     </span>
-                  )}
-                </td>
-                <td
-                  style={{
-                    padding: "4px 4px",
-                    fontFamily: "var(--font-mono)",
-                    fontSize: 10.5,
-                    color: "var(--muted)",
-                    borderBottom: "1px solid var(--line-soft)",
-                    whiteSpace: "nowrap",
-                  }}
+                    {row.issuer && (
+                      <span
+                        style={{
+                          fontSize: 10.5,
+                          color: "var(--muted)",
+                          fontFamily: "var(--font-mono)",
+                          display: "block",
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                        }}
+                      >
+                        {row.issuer}
+                      </span>
+                    )}
+                  </td>
+                  <td
+                    style={{
+                      padding: "4px 4px",
+                      fontFamily: "var(--font-mono)",
+                      fontSize: 10.5,
+                      color: "var(--muted)",
+                      borderBottom: "1px solid var(--line-soft)",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {row.isin ?? "—"}
+                  </td>
+                  <td
+                    style={{
+                      padding: "4px 4px",
+                      textAlign: "right",
+                      fontFamily: "var(--font-mono)",
+                      fontSize: 11.5,
+                      fontWeight: 500,
+                      color: "var(--ink)",
+                      borderBottom: "1px solid var(--line-soft)",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {fmtNavPct(row.percentNav)}
+                  </td>
+                </tr>
+              );
+              if (!isOpen || !row.members) return [main];
+              const memberRows = row.members.map((m) => (
+                <tr
+                  key={`${row.key}-${m.id}`}
+                  style={{ background: "var(--surface-2, transparent)" }}
                 >
-                  {row.isinCode ?? "—"}
-                </td>
-                <td
-                  style={{
-                    padding: "4px 4px",
-                    textAlign: "right",
-                    fontFamily: "var(--font-mono)",
-                    fontSize: 11.5,
-                    fontWeight: 500,
-                    color: "var(--ink)",
-                    borderBottom: "1px solid var(--line-soft)",
-                    whiteSpace: "nowrap",
-                  }}
-                >
-                  {fmtNavPct(row.percentNav)}
-                </td>
-              </tr>
-            ))}
+                  <td
+                    style={{
+                      padding: "3px 4px 3px 18px",
+                      color: "var(--muted)",
+                      fontSize: 10.5,
+                      borderBottom: "1px solid var(--line-soft)",
+                      maxWidth: 200,
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {m.issueCode ?? m.issuer ?? m.assetliabDesc ?? "—"}
+                  </td>
+                  <td style={{ borderBottom: "1px solid var(--line-soft)" }} />
+                  <td
+                    style={{
+                      padding: "3px 4px",
+                      textAlign: "right",
+                      fontFamily: "var(--font-mono)",
+                      fontSize: 10.5,
+                      color: "var(--muted)",
+                      borderBottom: "1px solid var(--line-soft)",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {fmtNavPct(m.percentNav)}
+                  </td>
+                </tr>
+              ));
+              return [main, ...memberRows];
+            })}
           </tbody>
         </table>
       </div>
@@ -503,7 +573,7 @@ function PortfolioSection({ rows }: { rows: FundPortfolioRow[] }) {
             letterSpacing: "0.02em",
           }}
         >
-          Show all {rows.length} holdings ↓
+          Show all {display.length} holdings ↓
         </button>
       )}
       {expanded && (
@@ -538,7 +608,7 @@ function PortfolioAssetTypeSection({ rows }: { rows: FundPortfolioAssetTypeRow[]
 
   // derive the period label from the first row
   const period = rows[0]?.period;
-  const periodLabel = period ? `${period.slice(0, 4)}/${period.slice(4)}` : null;
+  const periodLabel = formatYearMonth(period);
 
   return (
     <>
