@@ -203,30 +203,51 @@ function Hero({ onSignIn, onDemo, demoBusy }: HeroProps) {
           </ImageSlot>
           <div className="mt-hero-phone" aria-hidden="true">
             <div className="mt-hero-phone-screen">
-              <Image
-                src="/landing/advisor-mobile.png"
-                alt=""
-                width={390}
-                height={814}
-                priority
-                sizes="220px"
-              />
+              <PhonePortfolio />
             </div>
           </div>
           <div className="mt-hero-overlays" aria-hidden="true">
             <div className="mt-hero-overlay mt-overlay-tl">
-              <div className="mt-ov-label">Health score</div>
+              <div className="mt-ov-head">
+                <span className="mt-ov-label">Health score</span>
+                <span className="mt-ov-badge mt-ov-badge-up">▲ +6 / 30d</span>
+              </div>
               <div className="mt-ov-value">
                 78<span className="mt-ov-unit">/ 100</span>
               </div>
-              <div className="mt-ov-note">good · fee creep flagged · 1 holding</div>
+              <svg className="mt-ov-spark" viewBox="0 0 120 22" preserveAspectRatio="none">
+                <path
+                  d="M0,18 L20,17 L40,18 L60,13 L80,14 L100,8 L120,5"
+                  fill="none"
+                  stroke="var(--accent)"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                />
+              </svg>
+              <div className="mt-ov-note">Good · fee creep flagged</div>
             </div>
             <div className="mt-hero-overlay mt-overlay-br">
-              <div className="mt-ov-label">Blended fee</div>
+              <div className="mt-ov-head">
+                <span className="mt-ov-label">Blended fee</span>
+                <span className="mt-ov-badge mt-ov-badge-good">below avg</span>
+              </div>
               <div className="mt-ov-value">
                 0.74<span className="mt-ov-unit">% / yr</span>
               </div>
-              <div className="mt-ov-note">value-weighted across 6 funds</div>
+              <div className="mt-ov-compare">
+                <span className="mt-ov-cmp-row">
+                  <span className="mt-ov-cmp-track">
+                    <span style={{ width: "62%", background: "var(--accent)" }} />
+                  </span>
+                  <span className="mt-ov-cmp-val">You 0.74%</span>
+                </span>
+                <span className="mt-ov-cmp-row">
+                  <span className="mt-ov-cmp-track">
+                    <span style={{ width: "100%", background: "var(--muted-2)" }} />
+                  </span>
+                  <span className="mt-ov-cmp-val">Avg 0.91%</span>
+                </span>
+              </div>
             </div>
           </div>
         </div>
@@ -376,6 +397,119 @@ function ProposalMock() {
 }
 
 /* ============================================================
+ * Coded phone screens — realistic mobile mockups (not screenshots).
+ * Decorative; numbers mirror the demo portfolio.
+ * ============================================================ */
+function PhoneTabs({ active }: { active: "Portfolio" | "Chat" }) {
+  return (
+    <div className="mt-tabbar">
+      {(["Portfolio", "Markets", "Funds", "Chat"] as const).map((t) => (
+        <span className={`mt-tab${t === active ? " mt-tab-on" : ""}`} key={t}>
+          <span className="mt-tab-dot" />
+          {t}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function PhonePortfolio() {
+  return (
+    <div className="mt-screen" aria-hidden="true">
+      <div className="mt-screen-head">
+        <span className="mt-screen-title">Portfolio</span>
+        <span className="mt-screen-ava">DU</span>
+      </div>
+      <div className="mt-screen-body">
+        <div className="mt-sc-label">Combined balance · 3 portfolios</div>
+        <div className="mt-sc-balance">
+          ฿1,284,734<span className="mt-sc-balance-dec">.89</span>
+        </div>
+        <div className="mt-sc-delta">▲ ฿129,205 · +11.2% all-time</div>
+        <div className="mt-sc-card">
+          <div className="mt-sc-card-top">
+            <span className="mt-mock-label">Health</span>
+            <span className="mt-mock-pill">Good</span>
+          </div>
+          <div className="mt-sc-health">
+            78<span className="mt-sc-health-unit">/ 100</span>
+          </div>
+          <svg className="mt-sc-spark" viewBox="0 0 180 36" preserveAspectRatio="none" role="img">
+            <path
+              d="M0,30 L20,28 L40,30 L60,22 L80,24 L100,16 L120,18 L140,9 L160,11 L180,4"
+              fill="none"
+              stroke="var(--accent)"
+              strokeWidth="2"
+              strokeLinecap="round"
+            />
+          </svg>
+        </div>
+        <div className="mt-sc-alloc">
+          <span style={{ flex: "80.7", background: "var(--accent)" }} />
+          <span style={{ flex: "13.9", background: "#d9920a" }} />
+          <span style={{ flex: "3.4", background: "var(--accent-2)" }} />
+          <span style={{ flex: "2.0", background: "var(--muted-2)" }} />
+        </div>
+        <div className="mt-sc-legend">
+          <span>
+            <i style={{ background: "var(--accent)" }} />
+            Stocks 80.7%
+          </span>
+          <span>
+            <i style={{ background: "#d9920a" }} />
+            Bonds 13.9%
+          </span>
+        </div>
+      </div>
+      <PhoneTabs active="Portfolio" />
+    </div>
+  );
+}
+
+function PhoneAdvisor() {
+  return (
+    <div className="mt-screen" aria-hidden="true">
+      <div className="mt-screen-head">
+        <span className="mt-screen-title">Advisor</span>
+        <span className="mt-screen-new">+ New chat</span>
+      </div>
+      <div className="mt-screen-body">
+        <div className="mt-chat-bubble mt-chat-bubble-user">Am I drifting from my plan?</div>
+        <div className="mt-chat-meta">
+          <span className="mt-chat-dot" /> Advisor · 06:34 AM
+        </div>
+        <div className="mt-chat-bubble">
+          Your US sleeve is running hot — 6pp over target. Want me to draft a trim back to plan?
+        </div>
+        <div className="mt-proposal-card mt-proposal-card-sm">
+          <div className="mt-proposal-head">
+            <span className="mt-proposal-kind">Plan edit</span>
+            Trim overweight US
+          </div>
+          <div className="mt-proposal-diff">
+            <span className="mt-diff-fund">K-USA-A(A)</span>
+            <span className="mt-diff-amt">−฿57,400</span>
+          </div>
+          <div className="mt-proposal-actions">
+            <span className="mt-mini-btn mt-mini-accept">Accept</span>
+            <span className="mt-mini-btn mt-mini-reject">Reject</span>
+          </div>
+        </div>
+      </div>
+      <div className="mt-chat-chips">
+        <span className="mt-chat-chip">How am I vs target?</span>
+        <span className="mt-chat-chip">Explain my fees</span>
+      </div>
+      <div className="mt-chat-input">
+        Ask about your portfolio…
+        <span className="mt-chat-send">➤</span>
+      </div>
+      <PhoneTabs active="Chat" />
+    </div>
+  );
+}
+
+/* ============================================================
  * What it does — three feature cards (live only)
  * ============================================================ */
 function WhatItDoes() {
@@ -447,20 +581,11 @@ function AdvisorSpotlight() {
       <div className="mt-container">
         <div className="mt-bigrow">
           <div className="mt-phone-wrap">
-            <ImageSlot
-              kind="real"
-              className="mt-shot mt-shot-phone"
-              prompt="Real app screenshot — Advisor chat on mobile (portrait). Shows 2–3 messages and one accept-only proposal card with a small plan diff (e.g. 'Trim K-USA-A −฿57,400'). Light theme, Geist font. Captured from the actual Macrotide app on a phone viewport (~390×844)."
-              spec="aspect 9 / 16 · 1080×1920 · PNG, transparent or warm-cream bg"
-            >
-              <Image
-                src="/landing/advisor-mobile.png"
-                alt="Macrotide advisor chat on mobile"
-                width={390}
-                height={814}
-                sizes="min(280px, 88vw)"
-              />
-            </ImageSlot>
+            <div className="mt-phone-device" aria-hidden="true">
+              <div className="mt-phone-device-screen">
+                <PhoneAdvisor />
+              </div>
+            </div>
           </div>
           <div className="mt-bigrow-copy">
             <div className="mt-kicker">The Advisor · reads on phone, laptop, anywhere</div>
