@@ -2,15 +2,29 @@ import "server-only";
 import { AsyncLocalStorage } from "node:async_hooks";
 import type Database from "better-sqlite3";
 import type { drizzle } from "drizzle-orm/better-sqlite3";
-import { ownerDb, ownerSqlite } from "./client";
-import type * as schema from "./schema";
+import { appDb, appSqlite, marketDb, marketSqlite } from "./client";
+import type * as appSchema from "./schema/app";
+import type * as marketSchema from "./schema/market";
 
-export type Db = ReturnType<typeof drizzle<typeof schema>>;
+export type AppDb = ReturnType<typeof drizzle<typeof appSchema>>;
+export type MarketDb = ReturnType<typeof drizzle<typeof marketSchema>>;
+
+// Back-compat alias: most query modules typed their handle as `Db`. App-owned
+// modules are the overwhelming majority, so `Db` keeps meaning the app handle.
+export type Db = AppDb;
 
 export type DbContext = {
-  db: Db;
-  sqlite: Database.Database;
-  /** Demo sessions get an isolated in-memory DB; mutations never touch the owner's data. */
+  /** app.db handle — system of record (accounts, buckets, holdings, …). */
+  appDb: AppDb;
+  appSqlite: Database.Database;
+  /**
+   * market.db handle — regenerable market data (fund catalog/fees, NAV/quote
+   * cache, feeder look-through). For demo sessions this is the SHARED real
+   * market.db opened read-only (mutations are suppressed in cache.ts).
+   */
+  marketDb: MarketDb;
+  marketSqlite: Database.Database;
+  /** Demo sessions get an isolated in-memory app.db; mutations never touch the owner's data. */
   isDemo: boolean;
   /** Stable identifier for the active session (owner uses "owner"). */
   sessionId: string;
@@ -30,17 +44,40 @@ export function runWithDbContext<T>(ctx: DbContext, fn: () => T | Promise<T>): T
 }
 
 /**
- * Resolve the current request's DB. Outside a route handler (background jobs,
- * scripts, dev-server boot) we fall back to the owner singleton.
+ * Resolve the current request's DB context. Outside a route handler (background
+ * jobs, scripts, dev-server boot) we fall back to the owner singletons (the real
+ * app.db + market.db).
  */
 export function getDbContext(): DbContext {
   const ctx = storage.getStore();
   if (ctx) return ctx;
-  return { db: ownerDb, sqlite: ownerSqlite, isDemo: false, sessionId: "owner" };
+  return {
+    appDb,
+    appSqlite,
+    marketDb,
+    marketSqlite,
+    isDemo: false,
+    sessionId: "owner",
+  };
 }
 
-export function getDb(): Db {
-  return getDbContext().db;
+/** The current request's app.db (system of record). */
+export function getAppDb(): AppDb {
+  return getDbContext().appDb;
+}
+
+/** The current request's market.db (regenerable market data). */
+export function getMarketDb(): MarketDb {
+  return getDbContext().marketDb;
+}
+
+/**
+ * Legacy alias for {@link getAppDb}. The vast majority of `getDb()` callers are
+ * app-owned query modules; market/fund modules have been routed to
+ * {@link getMarketDb}. Prefer the explicit accessors in new code.
+ */
+export function getDb(): AppDb {
+  return getAppDb();
 }
 
 export function isDemoRequest(): boolean {

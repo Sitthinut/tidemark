@@ -1,5 +1,5 @@
 import { and, gte, inArray } from "drizzle-orm";
-import { getDb } from "../context";
+import { getAppDb, getMarketDb } from "../context";
 import { holdings, navHistory } from "../schema";
 
 export type SeriesRange = "1mo" | "3mo" | "6mo" | "1y" | "5y" | "max";
@@ -47,16 +47,20 @@ function rangeStartDate(range: SeriesRange): string {
  * Aggregate series is `sum(perBucket[i])` on each shared date.
  */
 export function getPortfolioSeries(range: SeriesRange = "6mo"): PortfolioSeriesResult {
-  const db = getDb();
+  // Cross-domain read: holdings live in app.db, their NAV series in market.db.
+  // There is no SQL join — we read each side and join app-side on the soft
+  // `${quoteSource}:${ticker}` cache key.
+  const appDb = getAppDb();
+  const marketDb = getMarketDb();
   const since = rangeStartDate(range);
 
-  const allHoldings = db.select().from(holdings).all();
+  const allHoldings = appDb.select().from(holdings).all();
   if (allHoldings.length === 0) {
     return { aggregate: [], perBucket: {}, asOf: null };
   }
 
   const cacheKeys = Array.from(new Set(allHoldings.map((h) => `${h.quoteSource}:${h.ticker}`)));
-  const navRows = db
+  const navRows = marketDb
     .select()
     .from(navHistory)
     .where(and(inArray(navHistory.ticker, cacheKeys), gte(navHistory.date, since)))

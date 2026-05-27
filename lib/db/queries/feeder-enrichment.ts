@@ -6,7 +6,7 @@
 // Read side: typed getters for the API route and FundDetailSheet.
 
 import { eq } from "drizzle-orm";
-import { getDb } from "../context";
+import { getMarketDb } from "../context";
 import { feederLookThroughHoldings, feederMasterMap } from "../schema";
 
 // ─── Inferred row types ───────────────────────────────────────────────────────
@@ -24,7 +24,7 @@ export type FeederLookThroughHoldingInsert = typeof feederLookThroughHoldings.$i
  * entry (a feeder fund maps to exactly one master fund at a time).
  */
 export function upsertFeederMasterMap(row: FeederMasterMapInsert): void {
-  const db = getDb();
+  const db = getMarketDb();
   db.insert(feederMasterMap)
     .values(row)
     .onConflictDoUpdate({
@@ -48,7 +48,7 @@ export function upsertFeederLookThroughHoldings(
   rows: FeederLookThroughHoldingInsert[],
 ): void {
   if (rows.length === 0) return;
-  const db = getDb();
+  const db = getMarketDb();
   db.transaction((tx) => {
     tx.delete(feederLookThroughHoldings).where(eq(feederLookThroughHoldings.projId, projId)).run();
     for (const row of rows) {
@@ -62,7 +62,8 @@ export function upsertFeederLookThroughHoldings(
 /** Feeder → master mapping for one fund. Returns null if not mapped. */
 export function getFeederMasterMap(projId: string): FeederMasterMapRow | null {
   return (
-    getDb().select().from(feederMasterMap).where(eq(feederMasterMap.projId, projId)).get() ?? null
+    getMarketDb().select().from(feederMasterMap).where(eq(feederMasterMap.projId, projId)).get() ??
+    null
   );
 }
 
@@ -71,7 +72,7 @@ export function getFeederMasterMap(projId: string): FeederMasterMapRow | null {
  * rank ascending (largest holding first = rank 1).
  */
 export function getFeederLookThroughHoldings(projId: string): FeederLookThroughHoldingRow[] {
-  return getDb()
+  return getMarketDb()
     .select()
     .from(feederLookThroughHoldings)
     .where(eq(feederLookThroughHoldings.projId, projId))

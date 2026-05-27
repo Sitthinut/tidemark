@@ -1,7 +1,7 @@
 import "server-only";
 import { cookies } from "next/headers";
 import { requireUser } from "@/lib/auth/require-user";
-import { ownerDb, ownerSqlite } from "@/lib/db/client";
+import { appDb, appSqlite, marketDb, marketSqlite } from "@/lib/db/client";
 import { type DbContext, runWithDbContext } from "@/lib/db/context";
 import { getOrCreateDemoSession } from "@/lib/db/demo";
 
@@ -9,10 +9,15 @@ export const DEMO_COOKIE = "macrotide_demo";
 
 /**
  * Resolve a per-request DB context. An **authenticated session always wins**:
- * if a user is logged in we route to the owner DB scoped to their id and ignore
- * any lingering `macrotide_demo` cookie. Only when there is NO authenticated
- * user AND a demo cookie is present do we route reads/writes to that session's
- * isolated in-memory SQLite. Otherwise the owner singleton is used.
+ * if a user is logged in we route to the owner app.db scoped to their id and
+ * ignore any lingering `macrotide_demo` cookie. Only when there is NO
+ * authenticated user AND a demo cookie is present do we route the app handle to
+ * that session's isolated in-memory SQLite. Otherwise the owner singletons.
+ *
+ * The market handle (fund catalog + NAV/quote cache) is the SHARED real
+ * market.db in every case — including demo, which reads it read-only and never
+ * persists (see lib/market/cache.ts). So a demo session sees REAL market data
+ * while its own buckets/holdings/plans stay isolated in its in-memory app.db.
  *
  * For owner requests we carry the authenticated user id on the context so
  * per-user query scoping (lib/db/queries/scope.ts) applies. `userId` is null in
@@ -20,7 +25,7 @@ export const DEMO_COOKIE = "macrotide_demo";
  * legacy `user_id IS NULL` set — behavior is identical to single-owner mode.
  * Demo sessions are already isolated, so they stay `userId: null`.
  *
- * Wrap every route handler that touches `getDb()` with this so demo sessions
+ * Wrap every route handler that touches the DB with this so demo sessions
  * remain isolated.
  */
 export async function withDb<T>(fn: (ctx: DbContext) => T | Promise<T>): Promise<T> {
@@ -29,7 +34,15 @@ export async function withDb<T>(fn: (ctx: DbContext) => T | Promise<T>): Promise
   const userId = await requireUser();
   let ctx: DbContext;
   if (userId) {
-    ctx = { db: ownerDb, sqlite: ownerSqlite, isDemo: false, sessionId: "owner", userId };
+    ctx = {
+      appDb,
+      appSqlite,
+      marketDb,
+      marketSqlite,
+      isDemo: false,
+      sessionId: "owner",
+      userId,
+    };
   } else {
     // No authenticated user. Fall back to a demo session if the cookie is set,
     // otherwise the single-owner / AUTH_DISABLED owner context (userId: null).
@@ -38,14 +51,26 @@ export async function withDb<T>(fn: (ctx: DbContext) => T | Promise<T>): Promise
     if (demoId) {
       const session = getOrCreateDemoSession(demoId);
       ctx = {
-        db: session.db,
-        sqlite: session.sqlite,
+        // Demo app.db is the session's isolated in-memory copy …
+        appDb: session.db,
+        appSqlite: session.sqlite,
+        // … but market data is the shared real market.db, read-only.
+        marketDb,
+        marketSqlite,
         isDemo: true,
         sessionId: demoId,
         userId: null,
       };
     } else {
-      ctx = { db: ownerDb, sqlite: ownerSqlite, isDemo: false, sessionId: "owner", userId: null };
+      ctx = {
+        appDb,
+        appSqlite,
+        marketDb,
+        marketSqlite,
+        isDemo: false,
+        sessionId: "owner",
+        userId: null,
+      };
     }
   }
 

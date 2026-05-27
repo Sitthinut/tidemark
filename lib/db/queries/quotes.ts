@@ -1,17 +1,17 @@
 import { inArray } from "drizzle-orm";
-import { getDb } from "../context";
+import { getMarketDb } from "../context";
 import { fundQuotes } from "../schema";
 
 export type FundQuote = typeof fundQuotes.$inferSelect;
 export type FundQuoteInsert = typeof fundQuotes.$inferInsert;
 
 export function listFundQuotes(tickers?: string[]): FundQuote[] {
-  const q = getDb().select().from(fundQuotes);
+  const q = getMarketDb().select().from(fundQuotes);
   return (tickers && tickers.length ? q.where(inArray(fundQuotes.ticker, tickers)) : q).all();
 }
 
 export function upsertFundQuote(input: FundQuoteInsert): FundQuote {
-  return getDb()
+  return getMarketDb()
     .insert(fundQuotes)
     .values(input)
     .onConflictDoUpdate({

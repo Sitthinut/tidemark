@@ -86,7 +86,7 @@ export function searchThreads(query: string, opts: SearchThreadsOptions = {}): T
   const trimmed = query.trim();
   if (match === null || trimmed === "") return [];
 
-  const sqlite = getDbContext().sqlite;
+  const sqlite = getDbContext().appSqlite;
   const deletedClause = opts.includeDeleted ? "" : "AND t.deleted_at IS NULL";
   const owner = ownerScope();
 

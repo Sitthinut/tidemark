@@ -8,7 +8,7 @@
 // or admin-only auth; for single-user / localhost it's intentionally open.
 
 import { NextResponse } from "next/server";
-import { db } from "@/lib/db/client";
+import { appDb } from "@/lib/db/client";
 import { holdings } from "@/lib/db/schema";
 import { refreshSymbols } from "@/lib/market/cache";
 import { INDICATOR_CATALOG } from "@/lib/market/indicators";
@@ -19,7 +19,7 @@ export async function POST() {
   const indexRefs = INDICATOR_CATALOG.map((i) => ({ source: "yahoo", ticker: i.symbol }));
   // Every held position is refreshed via its own provider — holdings now
   // carry quote_source explicitly so we don't need to guess by ticker shape.
-  const heldRows = db
+  const heldRows = appDb
     .selectDistinct({ source: holdings.quoteSource, ticker: holdings.ticker })
     .from(holdings)
     .all();

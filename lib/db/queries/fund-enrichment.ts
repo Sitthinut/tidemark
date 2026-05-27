@@ -6,7 +6,7 @@
 // Read side: typed getters for API routes and the advisor tool.
 
 import { and, eq, ne, sql } from "drizzle-orm";
-import { getDb } from "../context";
+import { getMarketDb } from "../context";
 import {
   fundAssetAllocation,
   fundPerformance,
@@ -47,7 +47,7 @@ export type FundPortfolioAssetTypeInsert = typeof fundPortfolioAssetType.$inferI
  */
 export function upsertFundPerformance(projId: string, rows: FundPerformanceInsert[]): void {
   if (rows.length === 0) return;
-  const db = getDb();
+  const db = getMarketDb();
   db.transaction((tx) => {
     tx.delete(fundPerformance).where(eq(fundPerformance.projId, projId)).run();
     for (const row of rows) {
@@ -62,7 +62,7 @@ export function upsertFundPerformance(projId: string, rows: FundPerformanceInser
  */
 export function upsertFundAssetAllocation(projId: string, rows: FundAssetAllocationInsert[]): void {
   if (rows.length === 0) return;
-  const db = getDb();
+  const db = getMarketDb();
   db.transaction((tx) => {
     tx.delete(fundAssetAllocation).where(eq(fundAssetAllocation.projId, projId)).run();
     for (const row of rows) {
@@ -77,7 +77,7 @@ export function upsertFundAssetAllocation(projId: string, rows: FundAssetAllocat
  */
 export function upsertFundTopHoldings(projId: string, rows: FundTopHoldingInsert[]): void {
   if (rows.length === 0) return;
-  const db = getDb();
+  const db = getMarketDb();
   db.transaction((tx) => {
     tx.delete(fundTopHoldings).where(eq(fundTopHoldings.projId, projId)).run();
     for (const row of rows) {
@@ -96,7 +96,7 @@ export function upsertFundTopHoldings(projId: string, rows: FundTopHoldingInsert
  */
 export function upsertFundPortfolio(projId: string, rows: FundPortfolioInsert[]): void {
   if (rows.length === 0) return;
-  const db = getDb();
+  const db = getMarketDb();
   db.transaction((tx) => {
     const existing = new Set(
       tx
@@ -122,7 +122,7 @@ export function upsertFundPortfolioAssetType(
   rows: FundPortfolioAssetTypeInsert[],
 ): void {
   if (rows.length === 0) return;
-  const db = getDb();
+  const db = getMarketDb();
   db.transaction((tx) => {
     const existing = new Set(
       tx
@@ -142,12 +142,16 @@ export function upsertFundPortfolioAssetType(
 
 /** All performance rows for one fund (latest snapshot). */
 export function getFundPerformance(projId: string): FundPerformanceRow[] {
-  return getDb().select().from(fundPerformance).where(eq(fundPerformance.projId, projId)).all();
+  return getMarketDb()
+    .select()
+    .from(fundPerformance)
+    .where(eq(fundPerformance.projId, projId))
+    .all();
 }
 
 /** Asset allocation rows for one fund (latest snapshot). */
 export function getFundAssetAllocation(projId: string): FundAssetAllocationRow[] {
-  return getDb()
+  return getMarketDb()
     .select()
     .from(fundAssetAllocation)
     .where(eq(fundAssetAllocation.projId, projId))
@@ -157,7 +161,7 @@ export function getFundAssetAllocation(projId: string): FundAssetAllocationRow[]
 
 /** Top-5 holdings for one fund (latest snapshot), ordered by rank. */
 export function getFundTopHoldings(projId: string): FundTopHoldingRow[] {
-  return getDb()
+  return getMarketDb()
     .select()
     .from(fundTopHoldings)
     .where(eq(fundTopHoldings.projId, projId))
@@ -173,7 +177,7 @@ export function getFundTopHoldings(projId: string): FundTopHoldingRow[] {
  * sum to 100%. Defensive against the ingest storing more than one period.
  */
 export function getFundPortfolio(projId: string): FundPortfolioRow[] {
-  return getDb()
+  return getMarketDb()
     .select()
     .from(fundPortfolio)
     .where(
@@ -195,7 +199,7 @@ export function getFundPortfolio(projId: string): FundPortfolioRow[] {
  * filter to the max period to avoid stacking dozens of 100% breakdowns.
  */
 export function getFundPortfolioAssetType(projId: string): FundPortfolioAssetTypeRow[] {
-  return getDb()
+  return getMarketDb()
     .select()
     .from(fundPortfolioAssetType)
     .where(
