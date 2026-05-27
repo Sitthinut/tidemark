@@ -10,6 +10,10 @@
 import { useState } from "react";
 import { Icon } from "@/components/Icon";
 import type {
+  FeederLookThroughHoldingRow,
+  FeederMasterMapRow,
+} from "@/lib/db/queries/feeder-enrichment";
+import type {
   FundAssetAllocationRow,
   FundPerformanceRow,
   FundPortfolioAssetTypeRow,
@@ -27,6 +31,10 @@ export type FundDetailResponse = FundWithTer & {
   topHoldings: FundTopHoldingRow[];
   portfolio: FundPortfolioRow[];
   portfolioAssetType: FundPortfolioAssetTypeRow[];
+  /** Master fund mapping if this is a feeder fund. Null when not a feeder or not yet mapped. */
+  masterMap: FeederMasterMapRow | null;
+  /** Master fund's underlying holdings (feeder look-through). Empty when not available. */
+  lookThroughHoldings: FeederLookThroughHoldingRow[];
 };
 
 // ─── performance type label map ───────────────────────────────────────────────
@@ -589,6 +597,264 @@ function PortfolioAssetTypeSection({ rows }: { rows: FundPortfolioAssetTypeRow[]
   );
 }
 
+// ─── 6. Feeder fund look-through ──────────────────────────────────────────────
+
+const LOOK_THROUGH_PREVIEW = 20;
+
+function LookThroughSection({
+  masterMap,
+  rows,
+}: {
+  masterMap: FeederMasterMapRow | null;
+  rows: FeederLookThroughHoldingRow[];
+}) {
+  const [expanded, setExpanded] = useState(false);
+  if (!masterMap && rows.length === 0) return null;
+
+  const visible = expanded ? rows : rows.slice(0, LOOK_THROUGH_PREVIEW);
+  const hidden = rows.length - LOOK_THROUGH_PREVIEW;
+
+  const asOfDate = rows[0]?.asOfDate;
+  const masterLabel = masterMap?.masterName ?? masterMap?.masterIsin ?? "Master Fund";
+
+  return (
+    <>
+      <SectionHeader
+        title={`Look-Through Holdings${asOfDate && asOfDate !== "unknown" ? ` (as of ${asOfDate})` : ""}`}
+      />
+      {masterMap && (
+        <div
+          style={{
+            fontSize: 11.5,
+            color: "var(--ink-soft)",
+            marginBottom: 8,
+            fontFamily: "var(--font-mono)",
+          }}
+        >
+          Master fund: <span style={{ color: "var(--ink)", fontWeight: 500 }}>{masterLabel}</span>
+          {masterMap.masterIsin && masterMap.masterName && (
+            <span style={{ color: "var(--muted)" }}>
+              {" · "}
+              {masterMap.masterIsin}
+            </span>
+          )}
+        </div>
+      )}
+      {rows.length === 0 ? (
+        <div
+          style={{
+            padding: "10px 0",
+            fontSize: 12,
+            color: "var(--muted)",
+          }}
+        >
+          Master fund holdings not yet fetched. Enable{" "}
+          <code
+            style={{
+              fontFamily: "var(--font-mono)",
+              fontSize: 11,
+              background: "var(--card-soft)",
+              padding: "1px 4px",
+              borderRadius: 4,
+            }}
+          >
+            EXTERNAL_INGEST_FEEDER_HOLDINGS=1
+          </code>{" "}
+          and re-run the catalog refresh.
+        </div>
+      ) : (
+        <>
+          <div style={{ overflowX: "auto" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11 }}>
+              <thead>
+                <tr>
+                  <th
+                    style={{
+                      textAlign: "left",
+                      padding: "3px 4px",
+                      fontSize: 10,
+                      fontFamily: "var(--font-mono)",
+                      fontWeight: 600,
+                      color: "var(--muted)",
+                      textTransform: "uppercase",
+                      borderBottom: "1px solid var(--line-soft)",
+                    }}
+                  >
+                    #
+                  </th>
+                  <th
+                    style={{
+                      textAlign: "left",
+                      padding: "3px 4px",
+                      fontSize: 10,
+                      fontFamily: "var(--font-mono)",
+                      fontWeight: 600,
+                      color: "var(--muted)",
+                      textTransform: "uppercase",
+                      borderBottom: "1px solid var(--line-soft)",
+                    }}
+                  >
+                    Name
+                  </th>
+                  <th
+                    style={{
+                      textAlign: "left",
+                      padding: "3px 4px",
+                      fontSize: 10,
+                      fontFamily: "var(--font-mono)",
+                      fontWeight: 600,
+                      color: "var(--muted)",
+                      textTransform: "uppercase",
+                      borderBottom: "1px solid var(--line-soft)",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    Ticker
+                  </th>
+                  <th
+                    style={{
+                      textAlign: "right",
+                      padding: "3px 4px",
+                      fontSize: 10,
+                      fontFamily: "var(--font-mono)",
+                      fontWeight: 600,
+                      color: "var(--muted)",
+                      textTransform: "uppercase",
+                      borderBottom: "1px solid var(--line-soft)",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    Weight
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {visible.map((row) => (
+                  <tr key={row.rank}>
+                    <td
+                      style={{
+                        padding: "4px 4px",
+                        fontFamily: "var(--font-mono)",
+                        fontSize: 10.5,
+                        color: "var(--muted)",
+                        borderBottom: "1px solid var(--line-soft)",
+                        whiteSpace: "nowrap",
+                        minWidth: 22,
+                      }}
+                    >
+                      {row.rank}
+                    </td>
+                    <td
+                      style={{
+                        padding: "4px 4px",
+                        color: "var(--ink-soft)",
+                        fontSize: 11.5,
+                        borderBottom: "1px solid var(--line-soft)",
+                        maxWidth: 180,
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap",
+                      }}
+                      title={row.name}
+                    >
+                      <span
+                        style={{ display: "block", overflow: "hidden", textOverflow: "ellipsis" }}
+                      >
+                        {row.name}
+                      </span>
+                      {row.assetClass && (
+                        <span
+                          style={{
+                            fontSize: 10,
+                            color: "var(--muted)",
+                            fontFamily: "var(--font-mono)",
+                          }}
+                        >
+                          {row.assetClass}
+                        </span>
+                      )}
+                    </td>
+                    <td
+                      style={{
+                        padding: "4px 4px",
+                        fontFamily: "var(--font-mono)",
+                        fontSize: 11,
+                        color: "var(--ink-soft)",
+                        borderBottom: "1px solid var(--line-soft)",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      {row.ticker ||
+                        (row.isin ? (
+                          <span style={{ fontSize: 10, color: "var(--muted)" }}>{row.isin}</span>
+                        ) : (
+                          "—"
+                        ))}
+                    </td>
+                    <td
+                      style={{
+                        padding: "4px 4px",
+                        textAlign: "right",
+                        fontFamily: "var(--font-mono)",
+                        fontSize: 11.5,
+                        fontWeight: 500,
+                        color: "var(--ink)",
+                        borderBottom: "1px solid var(--line-soft)",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      {fmtNavPct(row.weightPct)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {!expanded && hidden > 0 && (
+            <button
+              type="button"
+              onClick={() => setExpanded(true)}
+              style={{
+                marginTop: 6,
+                background: "none",
+                border: "none",
+                padding: "4px 0",
+                cursor: "pointer",
+                fontSize: 11.5,
+                color: "var(--accent)",
+                fontFamily: "var(--font-mono)",
+                letterSpacing: "0.02em",
+              }}
+            >
+              Show all {rows.length} holdings ↓
+            </button>
+          )}
+          {expanded && (
+            <button
+              type="button"
+              onClick={() => setExpanded(false)}
+              style={{
+                marginTop: 6,
+                background: "none",
+                border: "none",
+                padding: "4px 0",
+                cursor: "pointer",
+                fontSize: 11.5,
+                color: "var(--muted)",
+                fontFamily: "var(--font-mono)",
+                letterSpacing: "0.02em",
+              }}
+            >
+              Show less ↑
+            </button>
+          )}
+        </>
+      )}
+    </>
+  );
+}
+
 // ─── Loading / error states ───────────────────────────────────────────────────
 
 function LoadingState() {
@@ -705,7 +971,9 @@ function FundDetailBody({ projId }: { projId: string }) {
     data.assetAllocation.length > 0 ||
     data.topHoldings.length > 0 ||
     data.portfolio.length > 0 ||
-    data.portfolioAssetType.length > 0;
+    data.portfolioAssetType.length > 0 ||
+    data.masterMap != null ||
+    data.lookThroughHoldings.length > 0;
 
   return (
     <div>
@@ -733,6 +1001,9 @@ function FundDetailBody({ projId }: { projId: string }) {
       <TopHoldingsSection rows={data.topHoldings} />
       <PortfolioSection rows={data.portfolio} />
       <PortfolioAssetTypeSection rows={data.portfolioAssetType} />
+      {(data.masterMap != null || data.lookThroughHoldings.length > 0) && (
+        <LookThroughSection masterMap={data.masterMap} rows={data.lookThroughHoldings} />
+      )}
     </div>
   );
 }

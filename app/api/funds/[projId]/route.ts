@@ -7,9 +7,11 @@
 //   - topHoldings  — top-5 holdings (latest factsheet)
 //   - portfolio    — full quarterly portfolio (latest quarter, if ingested)
 //   - portfolioAssetType — monthly asset-type summary (latest month, if ingested)
+//   - feederMasterMap — master fund mapping if this is a feeder fund (or null)
+//   - lookThroughHoldings — master fund's holdings for feeder look-through
 //
 // Any table that has not been populated (enrichment flags were off during last
-// crawl) returns an empty array — callers should handle gracefully.
+// crawl) returns an empty array / null — callers should handle gracefully.
 //
 // This is an ADDITIVE route; the existing /api/funds (list/filter) is unchanged.
 
@@ -17,6 +19,7 @@ import { eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { withDb } from "@/lib/api/with-db";
 import { getDb } from "@/lib/db/context";
+import { getFeederEnrichment } from "@/lib/db/queries/feeder-enrichment";
 import { getFundEnrichment } from "@/lib/db/queries/fund-enrichment";
 import { fundCatalog } from "@/lib/db/schema";
 
@@ -37,10 +40,12 @@ export async function GET(_req: Request, { params }: { params: Promise<{ projId:
     }
 
     const enrichment = getFundEnrichment(projId);
+    const feederEnrichment = getFeederEnrichment(projId);
 
     return NextResponse.json({
       ...fund,
       ...enrichment,
+      ...feederEnrichment,
     });
   });
 }

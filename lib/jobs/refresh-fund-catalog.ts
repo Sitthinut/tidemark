@@ -17,6 +17,10 @@
 //                             WARNING: Full portfolio ingestion roughly doubles
 //                             crawl API calls (many funds have 100+ holdings).
 //                             Recommend running on a weekly cadence, not nightly.
+// EXTERNAL_INGEST_FEEDER_HOLDINGS=1 — fetch master-fund holdings CSVs from
+//                             iShares public URLs for feeder funds whose master
+//                             ISIN is in the built-in registry. Free, no auth.
+//                             One HTTP request per matched feeder fund.
 //
 // Merging this branch does NOT change prod behavior until at least one flag is set.
 //
@@ -26,6 +30,12 @@
 //   - Inactive/IPO funds leave aum/feeRows undefined to avoid clobbering any
 //     existing values with null.
 
+import {
+  type FeederLookThroughHoldingInsert,
+  getFeederMasterMap,
+  upsertFeederLookThroughHoldings,
+  upsertFeederMasterMap,
+} from "../db/queries/feeder-enrichment";
 import {
   type FundAssetAllocationInsert,
   type FundPerformanceInsert,
@@ -53,6 +63,11 @@ import {
   statusFromSec,
 } from "../market/fund-classify";
 import { normalizeFeeType } from "../market/fund-fees";
+import {
+  fetchISharesHoldingsByIsin,
+  type ISharesHoldingRow,
+  matchISharesMaster,
+} from "../market/providers/ishares";
 import {
   enumerateFundProfiles,
   fetchFundAssetAllocation,
@@ -96,6 +111,8 @@ export interface RefreshFundCatalogOptions {
   _fetchPortfolio?: typeof fetchFundPortfolio;
   /** Injectable portfolio-asset-type-fetcher (replaces the real API call in tests). */
   _fetchPortfolioAssetType?: typeof fetchFundPortfolioAssetType;
+  /** Injectable feeder look-through fetcher (replaces the real iShares HTTP call in tests). */
+  _fetchFeederHoldings?: typeof fetchISharesHoldingsByIsin;
 }
 
 export interface RefreshFundCatalogResult {
@@ -114,6 +131,8 @@ export interface RefreshFundCatalogResult {
   fundsWithHoldings: number;
   /** Funds for which portfolio data was upserted. */
   fundsWithPortfolio: number;
+  /** Feeder funds for which master-fund look-through holdings were fetched. */
+  fundsWithFeederLookThrough: number;
   errors: Array<{ projId: string; error: string }>;
 }
 
@@ -192,12 +211,14 @@ export async function refreshFundCatalog(
   const getTop5Holdings = opts._fetchTop5Holdings ?? fetchFundTop5Holdings;
   const getPortfolio = opts._fetchPortfolio ?? fetchFundPortfolio;
   const getPortfolioAssetType = opts._fetchPortfolioAssetType ?? fetchFundPortfolioAssetType;
+  const getFeederHoldings = opts._fetchFeederHoldings ?? fetchISharesHoldingsByIsin;
 
   // Read enrichment flags once per run (not per fund).
   const doPerformance = envFlag("SEC_INGEST_PERFORMANCE");
   const doAllocation = envFlag("SEC_INGEST_ALLOCATION");
   const doHoldings = envFlag("SEC_INGEST_HOLDINGS");
   const doPortfolio = envFlag("SEC_INGEST_PORTFOLIO");
+  const doFeederLookThrough = envFlag("EXTERNAL_INGEST_FEEDER_HOLDINGS");
 
   // 1. Enumerate all funds (active + inactive).
   const profiles = await enumerate(limitFunds);
@@ -211,6 +232,7 @@ export async function refreshFundCatalog(
   let fundsWithAllocation = 0;
   let fundsWithHoldings = 0;
   let fundsWithPortfolio = 0;
+  let fundsWithFeederLookThrough = 0;
   const errors: Array<{ projId: string; error: string }> = [];
 
   // 2. Process in a concurrency-capped pool.
@@ -325,6 +347,48 @@ export async function refreshFundCatalog(
             upsertFundPortfolioAssetType(projId, portTypeRows);
           }
         }
+
+        // Feeder fund look-through: resolve the master fund's ISIN, then fetch
+        // the master's published holdings. Resolution order:
+        //   1. An explicit feeder_master_map entry (operator-curated) — always
+        //      wins, and is never overwritten by an automatic guess.
+        //   2. A conservative name match against the iShares registry — used
+        //      only when it is unambiguous (see matchISharesMaster), so a wrong
+        //      ISIN is never silently assigned. Anything ambiguous is skipped
+        //      and left for a manual feeder_master_map entry.
+        // The SEC `feederfund_master_fund` field is a master-fund NAME string,
+        // not an ISIN, which is why name resolution is needed.
+        if (doFeederLookThrough && p.feederfund_master_fund) {
+          const masterName = p.feederfund_master_fund;
+          const explicit = getFeederMasterMap(projId);
+          const masterIsin = explicit?.masterIsin ?? matchISharesMaster(masterName);
+          if (masterIsin) {
+            const holdingItems: ISharesHoldingRow[] = await getFeederHoldings(masterIsin);
+            if (holdingItems.length > 0) {
+              // Only record an auto-derived map; never clobber an operator's
+              // explicit mapping with the SEC-sourced name.
+              if (!explicit) {
+                upsertFeederMasterMap({ projId, masterIsin, masterName, provider: "ishares" });
+              }
+
+              // Store the top holdings (cap at 50 to keep the DB slim).
+              const top = holdingItems.slice(0, 50);
+              const lookThroughRows: FeederLookThroughHoldingInsert[] = top.map((h, i) => ({
+                projId,
+                rank: i + 1,
+                name: h.name,
+                ticker: h.ticker || null,
+                assetClass: h.assetClass || null,
+                isin: h.isin || null,
+                weightPct: h.weightPct,
+                asOfDate: h.asOfDate,
+              }));
+              upsertFeederLookThroughHoldings(projId, lookThroughRows);
+              fundsWithFeederLookThrough++;
+            }
+          }
+          // No resolvable master ISIN — silently skip (not an error).
+        }
       }
 
       // 2b. Upsert catalog row (always — active and inactive).
@@ -385,6 +449,7 @@ export async function refreshFundCatalog(
     fundsWithAllocation,
     fundsWithHoldings,
     fundsWithPortfolio,
+    fundsWithFeederLookThrough,
     errors,
   };
 }

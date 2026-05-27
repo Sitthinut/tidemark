@@ -123,6 +123,7 @@ describe("refreshFundCatalog", () => {
       fundsWithAllocation: 0,
       fundsWithHoldings: 0,
       fundsWithPortfolio: 0,
+      fundsWithFeederLookThrough: 0,
       errors: [],
     });
     expect(upsertFund).not.toHaveBeenCalled();

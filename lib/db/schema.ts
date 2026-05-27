@@ -342,6 +342,68 @@ export const fundPortfolioAssetType = sqliteTable(
   ],
 );
 
+// ───────────────────────────────────────────────────────────────────────────
+// Feeder fund look-through — maps a Thai feeder fund (proj_id) to a foreign
+// master fund identified by ISIN, and stores the master fund's published
+// holdings fetched from the provider's public daily CSV.
+// Controlled by EXTERNAL_INGEST_FEEDER_HOLDINGS env flag (default OFF).
+// ───────────────────────────────────────────────────────────────────────────
+
+// Maps a Thai feeder fund to its master fund ISIN for look-through.
+// One row per feeder fund — only the single master fund relationship matters
+// (Thai feeder funds invest ≥80% in a single foreign master fund by SEC rules).
+export const feederMasterMap = sqliteTable(
+  "feeder_master_map",
+  {
+    // Thai SEC proj_id for the feeder fund.
+    projId: text("proj_id")
+      .primaryKey()
+      .references(() => fundCatalog.projId, { onDelete: "cascade" }),
+    // ISIN of the foreign master fund (e.g. "IE00B5BMR087" for CSPX).
+    masterIsin: text("master_isin").notNull(),
+    // Human-readable master fund name for display (e.g. "iShares Core S&P 500 UCITS ETF").
+    masterName: text("master_name"),
+    // Source of the master fund data: 'ishares' | 'vanguard' | 'manual'.
+    provider: text("provider").notNull().default("ishares"),
+    createdAt: text("created_at").notNull().default(sql`(CURRENT_TIMESTAMP)`),
+    updatedAt: text("updated_at").notNull().default(sql`(CURRENT_TIMESTAMP)`),
+  },
+  (table) => [index("idx_feeder_master_map_isin").on(table.masterIsin)],
+);
+
+// Look-through holdings — latest snapshot of the master fund's published
+// holdings, fetched from the provider's public CSV. Replaces on each crawl
+// (delete-then-insert). Only the LATEST snapshot is kept.
+export const feederLookThroughHoldings = sqliteTable(
+  "feeder_look_through_holdings",
+  {
+    // The Thai feeder fund proj_id (join to feeder_master_map).
+    projId: text("proj_id")
+      .notNull()
+      .references(() => fundCatalog.projId, { onDelete: "cascade" }),
+    // Rank within the master fund (1 = largest holding by weight).
+    rank: integer("rank").notNull(),
+    // Security name as published by the master fund provider.
+    name: text("name").notNull(),
+    // Ticker symbol (may be empty for bonds/cash).
+    ticker: text("ticker"),
+    // Asset class label from the provider (Equity, Fixed Income, Cash, Other).
+    assetClass: text("asset_class"),
+    // ISIN of the underlying security (may be empty).
+    isin: text("isin"),
+    // Weight as % of master fund NAV (e.g. 7.23 for 7.23%).
+    weightPct: real("weight_pct"),
+    // "As of" date of the holdings snapshot (ISO date string YYYY-MM-DD).
+    asOfDate: text("as_of_date"),
+    // When this row was last refreshed by the crawl job.
+    fetchedAt: text("fetched_at").notNull().default(sql`(CURRENT_TIMESTAMP)`),
+  },
+  (table) => [
+    primaryKey({ columns: [table.projId, table.rank] }),
+    index("idx_feeder_look_through_proj").on(table.projId),
+  ],
+);
+
 // Investment plan — one row per user. `id` autoincrements; a UNIQUE index on
 // `user_id` enforces a single plan per owner. SQLite treats multiple NULLs as
 // distinct in a UNIQUE index, which is fine: single-owner mode has exactly one
