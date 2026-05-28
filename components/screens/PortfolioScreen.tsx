@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { BrandMark } from "@/components/BrandMark";
 import { ModelDonut, ScoreCircle } from "@/components/charts";
 import { FeedbackRow } from "@/components/FeedbackRow";
@@ -26,6 +26,7 @@ import { formatSeriesDate } from "@/lib/portfolio/adapter";
 import { computeHealth, rebalanceHint, summarizeHealth } from "@/lib/portfolio/health";
 import { scorePortfolio } from "@/lib/portfolio/score";
 import type { AssetClass, Holding, Portfolio } from "@/lib/static/types";
+import { usePortfolioUi } from "@/lib/stores/portfolio-ui";
 
 function holdingToFormValues(h: Holding, fallbackBucketId: string): HoldingFormValues {
   return {
@@ -91,37 +92,18 @@ export function PortfolioScreen({
   onOpenImport,
   showMenu = true,
 }: PortfolioScreenProps) {
-  const [activePfId, setActivePfId] = useState<string>("all");
+  // Active portfolio lives in the shared store so the right-rail PortfoliosPanel
+  // stays in sync without a window-event handshake.
+  const { activeId: activePfId, setActiveId, requestNew, requestEdit } = usePortfolioUi();
   const [range, setRange] = useState<string>("6M");
   const [filter, setFilter] = useState<AssetClass | "all">("all");
   const [benchmark, setBenchmark] = useState<string>("none");
   const [feedback, setFeedback] = useState<Record<string, "up" | "down" | null>>({});
   const [holdingSheet, setHoldingSheet] = useState<Holding | null>(null);
 
-  // Broadcast active portfolio id so the right-rail PortfoliosPanel can
-  // highlight the matching row without lifting state up to App.
-  useEffect(() => {
-    window.dispatchEvent(new CustomEvent("portfolio-active-changed", { detail: activePfId }));
-  }, [activePfId]);
-
-  // Listen for cross-component navigation events.
-  useEffect(() => {
-    const onActivate = (e: Event) => setActivePfId((e as CustomEvent<string>).detail);
-    const onSyncRequest = () => {
-      window.dispatchEvent(new CustomEvent("portfolio-active-changed", { detail: activePfId }));
-    };
-    window.addEventListener("activate-portfolio", onActivate);
-    window.addEventListener("portfolio-active-request", onSyncRequest);
-    return () => {
-      window.removeEventListener("activate-portfolio", onActivate);
-      window.removeEventListener("portfolio-active-request", onSyncRequest);
-    };
-  }, [activePfId]);
-
-  // Helpers for emitting modal events to App.
-  const openNewPortfolio = () => window.dispatchEvent(new CustomEvent("new-portfolio"));
-  const openEditPortfolio = (id: string) =>
-    window.dispatchEvent(new CustomEvent("edit-portfolio", { detail: id }));
+  // App owns the create/edit sheet; request it through the shared store.
+  const openNewPortfolio = () => requestNew();
+  const openEditPortfolio = (id: string) => requestEdit(id);
 
   async function saveHolding(values: HoldingFormValues) {
     const id = holdingSheet?.id;
@@ -417,12 +399,12 @@ export function PortfolioScreen({
       </div>
 
       <div className="portfolio-switch">
-        <button data-active={activePfId === "all"} onClick={() => setActivePfId("all")}>
+        <button data-active={activePfId === "all"} onClick={() => setActiveId("all")}>
           ☰ All
           <span className="pf-sub">{portfolios.length} PORTFOLIOS</span>
         </button>
         {portfolios.map((p) => (
-          <button key={p.id} data-active={activePfId === p.id} onClick={() => setActivePfId(p.id)}>
+          <button key={p.id} data-active={activePfId === p.id} onClick={() => setActiveId(p.id)}>
             <span className="pf-icon">
               <Icon name={p.icon || "wallet"} size={12} />
             </span>{" "}

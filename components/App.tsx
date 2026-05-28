@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { type AddedHolding, AddHoldingsSheet } from "@/components/AddHoldingsSheet";
 import {
   type AppId,
@@ -25,6 +25,7 @@ import { usePortfolioView, useSelectedModelId } from "@/lib/fetchers/legacy";
 import { usePlan } from "@/lib/fetchers/portfolio";
 import { invalidate, useResource } from "@/lib/fetchers/swr";
 import type { Portfolio } from "@/lib/static/types";
+import { setActiveId, usePortfolioUi } from "@/lib/stores/portfolio-ui";
 import { useScrollHide } from "@/lib/useScrollHide";
 import { useViewport } from "@/lib/useViewport";
 
@@ -134,6 +135,9 @@ export function App() {
     { mode: "create" } | { mode: "edit"; portfolio: Portfolio } | null
   >(null);
   const { portfolios } = usePortfolioView();
+  // Create/edit intents from PortfolioScreen + PortfoliosPanel flow through the
+  // shared store. App owns the sheet so it survives the mobile↔wide swap.
+  const { editTarget, newNonce, consumeEditTarget } = usePortfolioUi();
 
   useEffect(() => {
     document.documentElement.setAttribute("data-theme", theme);
@@ -153,22 +157,25 @@ export function App() {
     }
   }, [isWide, screen]);
 
-  // Portfolio sheet event wiring: PortfolioScreen and PortfoliosPanel both
-  // dispatch these. App owns the sheet so it persists across viewport swaps.
+  // Portfolio sheet intents come from the shared store (PortfolioScreen and
+  // PortfoliosPanel both request through it). Open the create sheet whenever the
+  // "new" nonce bumps; the initial mount value (0) is ignored via the ref below.
+  const lastNewNonce = useRef(newNonce);
   useEffect(() => {
-    const onNew = () => setPortfolioSheet({ mode: "create" });
-    const onEdit = (e: Event) => {
-      const id = (e as CustomEvent<string>).detail;
-      const found = portfolios?.find((p) => p.id === id);
-      if (found) setPortfolioSheet({ mode: "edit", portfolio: found });
-    };
-    window.addEventListener("new-portfolio", onNew);
-    window.addEventListener("edit-portfolio", onEdit);
-    return () => {
-      window.removeEventListener("new-portfolio", onNew);
-      window.removeEventListener("edit-portfolio", onEdit);
-    };
-  }, [portfolios]);
+    if (newNonce === lastNewNonce.current) return;
+    lastNewNonce.current = newNonce;
+    setPortfolioSheet({ mode: "create" });
+  }, [newNonce]);
+
+  // Open the edit sheet for a requested id, then consume the intent so it fires
+  // once. Waits for `portfolios` to resolve before clearing.
+  useEffect(() => {
+    if (editTarget === null) return;
+    const found = portfolios?.find((p) => p.id === editTarget);
+    if (!found) return;
+    setPortfolioSheet({ mode: "edit", portfolio: found });
+    consumeEditTarget();
+  }, [editTarget, portfolios, consumeEditTarget]);
 
   async function savePortfolio(values: PortfolioFormValues) {
     const isEdit = portfolioSheet?.mode === "edit";
@@ -200,9 +207,8 @@ export function App() {
     if (!res.ok) throw new Error(`Delete failed (${res.status})`);
     invalidate("/api/buckets");
     invalidate(/^\/api\/holdings/);
-    // Tell PortfolioScreen to reset its active selection if it was viewing
-    // the deleted portfolio.
-    window.dispatchEvent(new CustomEvent("activate-portfolio", { detail: "all" }));
+    // Reset the active selection if it was viewing the deleted portfolio.
+    setActiveId("all");
   }
 
   // Cross-screen events
