@@ -14,6 +14,8 @@ export const metadata: Metadata = {
     description:
       "Open-source AI companion for Thai index investors. See your funds in one place, know your blended fee, and chat with an advisor that knows your holdings.",
     type: "website",
+    siteName: "Macrotide",
+    url: "/",
   },
   // No twitter-image.png: Twitter/X falls back to og:image (set via the
   // app/opengraph-image.png file convention). We still declare the card type
