@@ -1,7 +1,11 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
+// Resolve absolute URLs for og:image / twitter:image. Without this, Next.js
+// falls back to http://localhost:3000 in prod and social scrapers can't fetch
+// the share image. Same env var the auth + AI provider layers already use.
 export const metadata: Metadata = {
+  metadataBase: new URL(process.env.PUBLIC_APP_URL ?? "http://localhost:3000"),
   title: "Macrotide - An honest mirror for your index portfolio",
   description:
     "Open-source AI companion for Thai index investors. See your funds in one place, know your blended fee, and chat with an advisor that knows your holdings. Proposes, never trades.",
