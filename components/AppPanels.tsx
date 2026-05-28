@@ -16,6 +16,7 @@ import {
 import { invalidate } from "@/lib/fetchers/swr";
 import { computeHealth, summarizeHealth } from "@/lib/portfolio/health";
 import type { Portfolio } from "@/lib/static/types";
+import { useChatUi } from "@/lib/stores/chat-ui";
 import { usePortfolioUi } from "@/lib/stores/portfolio-ui";
 
 export type AppId = "chat" | "portfolios" | "plan" | "notes";
@@ -51,26 +52,17 @@ export function ChatPanel({
   // In-panel view swap (Option B): the chat body and the thread list share one
   // panel. "All chats" swaps to the list; the back arrow returns to chat.
   const [view, setView] = useState<"chat" | "threads">("chat");
-  // Mirror ChatScreen's active thread so the list can highlight it. ChatScreen
-  // owns threadId/loadThread/newChat and stays mounted across the swap; we drive
-  // it through the same window-CustomEvent bus the portfolio panel already uses,
-  // which keeps ChatScreen's public prop signature untouched.
-  const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
-  useEffect(() => {
-    const onSync = (e: Event) =>
-      setActiveThreadId((e as CustomEvent<string | null>).detail ?? null);
-    window.addEventListener("chat-active-changed", onSync);
-    // Ask ChatScreen to broadcast its current thread on mount.
-    window.dispatchEvent(new CustomEvent("chat-active-request"));
-    return () => window.removeEventListener("chat-active-changed", onSync);
-  }, []);
+  // ChatScreen owns threadId/loadThread/newChat and stays mounted across the
+  // swap; we coordinate through the shared chat UI store so the list can
+  // highlight the active thread and drive load/new — no window-event handshake.
+  const { activeThreadId, requestLoadThread, requestNewChat } = useChatUi();
 
   const selectThread = (id: string) => {
-    window.dispatchEvent(new CustomEvent("chat-load-thread", { detail: id }));
+    requestLoadThread(id);
     setView("chat");
   };
   const startNewChat = () => {
-    window.dispatchEvent(new CustomEvent("chat-new"));
+    requestNewChat();
     setView("chat");
   };
 

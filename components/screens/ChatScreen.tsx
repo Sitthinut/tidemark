@@ -6,6 +6,7 @@ import { FeedbackRow } from "@/components/FeedbackRow";
 import { Icon } from "@/components/Icon";
 import { invalidate } from "@/lib/fetchers/swr";
 import { AI_PERSONALITIES } from "@/lib/static/personalities";
+import { consumeLoadTarget, setActiveThreadId, useChatUi } from "@/lib/stores/chat-ui";
 
 const ACTIVE_THREAD_KEY = "macrotide_chat_active_thread";
 
@@ -401,36 +402,33 @@ export function ChatScreen({
     return () => window.removeEventListener("keydown", handler);
   }, [newChat, loading]);
 
-  // Cross-component bus for the in-panel thread list (desktop/tablet right
-  // rail). The list lives in ChatPanel, which can't reach this component's
-  // threadId/loadThread/newChat directly without prop-drilling — so we use the
-  // same window-CustomEvent pattern the portfolio panel uses. Mobile keeps
-  // driving the drawer through props and ignores this entirely.
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const onLoad = (e: Event) => {
-      const id = (e as CustomEvent<string>).detail;
-      if (id && id !== threadId) void loadThread(id);
-    };
-    const onNew = () => newChat();
-    const onRequest = () => {
-      window.dispatchEvent(new CustomEvent("chat-active-changed", { detail: threadId }));
-    };
-    window.addEventListener("chat-load-thread", onLoad);
-    window.addEventListener("chat-new", onNew);
-    window.addEventListener("chat-active-request", onRequest);
-    return () => {
-      window.removeEventListener("chat-load-thread", onLoad);
-      window.removeEventListener("chat-new", onNew);
-      window.removeEventListener("chat-active-request", onRequest);
-    };
-  }, [threadId, loadThread, newChat]);
+  // Cross-component coordination with the in-panel thread list (desktop/tablet
+  // right rail). The list lives in ChatPanel, which can't reach this component's
+  // threadId/loadThread/newChat directly — so we go through the shared chat UI
+  // store (lib/stores/chat-ui.ts) instead of window events. Mobile keeps driving
+  // the drawer through props and ignores this.
+  const { loadTarget, newNonce } = useChatUi();
 
-  // Broadcast the active thread so the in-panel list highlights the right row.
+  // Publish the active thread so the panel list highlights the right row.
   useEffect(() => {
-    if (typeof window === "undefined") return;
-    window.dispatchEvent(new CustomEvent("chat-active-changed", { detail: threadId }));
+    setActiveThreadId(threadId);
   }, [threadId]);
+
+  // Consume the panel's "load this thread" intent (fires once, then clears).
+  useEffect(() => {
+    if (loadTarget && loadTarget !== threadIdRef.current) void loadThread(loadTarget);
+    consumeLoadTarget();
+  }, [loadTarget, loadThread]);
+
+  // Consume the panel's "new chat" intent. nonce 0 is the initial state, not a
+  // request, so only act once it increments.
+  const handledNewNonce = useRef(0);
+  useEffect(() => {
+    if (newNonce !== handledNewNonce.current) {
+      handledNewNonce.current = newNonce;
+      if (newNonce > 0) newChat();
+    }
+  }, [newNonce, newChat]);
 
   /**
    * Fire-and-forget auto-title trigger. Called after the first turn pair
