@@ -11,6 +11,12 @@ export const metadata: Metadata = {
       "Open-source AI companion for Thai index investors. See your funds in one place, know your blended fee, and chat with an advisor that knows your holdings.",
     type: "website",
   },
+  // No twitter-image.png: Twitter/X falls back to og:image (set via the
+  // app/opengraph-image.png file convention). We still declare the card type
+  // so it renders the large preview instead of the default small summary.
+  twitter: {
+    card: "summary_large_image",
+  },
 };
 
 export const viewport: Viewport = {
