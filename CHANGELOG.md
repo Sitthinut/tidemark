@@ -30,9 +30,6 @@ cut: this section is sliced into a dated/versioned heading and a fresh
   `FMP_API_KEY` (both free-tier). This is the "reliable index/FX source (Yahoo
   429 fix)" the README/ROADMAP listed as planned — Yahoo hard-429s datacenter
   IPs and the keyed providers resolve it.
-
-### Changed
-
 - **Database split into app.db + market.db** — the single SQLite is split along a
   lifecycle boundary: **app.db** is the system of record (accounts, buckets,
   holdings, plans, journal, models, chat, preferences, user market indicators)
@@ -47,43 +44,26 @@ cut: this section is sliced into a dated/versioned heading and a fresh
   `scripts/split-db.ts` migrates an existing combined DB. Rationale: blast-radius
   isolation (the nightly SEC refresh can't endanger accounts), lean backups,
   credential-free dev clones, demo-with-real-data.
-- **Denormalized `fund_catalog.current_ter`** — the finder now sorts and annotates
+- **Denormalized `fund_catalog.current_ter`** — the finder sorts and annotates
   TER from a cached column on `fund_catalog` (maintained by `upsertFundFees`; the
   source of truth stays `fund_fees`), dropping the per-fund fee-history query.
-  Browse-all and search fell from seconds to ~tens of ms. Added composite
-  `(proj_id, period)` performance/portfolio indexes.
-- **Manage-indicators reorder** — drag-and-drop reorder on the current
-  `@dnd-kit/react` (migrated off the legacy `@dnd-kit/core` line); tier labels
-  removed.
-- **Portfolios sidebar reorder** — drag-to-reorder the portfolio list, persisted
-  via a new `buckets.position` column and `PATCH /api/portfolios/reorder`.
-- **Navigation labels** — the **Funds** tab is now **Explore** (it's catalog
-  discovery, not a holdings list) and the **Chat** tab is now **Advisor** (it's
-  the AI investment advisor). Screen ids are unchanged, so routing is untouched.
-- **Login screen** — the sign-in screen now matches the landing aesthetic: the
-  brand mark + wordmark (clickable home), pill buttons, and clearer copy (drops
-  the "real DB" jargon; uses the **Advisor** / **Explore** names). A signed-in
-  user hitting `/login` is now redirected server-side instead of via a
-  client-side bounce, so there's no flash of the login UI; the post-OAuth
-  passkey prompt and the demo sign-in path are unaffected.
-- **UI state stores** *(internal)* — the Portfolios panel↔screen and Chat
-  window-event buses were replaced by typed `useSyncExternalStore` stores
-  (`lib/stores/portfolio-ui.ts`, `lib/stores/chat-ui.ts`).
-
-### Fixed
-
-- **Fund detail** — duplicate portfolio rows are collapsed by identity
-  (ISIN, or issuer+description) into one expandable net row; fixed a fund-detail
-  500 (a query routed to the wrong DB handle after the split).
-- **Portfolios YTD delta** — corrected a YTD change that always rendered
-  positive/green.
-- **Build reliability** — DB migrations are skipped during `next build` (parallel
-  build workers were racing `CREATE TABLE`); they run normally at server startup.
-- **Mobile bottom nav overflow** — the floating tab bar's buttons were rigid
-  (`flex: 0 0 76px`) and spilled past the right edge on phones narrower than
-  ~392px. The bar now uses a deterministic width with equal-flex buttons
-  (`flex: 1 1 0`), so the five tabs divide it evenly down to 320px.
-
+  Browse-all and search are ~tens of ms. Composite `(proj_id, period)`
+  performance/portfolio indexes round it out.
+- **Drag-to-reorder** — **Manage Indicators** uses `@dnd-kit/react` (off the
+  legacy `@dnd-kit/core` line); tier labels removed. The **Portfolios sidebar**
+  reorders the portfolio list, persisted via a `buckets.position` column and
+  `PATCH /api/portfolios/reorder`.
+- **Navigation labels** — the **Funds** tab is **Explore** (catalog discovery,
+  not a holdings list) and the **Chat** tab is **Advisor** (the AI investment
+  advisor). Screen ids are unchanged, so routing is unaffected by the rename.
+- **Login screen** — the sign-in screen matches the landing aesthetic: brand
+  mark + wordmark (clickable home), pill buttons, and clearer copy (drops the
+  "real DB" jargon; uses the **Advisor** / **Explore** names). A signed-in user
+  hitting `/login` is redirected server-side rather than via a client-side
+  bounce, so there's no flash of the login UI; the post-OAuth passkey prompt
+  and the demo sign-in path are unaffected.
+- **Fund detail dedupe** — duplicate portfolio rows are collapsed by identity
+  (ISIN, or issuer + description) into one expandable net row.
 - **Persistence layer** — SQLite + Drizzle (15 tables), daily rotating backups,
   full CRUD APIs, SWR fetchers; all seven screens read from the DB.
 - **Passkey auth + demo mode** — better-auth + WebAuthn passkeys, secure-by-
@@ -153,6 +133,11 @@ cut: this section is sliced into a dated/versioned heading and a fresh
   last-passkey lockout guard) named from their AAGUIDs, linked OAuth providers,
   usage, and sign-out everywhere.
 - **Public signed-out landing page** for the shared link, with CTAs to sign in
-  or try the demo.
+  or try the demo. Real-app screenshots ride inside the iPhone bezel SVGs on
+  the hero and Advisor sections (with a graceful fallback to the coded mocks);
+  a "bigger canvas" section between the Advisor spotlight and the four-stage
+  Loop shows the desktop screenshot inside a pure macOS-style window border —
+  rounded rect, multi-layer shadow + hairline ring, image's natural aspect
+  ratio drives the height.
 - **Tooling baseline** — Biome (lint + format), GitHub Actions CI, Dependabot,
   git pre-commit hooks, Node 24.
