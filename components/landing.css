@@ -1183,6 +1183,40 @@
   }
 }
 
+/* ============ macOS window border (Desktop spotlight) ============
+   Pure rounded-rect window border around the screenshot — no titlebar, no
+   traffic lights. Height is driven by the image's natural aspect ratio
+   (width 100%, height auto) so the screenshot is never cropped. */
+.mt-mac-window {
+  width: min(960px, 100%);
+  margin: 0 auto;
+  border-radius: 14px;
+  overflow: hidden;
+  background: var(--paper);
+  /* Multi-layer shadow + hairline ring = real macOS window depth. */
+  box-shadow:
+    0 50px 100px -40px rgba(20, 20, 18, 0.32),
+    0 14px 28px -14px rgba(20, 20, 18, 0.14),
+    0 0 0 1px rgba(0, 0, 0, 0.08);
+}
+.mt-mac-window > * {
+  display: block;
+  width: 100%;
+}
+.mt-mac-window img {
+  /* Image drives its own height — no aspect-ratio lock, no object-fit crop. */
+  height: auto;
+}
+.mt-mac-window .mt-imgslot {
+  border: 0;
+  border-radius: 0;
+}
+@media (max-width: 640px) {
+  .mt-mac-window {
+    border-radius: 10px;
+  }
+}
+
 /* Enriched floating hero cards */
 .mt-hero-overlay {
   max-width: 208px;

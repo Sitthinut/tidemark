@@ -655,6 +655,48 @@ function AdvisorSpotlight() {
 }
 
 /* ============================================================
+ * Desktop view — centred copy + CSS MacBook with portfolio shot.
+ *
+ * Structure (`.mt-macbook` / `-screen` / `-display` / `-base` /
+ * `-trackpad-notch`) and copy are taken straight from the Claude
+ * Design hand-off (`investment-agent/project/Landing Page.html`).
+ * ============================================================ */
+function DesktopView() {
+  return (
+    // Regular (non-tight) section padding so the warm-bg breathing room after
+    // the screenshot reads as a deliberate pause before the Loop section flips
+    // to var(--paper).
+    <section className="mt-section">
+      <div className="mt-container">
+        <div className="mt-section-head">
+          <div className="mt-section-eyebrow">Same product · bigger canvas</div>
+          <h2 className="mt-h2">
+            Every angle, in <em>one window</em>.
+          </h2>
+          <p className="mt-section-lead">
+            On a laptop, allocation, drift, blended fee, and performance vs your index sit side by
+            side. The same numbers as on your phone, with more room to think.
+          </p>
+        </div>
+        <div className="mt-mac-window" aria-hidden="true">
+          <ScreenSlot
+            src="/landing/desktop-portfolio.png"
+            alt="Macrotide on desktop"
+            fallback={
+              <ImageSlot
+                kind="real"
+                prompt="Real app screenshot — Macrotide portfolio dashboard at a laptop viewport."
+                spec="aspect 16 / 10 · prefer 2880×1800 · PNG"
+              />
+            }
+          />
+        </div>
+      </div>
+    </section>
+  );
+}
+
+/* ============================================================
  * The loop — four pillars, shipped vs planned
  * ============================================================ */
 const PILLARS: Array<{
@@ -882,6 +924,7 @@ export default function Landing() {
         <TrustStrip />
         <WhatItDoes />
         <AdvisorSpotlight />
+        <DesktopView />
         <Loop />
         <OpenSource />
         <FinalCta onSignIn={onSignIn} onDemo={onDemo} demoBusy={demoBusy} />
