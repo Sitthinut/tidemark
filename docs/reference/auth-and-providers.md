@@ -72,6 +72,37 @@ The `openrouter/free` router picks among ~25 free-tier models per request (volun
 DEMO_AI_MODELS=meta-llama/llama-3.3-70b-instruct:free
 ```
 
+## Market data providers (indices / FX / stocks)
+
+Markets-screen indicators and any `yahoo`-sourced holding resolve through a
+provider chain, tried preferred → fallback. Each provider only matches the
+symbols it actually serves, and the keyed ones **drop out of the chain entirely
+when their env var is unset** — so the app degrades gracefully from real index
+levels → ETF proxy → keyless Yahoo with no config:
+
+```text
+FMP (keyed, REAL US indices)
+  → EODHD (keyed, REAL global indices + Thai SET)
+    → Twelve Data (keyed, ETF proxies)
+      → Frankfurter (keyless, FX only)
+        → Yahoo (keyless)
+```
+
+| Provider | Env var | Free tier | Serves |
+| --- | --- | --- | --- |
+| FMP (Financial Modeling Prep) | `FMP_API_KEY` | ≈ 250 req/day | REAL US index levels — `^GSPC` (S&P 500), `^NDX` (Nasdaq-100), `^DJI` (Dow) |
+| EODHD (EOD Historical Data) | `EODHD_API_KEY` | ≈ 20 req/day | REAL global index levels via `{CODE}.INDX` — incl. Nikkei (`N225.INDX`) and the Thai SET (`SET.INDX`) that FMP's free tier lacks |
+| Twelve Data | `TWELVE_DATA_API_KEY` | ≈ 800 req/day | ETF proxies (SPY/QQQ/DIA/THD/…) for index symbols not on a free real-index plan |
+| Frankfurter | (none) | unmetered | FX only (USD/THB), ECB-backed; works with no key and no datacenter-IP block |
+| Yahoo | (none) | — | keyless fallback; hard-429s datacenter IPs, hence the keyed providers above |
+
+With **no keys** the chain is exactly Frankfurter (FX) → Yahoo; with **only**
+Twelve Data set you get the prior ETF-proxy behaviour. MSCI ACWI has no free
+real-index source and intentionally stays an ETF proxy (`ACWI`); gold stays the
+`XAU/USD` spot commodity, not an index. Every var above is defined in the
+canonical [AGENTS.md § Environment variables](../../AGENTS.md#environment-variables)
+table.
+
 ## Rate limiting
 
 `/api/chat` is IP-rate-limited at **20 requests/minute** regardless of demo / owner status. Demo sessions add a **10-turn-per-session** cap on top. Both are in-memory; replace with Upstash/Redis when you go multi-instance.
@@ -82,7 +113,8 @@ DEMO_AI_MODELS=meta-llama/llama-3.3-70b-instruct:free
 | --- | --- |
 | Owner user/session/passkey | `data/app.db` (better-auth tables) |
 | Owner portfolio/journal/etc | `data/app.db` (app tables) |
-| Demo session data | In-memory SQLite, keyed by demo cookie, swept after 1h idle |
-| AI keys | `.env.local` (never committed; gitignored) |
+| Fund catalog/fees + NAV/quote cache | `data/market.db` (regenerable; not backed up) |
+| Demo session data | In-memory app.db, keyed by demo cookie, swept after 1h idle; reads the shared real market.db |
+| AI / provider keys | `.env.local` (never committed; gitignored) |
 
 To wipe demo state across the whole server, restart the process. To wipe the owner DB, delete `data/app.db` (back it up first — there's a daily auto-backup at `data/backups/`).

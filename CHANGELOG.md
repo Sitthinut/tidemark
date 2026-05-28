@@ -15,6 +15,61 @@ cut: this section is sliced into a dated/versioned heading and a fresh
 
 ### Added
 
+- **Instant fund search** — the fund finder typeahead is backed by an in-memory
+  MiniSearch index (`lib/search/fund-index.ts`): fuzzy + prefix matching, field
+  boosting, and curated index-nickname synonyms. It folds each feeder fund's
+  **master** fund name into the index, so a search for "S&P500" surfaces feeder
+  funds like KKP US500-UH. Replaces the old `LIKE '%q%'` scan that couldn't use
+  an index or match by master fund; lookups are sub-50ms.
+- **Real index levels** — new EODHD and FMP market providers return the **actual**
+  index level (S&P 500, Nasdaq-100, Dow, Nikkei, Thai SET) where a free real
+  source exists, instead of an ETF proxy. Provider chain is FMP → EODHD → Twelve
+  Data (ETF proxy) → Frankfurter (FX) → Yahoo, degrading gracefully to the prior
+  proxy/Yahoo behaviour when keys are unset. MSCI ACWI stays an ETF proxy (no
+  free real index) and gold stays XAU/USD. New env vars `EODHD_API_KEY` and
+  `FMP_API_KEY` (both free-tier). This is the "reliable index/FX source (Yahoo
+  429 fix)" the README/ROADMAP listed as planned — Yahoo hard-429s datacenter
+  IPs and the keyed providers resolve it.
+
+### Changed
+
+- **Database split into app.db + market.db** — the single SQLite is split along a
+  lifecycle boundary: **app.db** is the system of record (accounts, buckets,
+  holdings, plans, journal, models, chat, preferences, user market indicators)
+  and **market.db** holds regenerable data (fund catalog/fees/performance/
+  portfolio/feeder + the NAV/quote cache). A two-handle `DbContext` routes queries
+  by domain; no join crosses the boundary. better-auth uses app.db; backups cover
+  app.db only (market.db is regenerable and excluded from restic). Demo sessions
+  get an isolated in-memory app.db but share the real market.db (opened read-only;
+  mutations suppressed) for the same warm cache as real users. New env var
+  `MARKET_DB_PATH` (default `data/market.db`, same `data/` volume); a one-time
+  `scripts/split-db.ts` migrates an existing combined DB. Rationale: blast-radius
+  isolation (the nightly SEC refresh can't endanger accounts), lean backups,
+  credential-free dev clones, demo-with-real-data.
+- **Denormalized `fund_catalog.current_ter`** — the finder now sorts and annotates
+  TER from a cached column on `fund_catalog` (maintained by `upsertFundFees`; the
+  source of truth stays `fund_fees`), dropping the per-fund fee-history query.
+  Browse-all and search fell from seconds to ~tens of ms. Added composite
+  `(proj_id, period)` performance/portfolio indexes.
+- **Manage-indicators reorder** — drag-and-drop reorder on the current
+  `@dnd-kit/react` (migrated off the legacy `@dnd-kit/core` line); tier labels
+  removed.
+- **Portfolios sidebar reorder** — drag-to-reorder the portfolio list, persisted
+  via a new `buckets.position` column and `PATCH /api/portfolios/reorder`.
+- **UI state stores** *(internal)* — the Portfolios panel↔screen and Chat
+  window-event buses were replaced by typed `useSyncExternalStore` stores
+  (`lib/stores/portfolio-ui.ts`, `lib/stores/chat-ui.ts`).
+
+### Fixed
+
+- **Fund detail** — duplicate portfolio rows are collapsed by identity
+  (ISIN, or issuer+description) into one expandable net row; fixed a fund-detail
+  500 (a query routed to the wrong DB handle after the split).
+- **Portfolios YTD delta** — corrected a YTD change that always rendered
+  positive/green.
+- **Build reliability** — DB migrations are skipped during `next build` (parallel
+  build workers were racing `CREATE TABLE`); they run normally at server startup.
+
 - **Persistence layer** — SQLite + Drizzle (15 tables), daily rotating backups,
   full CRUD APIs, SWR fetchers; all seven screens read from the DB.
 - **Passkey auth + demo mode** — better-auth + WebAuthn passkeys, secure-by-

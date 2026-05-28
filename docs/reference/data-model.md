@@ -1,29 +1,53 @@
 # Data model
 
-Macrotide stores everything in a single SQLite database via Drizzle ORM. The
-schema is defined in [lib/db/schema.ts](../../lib/db/schema.ts) — **that file is
-the source of truth**; this page is an orientation map. Migrations live in
-`lib/db/migrations/` and run automatically on boot.
+Macrotide stores data in **two** SQLite databases via Drizzle ORM, split along a
+lifecycle boundary. The schema is defined in `lib/db/schema/` (split into
+[app.ts](../../lib/db/schema/app.ts) + [market.ts](../../lib/db/schema/market.ts),
+re-exported from `index.ts`) — **those files are the source of truth**; this page
+is an orientation map. Migrations live in `lib/db/migrations/` and run
+automatically on boot.
+
+## The two databases
+
+- **app.db** (`DB_PATH`, default `data/app.db`) — the **system of record**:
+  accounts/auth, buckets, holdings, plans, journal, models, settings, chat,
+  preferences, usage/tier, and `user_market_indicators`. Precious; backed up
+  nightly. Reached via `getAppDb()` (alias `getDb()`).
+- **market.db** (`MARKET_DB_PATH`, default `data/market.db`) — **regenerable**
+  market data: the fund catalog/fees/performance/portfolio, feeder look-through,
+  and the NAV/quote cache (`fund_quotes`/`nav_history`). Rebuilt from upstream;
+  **not** backed up. Reached via `getMarketDb()`.
+
+No FK or SQL join crosses the boundary. `holdings` links to market data only via
+the soft `quote_source` + `ticker` cache key, resolved in app code (never a
+join); a query module touching both reads each handle and joins app-side. Both
+files sit under the same `data/` volume. A one-time `scripts/split-db.ts`
+migrates an existing combined DB; demo sessions get an isolated in-memory app.db
+but share the real market.db read-write (same warm cache as real users).
 
 ## Tables at a glance
 
-### Application data
+### Application data (app.db)
 
 | Table | Holds | Key columns / notes |
 |---|---|---|
-| `buckets` | Portfolio slices (Core, SSF, experiment, …) | `target_allocation` (JSON), `target_model_id`, `user_id` |
+| `buckets` | Portfolio slices (Core, SSF, experiment, …) | `target_allocation` (JSON), `target_model_id`, `position` (sidebar order), `user_id` |
 | `holdings` | Fund positions inside a bucket | `bucket_id` (FK, cascade), `units`, `avg_cost`, `ter`, `quote_source` (routing key) |
 | `plans` | The investment plan | Single-row in v1; `markdown`, `selected_model_id`, `user_id` |
 | `journal_entries` | Notes, decisions, questions, reading | `kind`, `tags` (JSON), `pinned`, `archived_at`, `user_id` |
 | `model_portfolios` | Built-in + custom model allocations | `built_in`, `allocation` (JSON slices), risk/return metadata, `user_id` |
 | `settings` | Generic key-value app settings | `key` → `value` (JSON) |
 
-### Market cache (written by the market layer)
+### Market data (market.db — written by the market layer + the SEC crawl)
 
 | Table | Holds | Key columns / notes |
 |---|---|---|
 | `fund_quotes` | Latest NAV + performance per ticker | `ticker` PK, `nav`, `d1_pct`, `ytd_pct`, `y1_pct` |
 | `nav_history` | Daily NAV history | Composite PK (`ticker`, `date`) |
+| `fund_catalog` | SEC-sourced fund universe | keyed by `proj_id`; `current_ter` is a **derived cache** of the latest TER (maintained by `upsertFundFees`; source of truth stays `fund_fees`) so the finder can sort/annotate fees without a fee-history query |
+| `fund_fees` | Fee history per fund class | source of truth for TER |
+| `fund_performance`, `fund_asset_allocation`, `fund_top_holdings`, `fund_portfolio`, `fund_portfolio_asset_type` | Per-fund enrichment depth | ingested behind default-off crawl flags; composite `(proj_id, period)` indexes |
+| `feeder_master_map`, `feeder_look_through_holdings` | Feeder-fund → US master look-through | from SEC EDGAR N-PORT |
 
 > Cache keys in `fund_quotes`/`nav_history` are the combined `${source}:${ticker}`
 > so one table holds quotes from different providers without a schema change.

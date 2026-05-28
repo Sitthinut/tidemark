@@ -16,15 +16,16 @@ responsive across mobile / tablet / desktop with light/dark/system themes.
 | Persistence — SQLite + Drizzle, daily backups | ✅ Shipped |
 | AI advisor — streaming chat, tool-calls, proposal cards, transparent health score, performance-vs-index + plan-anchored rebalancing guidance | ✅ Shipped |
 | Passkey auth + isolated per-session demo mode | ✅ Shipped |
-| Market data — SET/global indices + FX (Yahoo), Thai fund NAVs + history (Thai SEC), RSS news | ✅ Shipped |
+| Market data — real index levels (EODHD/FMP, with ETF-proxy + Yahoo fallback) + FX, Thai fund NAVs + history (Thai SEC), RSS news | ✅ Shipped |
+| Instant fund finder — fuzzy + feeder-aware search, fee-annotated | ✅ Shipped |
 | Portfolio import — CSV, manual autocomplete, image OCR with advisor handoff | ✅ Shipped |
 | Long-term memory + chat archival — recall, FTS, session lifecycle | ✅ Shipped |
 | Multi-user — per-user isolation, tiers/quotas, owner admin | 🟡 Code shipped; launch prep open |
 | Benchmark comparison — "match or beat your index" (SET / S&P / Nasdaq / Nikkei) | ✅ Shipped; custom/goal-based benchmarks planned |
+| Reliable index/FX source (Yahoo 429 fix) | ✅ Shipped |
 | Richer AI — daily digest, AI-curated news brief, proactive review | ⬜ Planned |
 | Data freshness — auto-refresh cadence per surface | ⬜ Planned |
 | Scheduled NAV refresh | ⬜ Planned |
-| Reliable index/FX source (Yahoo 429 fix) | ⬜ Planned |
 
 For what's next see [ROADMAP.md](./ROADMAP.md); for shipped detail see
 [CHANGELOG.md](./CHANGELOG.md) and the **[docs/](./docs)** user + developer

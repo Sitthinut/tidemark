@@ -44,9 +44,10 @@ template; AGENTS.md is the single source of truth. See also
 
 ## Database
 
-- SQLite via Drizzle ORM. The schema is [lib/db/schema.ts](../../lib/db/schema.ts);
-  migrations run automatically on boot.
-- Default file is `data/app.db` (override with `DB_PATH`). It's gitignored,
+- SQLite via Drizzle ORM. The schema is [lib/db/schema/](../../lib/db/schema)
+  (split into `app.ts` + `market.ts`); migrations run automatically on boot.
+- App data lives in `data/app.db` (override with `DB_PATH`); regenerable market
+  data lives in `data/market.db` (override with `MARKET_DB_PATH`). Both gitignored,
   along with the daily backups under `data/backups/`.
 - To start clean: stop the server, delete `data/app.db`, restart, then
   `npm run db:seed`.

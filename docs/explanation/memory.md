@@ -249,7 +249,7 @@ for the demo and vanish when it ends — no special handling.
 ### Where it lives
 
 ```text
-lib/db/schema.ts                         user_preferences + chat_threads
+lib/db/schema/app.ts                     user_preferences + chat_threads
 lib/db/queries/preferences.ts            CRUD + active-filter + recall
 lib/db/queries/chat.ts                   threads, lifecycle, summary rows
 lib/db/queries/search.ts                 sidebar full-text search (FTS5)

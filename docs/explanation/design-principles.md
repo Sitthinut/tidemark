@@ -51,7 +51,7 @@ home and everything else links to it:
 - **Feature status** → [ROADMAP.md](../../ROADMAP.md)
 - **Environment variables** → [AGENTS.md](../../AGENTS.md#environment-variables)
 - **Deploy steps** → [deploy.md](../how-to/deploy.md)
-- **Schema** → [lib/db/schema.ts](../../lib/db/schema.ts)
+- **Schema** → [lib/db/schema/](../../lib/db/schema)
 
 The docs in this folder explain and orient; they don't copy. This is the same
 instinct behind the codebase's `see docs/...` comments and these docs'

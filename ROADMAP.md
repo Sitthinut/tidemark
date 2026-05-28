@@ -240,9 +240,12 @@ changelog. What's left is making the benchmark genuinely *theirs*:
   global index, or a blend — and persist the choice. The benchmark should be the
   one they're actually trying to match or beat, not only a preset.
 
-### Foundation — data freshness & a durable index source
+### Foundation — data freshness
 
-Two related data-quality gaps, separate from the scheduler above:
+The durable index/FX source **shipped** — keyed EODHD + FMP providers now serve
+real index levels (S&P 500, Nasdaq-100, Dow, Nikkei, SET), with the Twelve Data
+ETF proxy and Yahoo as graceful fallbacks behind the `Provider` registry, fixing
+the Yahoo datacenter-IP 429s; see the changelog. One related gap remains:
 
 - **Auto-refresh cadence.** The dashboard is fetch-on-mount today: the SWR layer
   ([lib/fetchers/swr.ts](./lib/fetchers/swr.ts)) runs with defaults — revalidate
@@ -253,16 +256,6 @@ Two related data-quality gaps, separate from the scheduler above:
   Decide a per-surface cadence (indices/FX ~1 min in market hours, news
   ~15–30 min, NAVs daily after the SEC window), wire `refreshInterval` where it
   earns its keep, and fix the quote TTL.
-- **Durable index/FX source (Yahoo 429s).** Indices + FX come from Yahoo's
-  unauthenticated chart endpoint, which rate-limits server-side requests (HTTP
-  429), often blanket-blocking a deploy's IP. Mitigated so far (stale-on-error
-  fallback, per-symbol backoff, warmed demo cache), but a cold start or a
-  persistently-blocked IP still shows "Market data is unavailable." Options: a
-  keyed provider with a real free tier (Alpha Vantage / Twelve Data / Finnhub)
-  behind the existing `Provider` registry; Yahoo with proper cookie+crumb auth;
-  or lean on the scheduled refresh to populate the cache off one well-spaced job.
-  Thai fund NAVs already come from the SEC Open API (reliable) — this is only the
-  index/FX path.
 
 ### Learn — index education hub
 

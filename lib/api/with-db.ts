@@ -15,9 +15,10 @@ export const DEMO_COOKIE = "macrotide_demo";
  * that session's isolated in-memory SQLite. Otherwise the owner singletons.
  *
  * The market handle (fund catalog + NAV/quote cache) is the SHARED real
- * market.db in every case — including demo, which reads it read-only and never
- * persists (see lib/market/cache.ts). So a demo session sees REAL market data
- * while its own buckets/holdings/plans stay isolated in its in-memory app.db.
+ * market.db in every case — including demo, which uses it read-write like a real
+ * user (reads + write-through cache fills; see lib/market/cache.ts), so a symbol
+ * fetched once serves every later session. A demo session thus sees REAL market
+ * data while its own buckets/holdings/plans stay isolated in its in-memory app.db.
  *
  * For owner requests we carry the authenticated user id on the context so
  * per-user query scoping (lib/db/queries/scope.ts) applies. `userId` is null in

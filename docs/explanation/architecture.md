@@ -1,29 +1,48 @@
 # Architecture
 
-*Last updated: 2026-05-24*
+*Last updated: 2026-05-27*
 
 How Macrotide is put together, and why it's shaped this way. For the working
 rules an agent must follow when editing (the `withDb` contract, streaming
 context re-entry, the `server-only` boundary), see [AGENTS.md](../../AGENTS.md) —
 this page builds the mental model those rules sit on.
 
-## The shape: one process, one file
+## The shape: one process, local SQLite
 
-Macrotide is **a single Next.js process talking to a local SQLite file.** No
+Macrotide is **a single Next.js process talking to local SQLite files.** No
 separate database service, no message broker, no cache layer. The smallest
 viable deploy is one small VM with a reverse proxy for TLS.
 
 This is a deliberate choice for a personal-scale app: it keeps operations
-trivial (back up one file), keeps latency low (in-process DB reads), and keeps
-the whole thing comprehensible. The trade-offs — single-writer SQLite, no
-horizontal scaling, in-memory rate limits — are acceptable until there are real
-users, and are documented in [SECURITY.md](../../SECURITY.md) and
+trivial, keeps latency low (in-process DB reads), and keeps the whole thing
+comprehensible. The trade-offs — single-writer SQLite, no horizontal scaling,
+in-memory rate limits — are acceptable until there are real users, and are
+documented in [SECURITY.md](../../SECURITY.md) and
 [deploy.md](../how-to/deploy.md).
 
+### Two databases, split by lifecycle
+
+The store is split along a lifecycle boundary into **app.db** (the system of
+record — accounts, buckets, holdings, plans, journal, chat, preferences, market
+indicators) and **market.db** (regenerable — fund catalog/fees/performance/
+portfolio, feeder look-through, and the NAV/quote cache). A two-handle
+`DbContext` ([lib/db/context.ts](../../lib/db/context.ts)) routes each query to
+the right handle by domain (`getAppDb()` / `getMarketDb()`). **No FK or join
+crosses the boundary** — `holdings` reaches market data only via the soft
+`quote_source`+`ticker` cache key, resolved app-side.
+
+Why split: **blast-radius isolation** (the nightly SEC crawl rewrites market.db
+and can never endanger an account), **lean backups** (only app.db is precious,
+so the backup is small and market.db is excluded), **credential-free dev clones**
+(market.db re-crawls from public sources), and **demo-with-real-data** (a demo
+session gets an isolated in-memory app.db but shares the real market.db
+read-only, so it sees the same warm cache as real users). A one-time
+`scripts/split-db.ts` migrates an existing combined DB.
+
 ```text
-Browser ──HTTPS──▶ Reverse proxy (Caddy) ──▶ Next.js (App Router) ──▶ SQLite file
+Browser ──HTTPS──▶ Reverse proxy (Caddy) ──▶ Next.js (App Router) ──▶ app.db + market.db (SQLite)
                                                    │
-                                                   └──▶ OpenRouter (AI), Yahoo / Thai SEC (market data)
+                                                   └──▶ OpenRouter (AI); FMP/EODHD/Twelve Data/Frankfurter/Yahoo + Thai SEC (market data)
 ```
 
 ## Layers
@@ -34,7 +53,7 @@ Browser ──HTTPS──▶ Reverse proxy (Caddy) ──▶ Next.js (App Router
 | **Client data** | [lib/fetchers/](../../lib/fetchers) | SWR fetchers — the only way components reach the API. |
 | **API** | [app/api/](../../app/api) | Route handlers. Validate, run inside `withDb`, call queries. See [api reference](../reference/api.md). |
 | **Domain logic** | [lib/portfolio/](../../lib/portfolio), [lib/market/](../../lib/market), [lib/memory/](../../lib/memory), [lib/advisor/](../../lib/advisor), [lib/ai/](../../lib/ai) | Pure-ish helpers and integrations: analytics, market providers, memory, Advisor tools, model provider. |
-| **Persistence** | [lib/db/](../../lib/db) | Drizzle client, [schema](../../lib/db/schema.ts), migrations, and all queries (`server-only`). |
+| **Persistence** | [lib/db/](../../lib/db) | Drizzle client, [schema](../../lib/db/schema) (split app/market), the two-handle context, migrations, and all queries (`server-only`). |
 | **Auth** | [lib/auth/](../../lib/auth) | better-auth singleton, session helpers, providers. |
 | **Content** | [lib/static/](../../lib/static) | Editorial strings and placeholder analytics, shipped in the bundle. |
 
@@ -47,14 +66,17 @@ gated by `import "server-only"` because `better-sqlite3` is Node-native.
 The one piece of cleverness worth internalising. Macrotide serves two kinds of
 traffic from the same code:
 
-- **Owner** — the authenticated user; data persists in the file at `DB_PATH`.
+- **Owner** — the authenticated user; app data persists in `app.db` at `DB_PATH`.
 - **Demo** — anyone who clicked *Try the demo*; gets a private, **in-memory**
-  SQLite seeded from [lib/mock/demo-seed.ts](../../lib/mock/demo-seed.ts), keyed
+  app.db seeded from [lib/mock/demo-seed.ts](../../lib/mock/demo-seed.ts), keyed
   by the `macrotide_demo` cookie, swept after 1h idle, capped at 10 chat turns.
+  It **shares the real market.db** (read-write, like a real user), so demo charts
+  use — and warm — the same fund/index cache as real users (no per-session
+  re-fetch; market data is global, so demo writes are just shared cache fills).
 
 `withDb` ([lib/api/with-db.ts](../../lib/api/with-db.ts)) reads the demo cookie
 and opens an `AsyncLocalStorage` scope so every `getDb()` call inside it routes
-to the right database automatically. **Any route that queries must run inside
+to the right app.db automatically. **Any route that queries must run inside
 `withDb`**, or demo writes would leak into the owner DB.
 
 The subtle case: `streamText`'s `onFinish` callback fires *after* `withDb`
@@ -97,11 +119,39 @@ The full memory + session-lifecycle design is its own document:
 
 Holdings carry a `quote_source` routing key. A provider **registry**
 ([lib/market/registry.ts](../../lib/market/registry.ts)) dispatches NAV/price
-fetches to the matching provider (Thai SEC Open API for Thai mutual funds,
-Yahoo Finance otherwise), with a cache layer in front. The routing key names the
-*asset class*, not the provider, so swapping a provider only touches the
-registry. Adding one is a documented four-step recipe in
+fetches to the matching provider, with a cache layer in front. The routing key
+names the *asset class*, not the provider, so swapping a provider only touches
+the registry. Adding one is a documented four-step recipe in
 [AGENTS.md § Provider routing](../../AGENTS.md#provider-routing-via-holdingsquote_source).
+
+For index/FX/stock symbols (the `yahoo` source) the registry tries a **graceful
+chain**: FMP and EODHD (keyed; **real** index levels where a free source exists)
+→ Twelve Data (keyed; ETF proxies) → Frankfurter (keyless; FX) → Yahoo (keyless
+fallback). The keyed providers drop out when their env var is unset, so the app
+degrades from real levels → ETF proxy → Yahoo with no config; this is what fixed
+Yahoo's datacenter-IP 429s. The chain is detailed in
+[auth-and-providers.md](../reference/auth-and-providers.md#market-data-providers-indices--fx--stocks).
+Thai mutual-fund NAVs come from the Thai SEC Open API.
+
+## Fund search
+
+The fund finder typeahead is served by an **in-memory MiniSearch index**
+([lib/search/fund-index.ts](../../lib/search/fund-index.ts)) over the bounded,
+read-only fund catalog — not a `LIKE` scan or a search server. It gives fuzzy +
+prefix matching with field boosting and curated index-nickname synonyms, and
+**folds each feeder fund's master fund name into the document** so "S&P500"
+surfaces feeder funds like KKP US500-UH. The index builds lazily per market.db
+handle and rebuilds transparently when a cheap staleness signal (active-fund
+count + `MAX(updated_at)`) changes after the nightly refresh.
+
+## Client UI state: typed external stores
+
+Cross-component UI signals that aren't server data (e.g. the Portfolios
+panel↔screen handshake, Chat UI events) go through small typed
+`useSyncExternalStore` stores in [lib/stores/](../../lib/stores) — replacing the
+earlier ad-hoc `window`-event buses. The store is the single source of truth, is
+type-checked end to end, and integrates cleanly with React's concurrent
+rendering (no manual event wiring or stale-closure hazards).
 
 ## Where it lives
 
@@ -114,12 +164,15 @@ app/(auth)/login/         Passkey / OAuth / demo sign-in screen
 components/screens/        The seven app screens + Account
 components/                Shared UI, charts, sheets, thread list
 lib/api/with-db.ts         Owner-vs-demo DB routing (AsyncLocalStorage)
-lib/db/schema.ts           The data model (source of truth)
+lib/db/context.ts          Two-handle DB context (app.db + market.db)
+lib/db/schema/             The data model — app.ts + market.ts (source of truth)
 lib/db/queries/            All DB access, server-only
 lib/auth/                  better-auth singleton + session helpers
 lib/ai/                    OpenRouter provider, summarization
 lib/advisor/, lib/memory/  Advisor tools + long-term memory
-lib/market/                Provider registry, cache, Yahoo + Thai SEC
+lib/market/                Provider registry, cache, index/FX chain + Thai SEC
+lib/search/                In-memory MiniSearch fund index
+lib/stores/                Typed useSyncExternalStore UI stores
 lib/portfolio/             Analytics, plan parsing, plan-edit, OCR, health/score
 lib/static/                Editorial content + placeholder analytics
 lib/mock/                  Seed data (db:seed) + demo seed (never imported by UI)

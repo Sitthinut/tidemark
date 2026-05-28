@@ -1,6 +1,27 @@
 # Deploying Macrotide
 
-Macrotide is a single Next.js process talking to a local SQLite file. There's no separate database service, no message broker, no caching layer to operate — the smallest viable deploy is one Linux VM with Caddy in front for TLS.
+Macrotide is a single Next.js process talking to local SQLite files. There's no separate database service, no message broker, no caching layer to operate — the smallest viable deploy is one Linux VM with Caddy in front for TLS.
+
+## Database layout (two files, one volume)
+
+The database is split along a lifecycle boundary into **two** SQLite files, both
+auto-created under the same `data/` volume:
+
+- **`data/app.db`** (`DB_PATH`) — the system of record: accounts, buckets,
+  holdings, plans, journal, models, chat, preferences, user market indicators.
+  Precious. **This is the only file backed up.**
+- **`data/market.db`** (`MARKET_DB_PATH`, default `data/market.db`) — regenerable
+  market data: fund catalog/fees/performance/portfolio/feeder look-through and
+  the NAV/quote cache. Rebuilt from upstream (the SEC crawl + market fetches), so
+  it is **excluded from the backup** — a lost market.db is re-crawled, not
+  restored.
+
+Both default under `data/`, so the bind-mount + `chown 1000:1000 data` steps
+below cover both with no extra config. An existing **combined** DB (a pre-split
+deploy) is migrated **once** by `scripts/split-db.ts`, which copies the market
+tables into a fresh market.db; run it once before the first post-split boot.
+Ordinary nullable schema additions (e.g. the `buckets.position` column) are
+applied automatically by the startup migrations — no manual step.
 
 If you just want to share the app with people on the public internet, follow the "Single VM" path. If you'd rather keep it on your laptop and tunnel via Tailscale, jump to "Tailnet only".
 
@@ -69,6 +90,10 @@ AI_MODELS=openrouter/free,openrouter/auto
 DEMO_OPENROUTER_API_KEY=sk-or-...
 SEC_API_KEY=...     # same subscription key works in every environment
 OWNER_EMAIL=you@actual-email   # must match the passkey account you register
+# Real index levels (optional, free-tier). Unset ⇒ the chain falls back to the
+# Twelve Data ETF proxy → Yahoo. See reference/auth-and-providers.md.
+FMP_API_KEY=...     # REAL US index levels (^GSPC/^NDX/^DJI)
+EODHD_API_KEY=...   # REAL global index levels + the Thai SET index
 ```
 
 Cookies stay host-scoped by default (better-auth) — do not configure a
@@ -380,8 +405,10 @@ The app is now reachable at `https://<machine>.<tailnet>.ts.net` from any tailne
 ## Backups
 
 `data/app.db` is the single source of truth (everything else is config + code).
+`data/market.db` is **regenerable** — re-crawled from the SEC + market sources —
+so it is deliberately **left out of the backup**; back up only app.db.
 
-Macrotide's runtime calls `backupIfStale()` on boot, snapshotting to `data/backups/app-YYYY-MM-DDTHH-MM-SS.db` daily (keeps 30 days). For off-site backup, point restic / borg / rclone at `data/` once a day:
+Macrotide's runtime calls `backupIfStale()` on boot, snapshotting **app.db** to `data/backups/app-YYYY-MM-DDTHH-MM-SS.db` daily (keeps 30 days). For off-site backup, point restic / borg / rclone at the app.db snapshots once a day (the `data/backups/` glob already excludes market.db):
 
 ```sh
 # /etc/cron.d/macrotide-backup

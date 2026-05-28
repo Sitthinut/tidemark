@@ -29,9 +29,9 @@ duplicate it. The groups it covers:
 | AI / model selection | `OPENROUTER_API_KEY`, `AI_MODELS`, `OCR_MODEL`, `TITLE_MODEL` | Chat/OCR providers and model chains |
 | Auth (better-auth) | `AUTH_SECRET`, `AUTH_DISABLED`, `AUTH_RP_NAME`, `PUBLIC_APP_URL` | `AUTH_SECRET` is mandatory in production |
 | OAuth + signup gate | `GOOGLE_CLIENT_*`, `GITHUB_CLIENT_*`, `TURNSTILE_*` | All optional and env-gated; passkey-only when unset |
-| Database | `DB_PATH` | SQLite file location |
+| Database | `DB_PATH`, `MARKET_DB_PATH` | The two SQLite files — app.db (system of record) and market.db (regenerable market data) |
 | Quotas + tier gating | `DAILY_TOKEN_BUDGET_FREE`, `DAILY_TOKEN_BUDGET_TRUSTED` | Per-user metering (authenticated users only) |
-| External data | `SEC_API_KEY` | Thai SEC Open API for fund NAVs |
+| External data | `SEC_API_KEY`, `FMP_API_KEY`, `EODHD_API_KEY`, `TWELVE_DATA_API_KEY` | Thai SEC Open API for fund NAVs; FMP/EODHD/Twelve Data for index/FX levels |
 | Dev / framework | `DEV_ALLOWED_ORIGIN`, `CODEX_AUTH_FILE`, `NODE_ENV` | |
 
 ## When you change a variable

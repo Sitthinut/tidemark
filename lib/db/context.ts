@@ -20,7 +20,8 @@ export type DbContext = {
   /**
    * market.db handle — regenerable market data (fund catalog/fees, NAV/quote
    * cache, feeder look-through). For demo sessions this is the SHARED real
-   * market.db opened read-only (mutations are suppressed in cache.ts).
+   * market.db, used read-write like a real user — demo reads from and warms the
+   * same cache (market data is global, so this just avoids redundant fetches).
    */
   marketDb: MarketDb;
   marketSqlite: Database.Database;
