@@ -15,6 +15,13 @@
       "when": 1779919455206,
       "tag": "0001_chat_fts",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1779926599704,
+      "tag": "0002_organic_korath",
+      "breakpoints": true
     }
   ]
 }

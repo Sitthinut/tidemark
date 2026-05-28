@@ -1,5 +1,8 @@
 "use client";
 
+import { move } from "@dnd-kit/helpers";
+import { DragDropProvider } from "@dnd-kit/react";
+import { useSortable } from "@dnd-kit/react/sortable";
 import { useEffect, useState } from "react";
 import { ChatThreadList } from "@/components/ChatThreadList";
 import { Icon } from "@/components/Icon";
@@ -10,7 +13,10 @@ import {
   usePortfolioView,
   useSelectedModelId,
 } from "@/lib/fetchers/legacy";
+import { invalidate } from "@/lib/fetchers/swr";
 import { computeHealth, summarizeHealth } from "@/lib/portfolio/health";
+import type { Portfolio } from "@/lib/static/types";
+import { usePortfolioUi } from "@/lib/stores/portfolio-ui";
 
 export type AppId = "chat" | "portfolios" | "plan" | "notes";
 
@@ -135,24 +141,104 @@ export function ChatPanel({
   );
 }
 
+const fmtBaht = (n: number) => `฿${Math.round(n).toLocaleString("en-US")}`;
+
+// A single draggable portfolio row. The drag handle (leading edge) is the only
+// drag affordance; the card click still activates and the trailing pencil still
+// edits — mirroring ManageIndicatorsSheet's handle/affordance split.
+function SortableBucketRow({
+  p,
+  index,
+  active,
+  onActivate,
+  onEdit,
+}: {
+  p: Portfolio;
+  index: number;
+  active: boolean;
+  onActivate: () => void;
+  onEdit: () => void;
+}) {
+  const { ref, handleRef, isDragging } = useSortable({ id: p.id, index });
+  return (
+    <div
+      ref={ref}
+      className={`ra-bucket-row${isDragging ? " ra-bucket-row--dragging" : ""}`}
+      data-active={active}
+    >
+      <button
+        ref={handleRef}
+        type="button"
+        className="ra-bucket-drag-handle"
+        aria-label={`Reorder ${p.name}`}
+      >
+        <Icon name="grip-vertical" size={14} />
+      </button>
+      <button
+        type="button"
+        className="ra-bucket-card ra-bucket-card-btn"
+        onClick={onActivate}
+        aria-label={`Open ${p.name}`}
+        aria-current={active ? "true" : undefined}
+      >
+        <span className="ra-bucket-icon">
+          <Icon name={p.icon || "wallet"} size={14} />
+        </span>
+        <div style={{ flex: 1, minWidth: 0, textAlign: "left" }}>
+          <div className="ra-bucket-name">{p.name}</div>
+          <div className="ra-bucket-sub">{p.holdings.length} holdings</div>
+        </div>
+        <div style={{ textAlign: "right" }}>
+          <div className="num" style={{ fontSize: 12.5 }}>
+            {fmtBaht(p.totalValue)}
+          </div>
+          <div className={`delta num ${p.perfPct.ytd >= 0 ? "up" : "down"}`}>
+            {p.perfPct.ytd >= 0 ? "+" : ""}
+            {p.perfPct.ytd.toFixed(1)}% YTD
+          </div>
+        </div>
+      </button>
+      <button
+        type="button"
+        className="ra-bucket-edit"
+        onClick={onEdit}
+        aria-label={`Edit ${p.name}`}
+        title={`Edit ${p.name}`}
+      >
+        <Icon name="pencil" size={12} />
+      </button>
+    </div>
+  );
+}
+
 export function PortfoliosPanel({ onClose }: { onClose: () => void }) {
   const { portfolios, isLoading } = usePortfolioView();
-  const fmt = (n: number) => `฿${Math.round(n).toLocaleString("en-US")}`;
-  // Track active portfolio id locally; PortfolioScreen broadcasts state when
-  // user navigates, so the sidebar stays in sync with whichever portfolio is
-  // currently being viewed.
-  const [activeId, setActiveId] = useState<string>("all");
+  // Active id + edit/new intents flow through the shared store, so the sidebar
+  // highlight tracks whatever the PortfolioScreen shows — no event handshake.
+  const { activeId, setActiveId, requestEdit, requestNew } = usePortfolioUi();
+
+  // Local working order for optimistic drag-reorder. Re-seed from the fetched
+  // portfolios whenever they change (load, create, delete) so we never render a
+  // stale or partial list; between server round-trips the local order wins.
+  const [order, setOrder] = useState<Portfolio[]>([]);
   useEffect(() => {
-    const onSync = (e: Event) => setActiveId((e as CustomEvent<string>).detail);
-    window.addEventListener("portfolio-active-changed", onSync);
-    // Ask PortfolioScreen to broadcast its current state on mount.
-    window.dispatchEvent(new CustomEvent("portfolio-active-request"));
-    return () => window.removeEventListener("portfolio-active-changed", onSync);
-  }, []);
-  const activate = (id: string) =>
-    window.dispatchEvent(new CustomEvent("activate-portfolio", { detail: id }));
-  const editPortfolio = (id: string) =>
-    window.dispatchEvent(new CustomEvent("edit-portfolio", { detail: id }));
+    if (portfolios) setOrder(portfolios);
+  }, [portfolios]);
+
+  const persistOrder = async (next: Portfolio[]) => {
+    try {
+      await fetch("/api/portfolios/reorder", {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ orderedIds: next.map((p) => p.id) }),
+      });
+      // The panel feeds off /api/buckets (via usePortfolioView); invalidate so
+      // the persisted order reconciles with our optimistic local state.
+      invalidate("/api/buckets");
+    } catch (err) {
+      console.error("Failed to persist portfolio order:", err);
+    }
+  };
 
   return (
     <>
@@ -160,53 +246,34 @@ export function PortfoliosPanel({ onClose }: { onClose: () => void }) {
       <div className="ra-panel-body" style={{ padding: "10px 14px 14px" }}>
         {isLoading || !portfolios ? (
           <div style={{ padding: 12, color: "var(--muted)", fontSize: 12.5 }}>Loading…</div>
-        ) : portfolios.length === 0 ? (
+        ) : order.length === 0 ? (
           <div style={{ padding: 12, color: "var(--muted)", fontSize: 12.5 }}>
             No portfolios yet.
           </div>
         ) : (
-          portfolios.map((p) => (
-            <div className="ra-bucket-row" key={p.id} data-active={activeId === p.id}>
-              <button
-                type="button"
-                className="ra-bucket-card ra-bucket-card-btn"
-                onClick={() => activate(p.id)}
-                aria-label={`Open ${p.name}`}
-                aria-current={activeId === p.id ? "true" : undefined}
-              >
-                <span className="ra-bucket-icon">
-                  <Icon name={p.icon || "wallet"} size={14} />
-                </span>
-                <div style={{ flex: 1, minWidth: 0, textAlign: "left" }}>
-                  <div className="ra-bucket-name">{p.name}</div>
-                  <div className="ra-bucket-sub">{p.holdings.length} holdings</div>
-                </div>
-                <div style={{ textAlign: "right" }}>
-                  <div className="num" style={{ fontSize: 12.5 }}>
-                    {fmt(p.totalValue)}
-                  </div>
-                  <div className={`delta num ${p.perfPct.ytd >= 0 ? "up" : "down"}`}>
-                    {p.perfPct.ytd >= 0 ? "+" : ""}
-                    {p.perfPct.ytd.toFixed(1)}% YTD
-                  </div>
-                </div>
-              </button>
-              <button
-                type="button"
-                className="ra-bucket-edit"
-                onClick={() => editPortfolio(p.id)}
-                aria-label={`Edit ${p.name}`}
-                title={`Edit ${p.name}`}
-              >
-                <Icon name="pencil" size={12} />
-              </button>
-            </div>
-          ))
+          <DragDropProvider
+            onDragEnd={(event) => {
+              const next = move(order, event);
+              setOrder(next);
+              void persistOrder(next);
+            }}
+          >
+            {order.map((p, i) => (
+              <SortableBucketRow
+                key={p.id}
+                p={p}
+                index={i}
+                active={activeId === p.id}
+                onActivate={() => setActiveId(p.id)}
+                onEdit={() => requestEdit(p.id)}
+              />
+            ))}
+          </DragDropProvider>
         )}
         <button
           className="btn ghost sm"
           style={{ width: "100%", marginTop: 10, display: "flex" }}
-          onClick={() => window.dispatchEvent(new CustomEvent("new-portfolio"))}
+          onClick={() => requestNew()}
         >
           <Icon name="plus" size={12} /> New portfolio
         </button>

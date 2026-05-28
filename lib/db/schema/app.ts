@@ -30,6 +30,9 @@ export const buckets = sqliteTable("buckets", {
   notes: text("notes"),
   goalText: text("goal_text"),
   targetModelId: text("target_model_id"),
+  // Manual sort order (ascending). Nullable: existing rows stay NULL and sort
+  // last, falling back to createdAt, until the user drag-reorders them.
+  position: integer("position"),
   targetAllocation: text("target_allocation", { mode: "json" }).$type<{
     equity: number;
     bond: number;

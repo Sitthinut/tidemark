@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { getDb } from "../context";
 import { buckets } from "../schema";
 import { ownedBy, ownerId } from "./scope";
@@ -8,11 +8,13 @@ export type BucketInsert = typeof buckets.$inferInsert;
 export type BucketUpdate = Partial<Omit<BucketInsert, "id" | "createdAt">>;
 
 export function listBuckets(): Bucket[] {
+  // Manual `position` wins; un-positioned rows (NULL) sort last, then by
+  // createdAt — so existing books render in today's order until reordered.
   return getDb()
     .select()
     .from(buckets)
     .where(ownedBy(buckets.userId))
-    .orderBy(buckets.createdAt)
+    .orderBy(sql`${buckets.position} nulls last`, buckets.createdAt)
     .all();
 }
 
@@ -46,4 +48,22 @@ export function deleteBucket(id: string): void {
     .delete(buckets)
     .where(and(eq(buckets.id, id), ownedBy(buckets.userId)))
     .run();
+}
+
+/**
+ * Persist a manual ordering: write `position = index` for each id in
+ * `orderedIds`. Owner-scoped — each UPDATE is gated by {@link ownedBy}, so a
+ * caller can only reorder their own buckets and ids they don't own are no-ops.
+ * Runs in a single transaction so the new order lands atomically.
+ */
+export function reorderBuckets(orderedIds: string[]): void {
+  const db = getDb();
+  db.transaction((tx) => {
+    orderedIds.forEach((id, index) => {
+      tx.update(buckets)
+        .set({ position: index })
+        .where(and(eq(buckets.id, id), ownedBy(buckets.userId)))
+        .run();
+    });
+  });
 }

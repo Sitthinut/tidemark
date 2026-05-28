@@ -6,7 +6,14 @@ import { describe, expect, it } from "vitest";
 import { freshMarketDb } from "@/tests/db-helpers";
 import { runWithDbContext } from "../context";
 import * as schema from "../schema";
-import { createBucket, deleteBucket, getBucket, listBuckets, updateBucket } from "./buckets";
+import {
+  createBucket,
+  deleteBucket,
+  getBucket,
+  listBuckets,
+  reorderBuckets,
+  updateBucket,
+} from "./buckets";
 
 function freshDb() {
   const sqlite = new Database(":memory:");
@@ -67,6 +74,33 @@ describe("buckets queries", () => {
       createBucket({ ...NEW_BUCKET, id: "b", name: "B" });
       const rows = listBuckets();
       expect(rows.map((r) => r.id)).toEqual(["a", "b"]);
+    });
+  });
+
+  it("reorderBuckets writes position and re-sorts the list", () => {
+    withFresh(() => {
+      createBucket({ ...NEW_BUCKET, id: "a", name: "A" });
+      createBucket({ ...NEW_BUCKET, id: "b", name: "B" });
+      createBucket({ ...NEW_BUCKET, id: "c", name: "C" });
+      // Default order is createdAt: a, b, c.
+      expect(listBuckets().map((r) => r.id)).toEqual(["a", "b", "c"]);
+
+      reorderBuckets(["c", "a", "b"]);
+      expect(listBuckets().map((r) => r.id)).toEqual(["c", "a", "b"]);
+      expect(getBucket("c")?.position).toBe(0);
+      expect(getBucket("a")?.position).toBe(1);
+      expect(getBucket("b")?.position).toBe(2);
+    });
+  });
+
+  it("listBuckets sorts NULL positions last (after positioned rows)", () => {
+    withFresh(() => {
+      createBucket({ ...NEW_BUCKET, id: "a", name: "A" });
+      createBucket({ ...NEW_BUCKET, id: "b", name: "B" });
+      createBucket({ ...NEW_BUCKET, id: "c", name: "C" });
+      // Only position b — a and c keep NULL position and fall back to createdAt.
+      reorderBuckets(["b"]);
+      expect(listBuckets().map((r) => r.id)).toEqual(["b", "a", "c"]);
     });
   });
 

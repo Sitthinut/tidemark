@@ -2298,12 +2298,41 @@ textarea.sheet-input {
   color: inherit;
   text-align: left;
 }
-/* Row wrapper: card + pencil button side-by-side, sharing the visual selection. */
+/* Row wrapper: drag handle + card + pencil button side-by-side, sharing the
+   visual selection. */
 .ra-bucket-row {
   display: flex;
   align-items: stretch;
   gap: 4px;
   margin-bottom: 6px;
+  /* Let the pointer drag sensor own vertical gestures on the row (matches
+     .mi-row), rather than the browser's native touch scroll. */
+  touch-action: none;
+}
+/* Leading-edge drag handle. Mirrors .mi-drag-handle, sized to the card row. */
+.ra-bucket-drag-handle {
+  flex-shrink: 0;
+  background: transparent;
+  border: 0;
+  padding: 0 2px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted);
+  cursor: grab;
+}
+.ra-bucket-drag-handle:active {
+  cursor: grabbing;
+}
+/* Lifted while dragging — pop the whole row off the list. */
+.ra-bucket-row--dragging {
+  position: relative;
+  z-index: 2;
+}
+.ra-bucket-row--dragging .ra-bucket-card {
+  background: var(--paper);
+  border-color: var(--line-soft);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.14);
 }
 .ra-bucket-row .ra-bucket-card {
   flex: 1;
