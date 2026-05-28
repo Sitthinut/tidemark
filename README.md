@@ -1,9 +1,11 @@
 # Macrotide
 
-> An open-source AI investment companion for Thai index investors. Personal-use
-> experiment.
+<img src="./app/opengraph-image.png" alt="Macrotide — an honest mirror for your index portfolio. Mobile and desktop screenshots of the portfolio dashboard." width="800" />
+
+_An open-source AI investment companion for Thai index investors. Personal-use experiment._
 
 [![CI](https://github.com/Sitthinut/macrotide/actions/workflows/ci.yml/badge.svg)](https://github.com/Sitthinut/macrotide/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue)](./LICENSE)
 
 ## Status
 
