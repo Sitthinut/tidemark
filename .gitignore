@@ -39,5 +39,8 @@ next-env.d.ts.bak
 # browser-automation screenshots (agent-browser / playwright-cli) — throwaway
 /.playwright-cli/
 
+# Claude Code agent worktrees — ephemeral, machine-local scratch
+/.claude/worktrees/
+
 # next.js auto-generated, regenerated on every build
 next-env.d.ts
