@@ -22,6 +22,27 @@ import { PhoneFrame } from "./PhoneFrame";
 import "./landing.css";
 
 /* ============================================================
+ * <ScreenSlot> — show a real screenshot, fall back to a coded
+ * mockup if the file isn't there yet.
+ *
+ * Capture spec for phones: 390 × 784 logical @ DPR 3 → 1170 × 2352
+ * PNG. The shorter height deducts the ~5.35% of the screen cutout
+ * where the bezel SVG's Dynamic Island sits — the time +
+ * signal/wifi/battery icons end above the island and so are also
+ * clear of the image (handled in landing.css).
+ * ============================================================ */
+function ScreenSlot({ src, alt, fallback }: { src: string; alt: string; fallback: ReactNode }) {
+  const [errored, setErrored] = useState(false);
+  if (errored) return <>{fallback}</>;
+  return (
+    // Plain <img> (not next/image) on purpose — decorative, lives inside an
+    // aspect-locked container, and we need the cheap `onError` swap.
+    // biome-ignore lint/performance/noImgElement: see comment above
+    <img src={src} alt={alt} onError={() => setErrored(true)} />
+  );
+}
+
+/* ============================================================
  * <ImageSlot> — placeholder for real screenshots / abstract images
  *
  *   <ImageSlot kind="real" prompt="…" spec="…">
@@ -202,9 +223,21 @@ function Hero({ onSignIn, onDemo, demoBusy }: HeroProps) {
               sizes="(max-width: 720px) calc(100vw - 44px), min(100vw - 64px, 1120px)"
             />
           </ImageSlot>
-          <div className="mt-hero-phone" aria-hidden="true">
-            <PhoneFrame mode="dark">
-              <PhonePortfolio />
+          <div
+            className="mt-hero-phone"
+            aria-hidden="true"
+            // Portfolio screenshot is light-themed; `--phone-screen-bg` paints
+            // the status-bar strip in the same colour as the app's light `--bg`
+            // so there's no seam where the image meets the bezel zone. Bezel
+            // mode "light" → dark icons readable on the light strip.
+            style={{ "--phone-screen-bg": "#f8f8f9" } as CSSProperties}
+          >
+            <PhoneFrame mode="light">
+              <ScreenSlot
+                src="/landing/mobile-portfolio.png"
+                alt="Macrotide portfolio screen"
+                fallback={<PhonePortfolio />}
+              />
             </PhoneFrame>
           </div>
           <div className="mt-hero-overlays" aria-hidden="true">
@@ -582,9 +615,20 @@ function AdvisorSpotlight() {
       <div className="mt-container">
         <div className="mt-bigrow">
           <div className="mt-phone-wrap">
-            <div className="mt-phone-device" aria-hidden="true">
-              <PhoneFrame mode="light">
-                <PhoneAdvisor />
+            <div
+              className="mt-phone-device"
+              aria-hidden="true"
+              // Advisor screenshot is dark-themed; backdrop colour matches the
+              // dark app `--bg`. Bezel mode "dark" → light icons readable on
+              // the dark strip.
+              style={{ "--phone-screen-bg": "#0c0d0f" } as CSSProperties}
+            >
+              <PhoneFrame mode="dark">
+                <ScreenSlot
+                  src="/landing/mobile-advisor.png"
+                  alt="Macrotide Advisor screen"
+                  fallback={<PhoneAdvisor />}
+                />
               </PhoneFrame>
             </div>
           </div>

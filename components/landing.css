@@ -418,6 +418,33 @@
   overflow: hidden;
   border-radius: 12.2126cqw;
   pointer-events: all;
+  /* Backdrop for the top ~5.35% of the cutout — where the bezel SVG paints
+     the time + signal/wifi/battery and the Dynamic Island sits. Set per-
+     instance via `--phone-screen-bg` to match the screenshot's top-edge
+     colour so the image meets the backdrop without a visible seam. */
+  background-color: var(--phone-screen-bg, #0c0d0f);
+}
+/* Push the screen content (real screenshot via <img>, or fallback coded mock
+   via .mt-screen) below the bezel's Dynamic Island. 5.35% matches the island
+   bottom (rect y=24, h=31 in the 415×843 viewBox, normalised against the
+   ~98.7% cutout height). The bezel's time text + signal/wifi/battery icons
+   sit above the island and so are also clear of the image. */
+.phone-screenshot > img {
+  position: absolute;
+  top: 5.35%;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  width: 100%;
+  height: 94.65%;
+  object-fit: cover;
+  object-position: top center;
+  display: block;
+}
+.phone-screenshot > .mt-screen {
+  /* Coded fallback mock — slide it down so the bezel status bar paints on the
+     `--phone-screen-bg` strip above, not over the mock's own header. */
+  top: 5.35%;
 }
 .phone-bezel {
   width: 100%;
@@ -633,6 +660,13 @@
   border-radius: 0;
   border: 0;
   border-bottom: 1px solid var(--line);
+  /* Hard-lock the image box to 4 / 3. Without `position: relative` +
+     `overflow: hidden`, the proposal mock has more stacked content than the
+     others and pushes its container taller than 4 / 3, which Grid's default
+     stretch then propagates to the other two cards. The inner `.mt-mock` is
+     absolute-positioned so its content can't override the lock. */
+  position: relative;
+  overflow: hidden;
 }
 .mt-feature-body {
   padding: 22px 22px 24px;
@@ -658,8 +692,11 @@
   background: linear-gradient(180deg, #fbfaf6 0%, #f4f2ec 100%);
   display: flex;
 }
+/* Absolute inside the aspect-locked `.mt-feature-img` so the mock fills the
+   box exactly and its content can't push the box taller (see comment above). */
 .mt-mock {
-  flex: 1;
+  position: absolute;
+  inset: 0;
   display: flex;
   flex-direction: column;
   padding: 18px 18px 16px;
