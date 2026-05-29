@@ -6,6 +6,10 @@ import { BrandMark } from "@/components/BrandMark";
 import { clearDemoSession } from "@/lib/auth/clear-demo";
 import { authClient, signIn, useSession } from "@/lib/auth/client";
 import { Turnstile } from "./Turnstile";
+// Pull in the marketing tokens (warm `--bg`, `--line`, radii) so the login card
+// sits on the same ground as the landing. Scoped to `.mt-landing-root`, applied
+// on the shell below — see `shell`.
+import "@/components/landing.css";
 
 // Brand lockup — the mark + wordmark, matching the landing header (BrandMark +
 // "Macrotide"). On the main login screen it's a link home (`asLink`); on the
@@ -256,7 +260,7 @@ function LoginInner() {
   //    a cancelled prompt stays here to retry.
   if ((passkeyPrompt || pendingPasskey) && session?.user) {
     return (
-      <div style={shell}>
+      <div className="mt-landing-root" style={shell}>
         <div style={card}>
           <BrandLockup asLink={false} />
           <div style={tagline}>
@@ -283,7 +287,7 @@ function LoginInner() {
   }
 
   return (
-    <div style={shell}>
+    <div className="mt-landing-root" style={shell}>
       <div style={card}>
         <BrandLockup asLink={true} />
         <div style={tagline}>
@@ -423,19 +427,22 @@ const shell: React.CSSProperties = {
   alignItems: "center",
   justifyContent: "center",
   padding: "32px 16px",
+  // Warm marketing ground (`--bg`/tokens come from `.mt-landing-root`, applied
+  // on this element) so login feels continuous with the landing.
   background: "var(--bg)",
   color: "var(--ink)",
-  fontFamily: "var(--font-sans)",
+  fontFamily: "var(--mt-font-sans)",
+  letterSpacing: "-0.012em",
 };
 
 const card: React.CSSProperties = {
   width: "100%",
   maxWidth: 380,
   background: "var(--paper)",
-  border: "1px solid var(--line-soft)",
-  borderRadius: 18,
+  border: "1px solid var(--line)",
+  borderRadius: "var(--mt-r-lg)",
   padding: "32px 24px 24px",
-  boxShadow: "var(--shadow-md)",
+  boxShadow: "0 24px 48px -28px rgba(20, 20, 18, 0.18)",
   textAlign: "center",
   display: "flex",
   flexDirection: "column",
@@ -467,12 +474,15 @@ const tagline: React.CSSProperties = {
 
 const baseBtn: React.CSSProperties = {
   width: "100%",
-  padding: "12px 16px",
-  // Pill buttons, matching the landing page's `.mt-btn` (border-radius: 999px).
-  borderRadius: 999,
+  // Match the in-app button geometry (globals.css `.btn`): rounded-rect, not the
+  // landing's pill. The passkey primary stays accent-green (see `primary`); the
+  // other actions use the app's neutral/ghost treatments below.
+  padding: "11px 18px",
+  borderRadius: "var(--r-md)",
   fontSize: 14,
   fontWeight: 500,
   fontFamily: "var(--font-sans)",
+  letterSpacing: "-0.01em",
   cursor: "pointer",
   transition: "opacity 0.15s",
   border: "1px solid transparent",
@@ -486,7 +496,8 @@ const primary: React.CSSProperties = {
 
 const secondary: React.CSSProperties = {
   ...baseBtn,
-  background: "var(--card-soft)",
+  // Mirrors the app's `.btn.ghost`: outlined, neutral — for OAuth + Create account.
+  background: "transparent",
   color: "var(--ink)",
   borderColor: "var(--line)",
 };
@@ -500,12 +511,12 @@ const ghost: React.CSSProperties = {
 const input: React.CSSProperties = {
   width: "100%",
   padding: "12px 14px",
-  borderRadius: 10,
-  background: "var(--bg)",
+  borderRadius: "var(--mt-r-md)",
+  background: "var(--paper)",
   border: "1px solid var(--line)",
   color: "var(--ink)",
   fontSize: 14,
-  fontFamily: "var(--font-sans)",
+  fontFamily: "var(--mt-font-sans)",
   marginBottom: 8,
   boxSizing: "border-box",
 };
@@ -559,7 +570,7 @@ const hint: React.CSSProperties = {
 
 const footer: React.CSSProperties = {
   marginTop: 20,
-  fontFamily: "var(--font-mono)",
+  fontFamily: "var(--mt-font-mono)",
   fontSize: 11,
   letterSpacing: "0.04em",
   color: "var(--muted-2)",

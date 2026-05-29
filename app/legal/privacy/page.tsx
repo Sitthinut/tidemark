@@ -14,7 +14,7 @@ export default function PrivacyPage() {
   return (
     <>
       <h1>Privacy Policy</h1>
-      <p style={{ color: "var(--muted)", fontSize: 13 }}>Last updated: {LEGAL_LAST_UPDATED}</p>
+      <p className="mt-prose-updated">Last updated: {LEGAL_LAST_UPDATED}</p>
 
       <h2>1. Who runs Macrotide</h2>
       <p>
@@ -114,15 +114,12 @@ export default function PrivacyPage() {
       <h2>9. Changes</h2>
       <p>This policy may be updated; the date above will change accordingly.</p>
 
-      <p style={{ marginTop: 32, color: "var(--muted)", fontSize: 13 }}>
+      <p className="mt-prose-contact">
         Privacy questions or a deletion request? Contact {operator}
         {email ? (
           <>
             {" "}
-            at{" "}
-            <a href={`mailto:${email}`} style={{ color: "var(--accent)" }}>
-              {email}
-            </a>
+            at <a href={`mailto:${email}`}>{email}</a>
           </>
         ) : null}
         .

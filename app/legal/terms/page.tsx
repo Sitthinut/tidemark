@@ -15,20 +15,9 @@ export default function TermsPage() {
   return (
     <>
       <h1>Terms of Service</h1>
-      <p style={{ color: "var(--muted)", fontSize: 13 }}>Last updated: {LEGAL_LAST_UPDATED}</p>
+      <p className="mt-prose-updated">Last updated: {LEGAL_LAST_UPDATED}</p>
 
-      <div
-        style={{
-          marginTop: 16,
-          padding: "14px 16px",
-          borderRadius: 10,
-          border: "1px solid var(--accent)",
-          background: "var(--accent-soft)",
-          color: "var(--accent-ink)",
-          fontSize: 14,
-          lineHeight: 1.55,
-        }}
-      >
+      <div className="mt-prose-callout">
         <strong>Macrotide is not financial advice.</strong> It is an informational and educational
         companion only. Nothing here — including AI responses, scores, charts, or plan suggestions —
         is financial, investment, tax, or legal advice, and using Macrotide does not create any
@@ -82,10 +71,7 @@ export default function TermsPage() {
         and the third-party language and vision model providers it routes to, in order to generate
         responses. Don&apos;t paste anything you wouldn&apos;t want processed by those providers.
         Availability, models, and limits may change at any time. See the{" "}
-        <a href="/legal/privacy" style={{ color: "var(--accent)" }}>
-          Privacy Policy
-        </a>{" "}
-        for how data is handled.
+        <a href="/legal/privacy">Privacy Policy</a> for how data is handled.
       </p>
 
       <h2>6. No warranty and limit of liability</h2>
@@ -109,15 +95,12 @@ export default function TermsPage() {
         </>
       )}
 
-      <p style={{ marginTop: 32, color: "var(--muted)", fontSize: 13 }}>
+      <p className="mt-prose-contact">
         Questions about these terms? Contact {operator}
         {email ? (
           <>
             {" "}
-            at{" "}
-            <a href={`mailto:${email}`} style={{ color: "var(--accent)" }}>
-              {email}
-            </a>
+            at <a href={`mailto:${email}`}>{email}</a>
           </>
         ) : null}
         .
