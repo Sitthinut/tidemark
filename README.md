@@ -1,11 +1,16 @@
 # Macrotide
 
-<img src="./app/opengraph-image.png" alt="Macrotide — an honest mirror for your index portfolio. Mobile and desktop screenshots of the portfolio dashboard." width="800" />
-
-_An open-source AI investment companion for Thai index investors. Personal-use experiment._
+![Macrotide — an honest mirror for your index portfolio. Mobile and desktop screenshots of the portfolio dashboard.](./app/opengraph-image.png)
 
 [![CI](https://github.com/Sitthinut/macrotide/actions/workflows/ci.yml/badge.svg)](https://github.com/Sitthinut/macrotide/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](./LICENSE)
+
+_An open-source AI investment companion for Thai index investors. Personal-use experiment._
+
+Macrotide closes the gap between index investing's proven theory and how DIY
+investors actually execute it. It pairs education, portfolio analysis, market
+research, and low-fee Thai fund selection with an AI advisor grounded in your
+real holdings.
 
 ## Status
 
@@ -33,7 +38,7 @@ For what's next see [ROADMAP.md](./ROADMAP.md); for shipped detail see
 [CHANGELOG.md](./CHANGELOG.md) and the **[docs/](./docs)** user + developer
 guide.
 
-## What it will do
+## What it does
 
 - Hold your **mutual fund holdings** (Thai fund-supermarket account).
 - **Visualize** allocation, fees, and NAV trends.
