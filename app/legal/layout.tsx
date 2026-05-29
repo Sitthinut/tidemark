@@ -1,22 +1,19 @@
-import Link from "next/link";
 import type { ReactNode } from "react";
+import { LandingFooter, LandingHeader } from "@/components/LandingChrome";
+import "@/components/landing.css";
 
+// Legal pages ride the marketing design language and share the EXACT homepage
+// header + footer (LandingChrome) so a page linked from the landing looks like
+// the landing. The brand lockup routes home (`/`) instead of the in-page anchor.
+// Light-only, matching the landing.
 export default function LegalLayout({ children }: { children: ReactNode }) {
   return (
-    <div
-      style={{
-        minHeight: "100vh",
-        background: "var(--bg)",
-        color: "var(--ink)",
-        fontFamily: "var(--font-sans)",
-      }}
-    >
-      <div style={{ maxWidth: 720, margin: "0 auto", padding: "48px 24px 80px" }}>
-        <Link href="/login" style={{ color: "var(--muted)", fontSize: 13, textDecoration: "none" }}>
-          ← Back to Macrotide
-        </Link>
-        <article style={{ marginTop: 24, lineHeight: 1.65, fontSize: 15 }}>{children}</article>
-      </div>
+    <div className="mt-landing-root">
+      <LandingHeader brandHref="/" />
+      <main className="mt-container mt-narrow mt-section-tight">
+        <article className="mt-prose">{children}</article>
+      </main>
+      <LandingFooter />
     </div>
   );
 }
