@@ -768,9 +768,10 @@ textarea.sheet-input {
 /* Sheet actions: divider + breathing room so buttons don't crowd the last
    helper text in the form body. */
 .sheet-actions {
-  margin-top: 18px;
-  padding-top: 16px;
-  border-top: 1px solid var(--line-soft);
+  /* No divider above the actions — `.sheet-actions` isn't a pinned footer (the
+     whole `.sheet` scrolls and the actions scroll with it), so a border-top is
+     visual weight, not a scroll cue. Whitespace separates the buttons instead. */
+  margin-top: 24px;
 }
 
 /* Drop zone */
