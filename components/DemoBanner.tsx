@@ -29,7 +29,7 @@ export function DemoBanner() {
   async function exit() {
     setExiting(true);
     await clearDemoSession();
-    window.location.href = "/login";
+    window.location.href = "/";
   }
 
   return (
