@@ -2356,6 +2356,21 @@ textarea.sheet-input {
   margin: 0 auto;
   padding: 0;
 }
+
+/* Screen host + mount-point wrappers (App.tsx). The single persistent
+   .screen-host node is re-parented between the mobile .screen-slot (inside
+   .app-frame) and the wide mount-point (.ra-main-inner) so the screen subtree
+   — and any open modal it owns — survives a viewport-breakpoint remount. Both
+   wrappers are layout-transparent: full-width, no box of their own, so the
+   screen lays out exactly as it did when it was a direct child of .app-frame /
+   .ra-main-inner. They are NOT scroll/positioning ancestors — sticky topbars
+   still resolve against the window (mobile) / .ra-main OverlayScrollbars
+   viewport (wide), unchanged. */
+.screen-slot,
+.screen-host {
+  display: block;
+  width: 100%;
+}
 .ra-shell.desktop .ra-main-inner {
   max-width: 880px;
 }
@@ -2471,6 +2486,18 @@ textarea.sheet-input {
   flex: 1;
   overflow-y: auto;
   padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+/* The column+gap layout lives on a stable inner content wrapper, not the host:
+   the desktop/tablet overlay scrollbar (see PanelScrollBody / useOverlayScrollbar)
+   re-parents the host's single child into a generated viewport, which would
+   strip a flex-gap set on the host. Carrying it here survives the restructure
+   and matches native (mobile/touch), where there's no OS. Mirrors how
+   Modal.Body carries its gap on `.modal-body-content`. The host keeps its
+   padding (OverlayScrollbars preserves host padding). */
+.ra-panel-body-content {
   display: flex;
   flex-direction: column;
   gap: 10px;

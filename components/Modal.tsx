@@ -253,20 +253,33 @@ function ModalBody({ gap, children }: ModalBodyProps) {
     },
   });
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: getInstance/initOverlayScrollbars are stable; re-run on shell swap only
+  // OverlayScrollbars lifecycle. Desktop/tablet (`isWide`) gets OS-managed
+  // scroll; mobile uses native touch scroll on the body. We init OS only while
+  // wide and tear it down only when LEAVING wide — so a modal that's open while
+  // the viewport crosses a breakpoint keeps a live, in-place scroller instead
+  // of being destroyed+recreated (which lost scroll position / glitched). The
+  // wide↔wide case (tablet↔desktop) never re-runs this — `isWide` is unchanged.
+  useEffect(() => {
+    const bodyEl = bodyRef.current;
+    if (!bodyEl || !isWide) return;
+    initOverlayScrollbars(bodyEl);
+    return () => {
+      getInstance()?.destroy();
+    };
+  }, [isWide, initOverlayScrollbars, getInstance]);
+
+  // Footer-shadow IntersectionObserver. Re-binds when `isWide` flips because the
+  // scroll root changes: the OS-generated viewport (wide) vs the body element
+  // (mobile native scroll). Kept separate from the OS lifecycle so toggling the
+  // shadow observer never tears down the scroller itself.
   useEffect(() => {
     const bodyEl = bodyRef.current;
     const sentinel = sentinelRef.current;
     if (!bodyEl || !sentinel) return;
 
-    // Desktop/tablet: OverlayScrollbars owns the scroll + generates a viewport
-    // child that the sentinel lives inside, so the IO must observe against it.
-    // Mobile: native touch scroll on the body element itself.
-    let viewportEl: HTMLElement = bodyEl;
-    if (isWide) {
-      initOverlayScrollbars(bodyEl);
-      viewportEl = getInstance()?.elements().viewport ?? bodyEl;
-    }
+    const viewportEl: HTMLElement = isWide
+      ? (getInstance()?.elements().viewport ?? bodyEl)
+      : bodyEl;
 
     const io = new IntersectionObserver(
       (entries) => {
@@ -279,9 +292,8 @@ function ModalBody({ gap, children }: ModalBodyProps) {
 
     return () => {
       io.disconnect();
-      getInstance()?.destroy();
     };
-  }, [isWide, setFooterShadow]);
+  }, [isWide, setFooterShadow, getInstance]);
 
   return (
     <div ref={bodyRef} className="modal-body">

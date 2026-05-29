@@ -2,7 +2,8 @@
 
 import "overlayscrollbars/overlayscrollbars.css";
 import { useOverlayScrollbars } from "overlayscrollbars-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { type AddedHolding, AddHoldingsSheet } from "@/components/AddHoldingsSheet";
 import {
   type AppId,
@@ -80,6 +81,24 @@ const APPS_RAIL: { id: AppId; icon: string; label: string }[] = [
 ];
 
 const THEME_STORAGE_KEY = "macrotide-theme";
+const ACTIVE_APP_STORAGE_KEY = "macrotide-active-app";
+
+const APP_IDS: AppId[] = ["chat", "portfolios", "plan", "notes"];
+
+// Persisted dock state. We encode `null` (closed) as the literal string
+// "null" so a closed panel is a remembered choice, not an absent key — that
+// distinction is how we tell "user closed it" (restore closed) apart from
+// "very first visit" (default-open chat on desktop).
+function readStoredActiveApp(): AppId | null | undefined {
+  if (typeof window === "undefined") return undefined;
+  try {
+    const stored = window.localStorage.getItem(ACTIVE_APP_STORAGE_KEY);
+    if (stored === null) return undefined;
+    if (stored === "null") return null;
+    if (APP_IDS.includes(stored as AppId)) return stored as AppId;
+  } catch {}
+  return undefined;
+}
 
 export function App() {
   const viewport = useViewport();
@@ -160,9 +179,43 @@ export function App() {
   //   - Mobile (<700):     no panel rail at all; chat lives as its own screen.
   const [activeApp, setActiveApp] = useState<AppId | null>(() => {
     if (typeof window === "undefined") return "chat";
+    // Restore the last persisted dock state on reload/rotate/resize. Only on a
+    // user's very first visit (nothing stored) do we fall back to the
+    // viewport default: desktop (≥1000) opens chat, narrower stays closed.
+    const stored = readStoredActiveApp();
+    if (stored !== undefined) return stored;
     return window.innerWidth >= 1000 ? "chat" : null;
   });
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
+
+  // The mobile and wide shells are entirely different JSX/DOM trees. If we
+  // rendered renderScreen() inside each shell's branch, crossing a viewport
+  // breakpoint (e.g. phone rotate 390↔844 crossing 700) would unmount one
+  // shell and mount the other, REMOUNTING the screen subtree and wiping all of
+  // its transient state — open modals/sheets, search queries, active tab, etc.
+  //
+  // Fix: own a SINGLE persistent host <div> (created once, never unmounted) and
+  // portal the single renderScreen() subtree into it. Each shell renders an
+  // empty mount-point; a layout effect physically re-parents the persistent
+  // host into whichever mount-point is live. Because the host DOM node and the
+  // portal both keep a stable React-tree position across the shell swap, the
+  // screen — and any modal it owns — is reconciled (state preserved), never
+  // remounted. PortfolioSheet/AddHoldingsSheet (sharedModals) are lifted for
+  // the same reason; this generalizes that protection to the whole screen.
+  const screenHostRef = useRef<HTMLDivElement | null>(null);
+  if (screenHostRef.current === null && typeof document !== "undefined") {
+    screenHostRef.current = document.createElement("div");
+    screenHostRef.current.className = "screen-host";
+  }
+  // The shell's mount-point; the persistent host is appended here. State (not a
+  // ref) so the re-parent effect re-runs when the active shell swaps the slot.
+  const [screenSlot, setScreenSlot] = useState<HTMLElement | null>(null);
+  useLayoutEffect(() => {
+    const host = screenHostRef.current;
+    if (host && screenSlot && host.parentNode !== screenSlot) {
+      screenSlot.appendChild(host);
+    }
+  }, [screenSlot]);
 
   // PortfolioSheet lives at the App level so it survives the mobile↔wide
   // layout swap (which remounts everything below App). Without this lift,
@@ -185,11 +238,23 @@ export function App() {
     document.documentElement.setAttribute("data-viewport", viewport);
   }, [viewport]);
 
-  // If we resize mobile → wide while on the Chat screen, hop into the dock.
+  // Remember the dock state (open + which sub-panel, or closed) across reloads
+  // and rotate/resize. `null` is persisted as "null" so a closed panel is a
+  // remembered choice rather than an absent key. Mirrors the theme pattern.
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(ACTIVE_APP_STORAGE_KEY, activeApp ?? "null");
+    } catch {}
+  }, [activeApp]);
+
+  // If we resize mobile → wide while on the Chat screen, the chat tab has no
+  // home in the wide rail, so navigate off it. We move the *screen* to the
+  // portfolio home, but we do NOT force the dock open — that would clobber a
+  // user who explicitly closed it. The persisted `activeApp` already holds
+  // their choice; leave it untouched so a closed dock stays closed.
   useEffect(() => {
     if (isWide && screen === "chat") {
       setScreen("portfolio");
-      setActiveApp("chat");
     }
   }, [isWide, screen]);
 
@@ -299,7 +364,7 @@ export function App() {
     // on /login with `macrotide_demo` intact and slide right back in.
     await clearDemoSession();
     await authClient.signOut();
-    window.location.href = "/login";
+    window.location.href = "/";
   };
   const accountMenuItems = (
     <>
@@ -430,51 +495,55 @@ export function App() {
     </>
   );
 
+  // Both shells render an empty .screen-host slot; the persistent screen
+  // subtree is portaled into whichever one is mounted (see screenHost note +
+  // the single return below). The portal itself sits at a stable React-tree
+  // position (the final return), so it is NOT remounted by the shell swap.
   // ===== MOBILE SHELL (unchanged behavior from original) =====
-  if (!isWide) {
+  const mobileShell = (() => {
     const hideNav =
       screen === "settings" || screen === "models" || screen === "account" || screen === "admin";
     return (
-      <>
-        <div className="app-root">
-          <div className="app-frame" data-screen-label={screen}>
-            {renderScreen()}
-            {!hideNav && (
-              <nav className="bottom-nav">
-                {MOBILE_NAV.map((item) => (
-                  <button
-                    key={item.id}
-                    data-active={screen === item.id}
-                    onClick={() => setScreen(item.id)}
-                  >
-                    <Icon name={item.icon} size={17} />
-                    <span>{item.label}</span>
-                  </button>
-                ))}
-              </nav>
-            )}
-            {/* Account menu opens from each screen's top-right control (the
-                settings gear, or the kebab on Chat) — see openMobileMenu. */}
-            {accountMenuOpen && (
-              <>
+      <div className="app-root">
+        <div className="app-frame" data-screen-label={screen}>
+          {/* Mount-point: the persistent screen host (and the portaled
+                renderScreen() inside it) is re-parented here — see screenHost
+                note — so the screen survives the mobile↔wide remount. */}
+          <div ref={setScreenSlot} className="screen-slot" />
+          {!hideNav && (
+            <nav className="bottom-nav">
+              {MOBILE_NAV.map((item) => (
                 <button
-                  type="button"
-                  className="mobile-menu-backdrop"
-                  aria-label="Close menu"
-                  onClick={() => setAccountMenuOpen(false)}
-                />
-                <div className="mobile-account-menu">{accountMenuItems}</div>
-              </>
-            )}
-          </div>
+                  key={item.id}
+                  data-active={screen === item.id}
+                  onClick={() => setScreen(item.id)}
+                >
+                  <Icon name={item.icon} size={17} />
+                  <span>{item.label}</span>
+                </button>
+              ))}
+            </nav>
+          )}
+          {/* Account menu opens from each screen's top-right control (the
+                settings gear, or the kebab on Chat) — see openMobileMenu. */}
+          {accountMenuOpen && (
+            <>
+              <button
+                type="button"
+                className="mobile-menu-backdrop"
+                aria-label="Close menu"
+                onClick={() => setAccountMenuOpen(false)}
+              />
+              <div className="mobile-account-menu">{accountMenuItems}</div>
+            </>
+          )}
         </div>
-        {sharedModals}
-      </>
+      </div>
     );
-  }
+  })();
 
   // ===== WIDE SHELL (tablet + desktop) =====
-  return (
+  const wideShell = (
     <>
       <div
         className={`ra-shell ${viewport} ${activeApp ? "panel-open" : "panel-closed"}`}
@@ -519,9 +588,10 @@ export function App() {
 
         {/* ===== Main content ===== */}
         <main className="ra-main" ref={raMainRef}>
-          <div className="ra-main-inner" data-screen-label={screen}>
-            {renderScreen()}
-          </div>
+          {/* Mount-point: the persistent screen host (and the portaled
+              renderScreen() inside it) is re-parented here — see screenHost
+              note — so the screen survives the mobile↔wide remount. */}
+          <div className="ra-main-inner" data-screen-label={screen} ref={setScreenSlot} />
         </main>
 
         {/* ===== Apps panel + backdrop =====
@@ -566,6 +636,20 @@ export function App() {
           ))}
         </aside>
       </div>
+    </>
+  );
+
+  // Single return so the persistent screen portal and sharedModals sit at a
+  // STABLE React-tree position. Swapping `mobileShell`/`wideShell` re-renders
+  // the chrome, but the portal element keeps its slot, so renderScreen() and
+  // any modal it owns are reconciled (state preserved), not remounted. The
+  // screen subtree is rendered once here and createPortal targets the single
+  // persistent host node, which the layout effect re-parents into the active
+  // shell's mount-point as the shells swap.
+  return (
+    <>
+      {screenHostRef.current && createPortal(renderScreen(), screenHostRef.current)}
+      {isWide ? wideShell : mobileShell}
       {sharedModals}
     </>
   );

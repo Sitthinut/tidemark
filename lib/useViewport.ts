@@ -27,9 +27,21 @@ export function useViewport(): Viewport {
   );
 
   useEffect(() => {
-    const onResize = () => setW(window.innerWidth);
+    // Debounce: a rotate/resize fires a burst of `resize` events, and each
+    // width change can re-render the whole app. Coalescing to the settled width
+    // avoids thrash mid-gesture. (Debounce alone does NOT prevent the
+    // breakpoint-crossing remount — the screen subtree is kept mounted via the
+    // persistent portal in App.tsx; this just trims redundant renders.)
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const onResize = () => {
+      if (timer !== undefined) clearTimeout(timer);
+      timer = setTimeout(() => setW(window.innerWidth), 100);
+    };
     window.addEventListener("resize", onResize);
-    return () => window.removeEventListener("resize", onResize);
+    return () => {
+      if (timer !== undefined) clearTimeout(timer);
+      window.removeEventListener("resize", onResize);
+    };
   }, []);
 
   return widthToViewport(w);

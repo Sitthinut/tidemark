@@ -3,7 +3,7 @@
 import { move } from "@dnd-kit/helpers";
 import { DragDropProvider } from "@dnd-kit/react";
 import { useSortable } from "@dnd-kit/react/sortable";
-import { useEffect, useState } from "react";
+import { type CSSProperties, type ReactNode, useEffect, useState } from "react";
 import { ChatThreadList } from "@/components/ChatThreadList";
 import { Icon } from "@/components/Icon";
 import { ChatScreen, type SeedPrompt } from "@/components/screens/ChatScreen";
@@ -18,8 +18,40 @@ import { computeHealth, summarizeHealth } from "@/lib/portfolio/health";
 import type { Portfolio } from "@/lib/static/types";
 import { useChatUi } from "@/lib/stores/chat-ui";
 import { usePortfolioUi } from "@/lib/stores/portfolio-ui";
+import { useOverlayScrollbar } from "@/lib/useOverlayScrollbar";
 
 export type AppId = "chat" | "portfolios" | "plan" | "notes";
+
+const CHAT_VIEW_STORAGE_KEY = "macrotide-chat-view";
+
+/**
+ * A panel scroll body with the desktop/tablet overlay scrollbar.
+ *
+ * OverlayScrollbars re-parents the host's children into a generated viewport,
+ * so React must NOT reconcile dynamic children directly under the OS host — it
+ * would try to remove/insert nodes the library has already moved and throw
+ * `removeChild ... not a child of this node`. The single, stable
+ * `.ra-panel-body-content` child is what OS moves; React only ever reconciles
+ * inside it. This mirrors `.modal-body` / `.modal-body-content` in Modal.tsx.
+ * The host keeps its padding (OS preserves host padding); the content wrapper
+ * carries the column+gap layout (which OS would strip off the host).
+ */
+function PanelScrollBody({
+  className,
+  style,
+  children,
+}: {
+  className?: string;
+  style?: CSSProperties;
+  children: ReactNode;
+}) {
+  const bodyRef = useOverlayScrollbar();
+  return (
+    <div ref={bodyRef} className={`ra-panel-body${className ? ` ${className}` : ""}`} style={style}>
+      <div className="ra-panel-body-content">{children}</div>
+    </div>
+  );
+}
 
 interface PanelHeaderProps {
   title: string;
@@ -51,7 +83,20 @@ export function ChatPanel({
 }) {
   // In-panel view swap (Option B): the chat body and the thread list share one
   // panel. "All chats" swaps to the list; the back arrow returns to chat.
-  const [view, setView] = useState<"chat" | "threads">("chat");
+  // Persist the sub-view across reloads/resize (mirrors the theme pattern).
+  const [view, setView] = useState<"chat" | "threads">(() => {
+    if (typeof window === "undefined") return "chat";
+    try {
+      const stored = window.localStorage.getItem(CHAT_VIEW_STORAGE_KEY);
+      if (stored === "chat" || stored === "threads") return stored;
+    } catch {}
+    return "chat";
+  });
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(CHAT_VIEW_STORAGE_KEY, view);
+    } catch {}
+  }, [view]);
   // ChatScreen owns threadId/loadThread/newChat and stays mounted across the
   // swap; we coordinate through the shared chat UI store so the list can
   // highlight the active thread and drive load/new — no window-event handshake.
@@ -235,7 +280,7 @@ export function PortfoliosPanel({ onClose }: { onClose: () => void }) {
   return (
     <>
       <PanelHeader title="Portfolios" onClose={onClose} />
-      <div className="ra-panel-body" style={{ padding: "10px 14px 14px" }}>
+      <PanelScrollBody style={{ padding: "10px 14px 14px" }}>
         {isLoading || !portfolios ? (
           <div style={{ padding: 12, color: "var(--muted)", fontSize: 12.5 }}>Loading…</div>
         ) : order.length === 0 ? (
@@ -269,7 +314,7 @@ export function PortfoliosPanel({ onClose }: { onClose: () => void }) {
         >
           <Icon name="plus" size={12} /> New portfolio
         </button>
-      </div>
+      </PanelScrollBody>
     </>
   );
 }
@@ -300,12 +345,9 @@ export function PlanPanel({ onClose }: { onClose: () => void }) {
     return (
       <>
         <PanelHeader title="Plan & Health" onClose={onClose} />
-        <div
-          className="ra-panel-body"
-          style={{ padding: 16, color: "var(--muted)", fontSize: 12.5 }}
-        >
+        <PanelScrollBody style={{ padding: 16, color: "var(--muted)", fontSize: 12.5 }}>
           Loading…
-        </div>
+        </PanelScrollBody>
       </>
     );
   }
@@ -326,7 +368,7 @@ export function PlanPanel({ onClose }: { onClose: () => void }) {
   return (
     <>
       <PanelHeader title="Plan & Health" onClose={onClose} />
-      <div className="ra-panel-body" style={{ padding: "12px 14px" }}>
+      <PanelScrollBody style={{ padding: "12px 14px" }}>
         <div
           className="card-soft"
           style={{ padding: "10px 12px", marginBottom: 12, borderRadius: 12 }}
@@ -391,7 +433,7 @@ export function PlanPanel({ onClose }: { onClose: () => void }) {
             Pick a target model to unlock drift tracking and rebalance suggestions.
           </div>
         )}
-      </div>
+      </PanelScrollBody>
     </>
   );
 }
@@ -402,7 +444,7 @@ export function NotesPanel({ onClose }: { onClose: () => void }) {
   return (
     <>
       <PanelHeader title="Pinned notes" onClose={onClose} />
-      <div className="ra-panel-body" style={{ padding: "8px 12px 12px" }}>
+      <PanelScrollBody style={{ padding: "8px 12px 12px" }}>
         {notes.slice(0, 6).map((n) => (
           <div className="article-card" key={n.id}>
             <div className="meta-row">
@@ -430,7 +472,7 @@ export function NotesPanel({ onClose }: { onClose: () => void }) {
             No pinned notes yet.
           </div>
         )}
-      </div>
+      </PanelScrollBody>
     </>
   );
 }

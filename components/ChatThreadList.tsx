@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { Icon } from "@/components/Icon";
 import { invalidate, useResource } from "@/lib/fetchers/swr";
+import { useOverlayScrollbar } from "@/lib/useOverlayScrollbar";
 
 interface ThreadRow {
   id: string;
@@ -90,6 +91,11 @@ export function ChatThreadList({
   // path stays one request.
   const { data, isLoading, error } = useResource<ThreadRow[]>(open ? "/api/chat/threads" : null);
   const [showDeleted, setShowDeleted] = useState(false);
+
+  // Overlay scrollbar for the in-panel list scroller. Only the "panel" variant
+  // renders `.ra-thread-panel`; in the drawer variant the callback ref is never
+  // attached, so the instance never initializes.
+  const threadPanelRef = useOverlayScrollbar(variant === "panel");
 
   // Sidebar full-text search. The raw input updates immediately for
   // responsiveness; `debouncedQuery` trails by 200ms so we don't fire a
@@ -638,10 +644,16 @@ export function ChatThreadList({
   // In-panel variant: just the scrollable list body. The chat panel supplies
   // its own header + back control, so there's no fixed positioning or backdrop.
   if (variant === "panel") {
+    // Single stable child: OverlayScrollbars re-parents the host's children into
+    // a generated viewport, so React must not reconcile the dynamic list
+    // directly under the OS host (it would throw `removeChild ... not a child`).
+    // React only reconciles inside `.ra-thread-panel-content`. See PanelScrollBody.
     return (
-      <div className="ra-thread-panel">
-        {listBody}
-        {hoverStyles}
+      <div ref={threadPanelRef} className="ra-thread-panel">
+        <div className="ra-thread-panel-content">
+          {listBody}
+          {hoverStyles}
+        </div>
       </div>
     );
   }
