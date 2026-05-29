@@ -15,6 +15,14 @@ cut: this section is sliced into a dated/versioned heading and a fresh
 
 ### Added
 
+- **Confirm-before-delete on destructive actions** — deleting a holding,
+  portfolio, or custom model template, purging a chat thread, removing a passkey,
+  or signing out everywhere now routes through a consistent confirmation dialog
+  (replacing native `window.confirm` and one unguarded one-click delete), so no
+  irreversible action happens on a single mis-tap. The reversible 30-day chat
+  trash and an ordinary sign-out stay one-tap.
+- **Legal links on the front door** — the landing footer now links the Terms of
+  Service and Privacy Policy pages.
 - **Instant fund search** — the fund finder typeahead is backed by an in-memory
   MiniSearch index (`lib/search/fund-index.ts`): fuzzy + prefix matching, field
   boosting, and curated index-nickname synonyms. It folds each feeder fund's
