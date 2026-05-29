@@ -68,7 +68,7 @@ via the soft `quoteSource`+`ticker` cache key resolved in app code
 (`getCachedSeries`), never a join. A query module touching both (e.g.
 `lib/db/queries/series.ts`) reads each handle and joins app-side. The schema is
 split into `lib/db/schema/app.ts` + `lib/db/schema/market.ts`, re-exported from
-`lib/db/schema/index.ts`. Two drizzle configs (`drizzle.config.{app,market}.ts`)
+`lib/db/schema/index.ts`. Two drizzle configs (`drizzle/config.{app,market}.ts`)
 generate baselines under `lib/db/migrations/{app,market}/`.
 
 Every API route that calls `getDb()`/`getMarketDb()` (which most queries do via
@@ -361,7 +361,7 @@ GitHub Actions CI runs typecheck + lint + build. The build step needs
   file matching its lifecycle (precious → app, regenerable → market).
 - Generate migrations with `npm run db:generate` (runs both
   `db:generate:app` + `db:generate:market`). Each DB has its own config
-  (`drizzle.config.{app,market}.ts`) and migration dir
+  (`drizzle/config.{app,market}.ts`) and migration dir
   (`lib/db/migrations/{app,market}/`). Migrations are forward-only; in dev,
   prefer `db:drop:app`/`db:drop:market` + reseed over hand-editing.
   The FTS5 `chat_messages_fts` table (not expressible in drizzle) rides as a
