@@ -980,9 +980,11 @@ export function AddHoldingsSheet({ open, onClose, onAdd }: AddHoldingsSheetProps
                   onChange={(e) => updateRow(i, "units", e.target.value)}
                   aria-invalid={rowNeedsUnits}
                   title={
-                    r.estimated && !rowNeedsUnits
-                      ? "Estimated from value ÷ NAV — edit for an exact quantity"
-                      : undefined
+                    rowNeedsUnits
+                      ? "No quantity on the screenshot — open the fund in your broker app (or its detail screen) for exact units + avg cost, then type them here."
+                      : r.estimated
+                        ? "Estimated from value ÷ NAV — edit for an exact quantity"
+                        : undefined
                   }
                   style={
                     rowNeedsUnits
@@ -1041,9 +1043,9 @@ export function AddHoldingsSheet({ open, onClose, onAdd }: AddHoldingsSheetProps
               }}
             >
               {needsUnitsCount > 0 && unknownSymbolCount > 0
-                ? `ⓘ ${needsUnitsCount} row${needsUnitsCount > 1 ? "s need" : " needs"} a quantity. ${unknownSymbolCount} symbol${unknownSymbolCount > 1 ? "s are" : " is"} not in the catalog yet, but you can still save ${unknownSymbolCount > 1 ? "them" : "it"} if correct.`
+                ? `ⓘ ${needsUnitsCount} row${needsUnitsCount > 1 ? "s show" : " shows"} only a value — add the quantity (exact units + avg cost are on the fund's detail screen). ${unknownSymbolCount} symbol${unknownSymbolCount > 1 ? "s are" : " is"} not in the catalog yet, but you can still save ${unknownSymbolCount > 1 ? "them" : "it"} if correct.`
                 : needsUnitsCount > 0
-                  ? `ⓘ ${needsUnitsCount} row${needsUnitsCount > 1 ? "s need" : " needs"} a quantity before ${needsUnitsCount > 1 ? "they" : "it"} can be saved.`
+                  ? `ⓘ ${needsUnitsCount} row${needsUnitsCount > 1 ? "s show" : " shows"} only a value — add the quantity (exact units + avg cost are on the fund's detail screen) before saving.`
                   : `ⓘ ${unknownSymbolCount} symbol${unknownSymbolCount > 1 ? "s are" : " is"} not in the catalog yet. You can still save ${unknownSymbolCount > 1 ? "them" : "it"} if correct.`}
             </div>
           )}

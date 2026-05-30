@@ -69,7 +69,27 @@ describe("inferQuoteSource", () => {
     expect(inferQuoteSource("PTT.BK")).toBe("yahoo");
     expect(inferQuoteSource("^GSPC")).toBe("yahoo");
     expect(inferQuoteSource("THB=X")).toBe("yahoo");
-    expect(inferQuoteSource("KFIXED")).toBe("yahoo"); // no hyphen = not Thai-fund shape
+    expect(inferQuoteSource("KFIXED")).toBe("yahoo"); // no hyphen, not a known AMC prefix
+    for (const t of ["SPY", "QQQ", "THD", "ACWI"]) {
+      expect(inferQuoteSource(t)).toBe("yahoo"); // plain ETF tickers
+    }
+  });
+
+  it("tags Thai funds the old shape-only regex missed", () => {
+    // Parenthetical share class — parens weren't in the old character class.
+    expect(inferQuoteSource("K-GOLD-A(A)")).toBe("thai_mutual_fund");
+    // No-hyphen AMC codes — fell through to yahoo under shape-only rules.
+    expect(inferQuoteSource("SCBCOMP")).toBe("thai_mutual_fund");
+    expect(inferQuoteSource("KFS100SSFX")).toBe("thai_mutual_fund");
+    // Hyphen / ampersand fund codes stay Thai funds.
+    for (const t of ["TLFVMR-ASIAX", "KF-LATAM", "KF-SET50-L", "KT-BOND"]) {
+      expect(inferQuoteSource(t)).toBe("thai_mutual_fund");
+    }
+  });
+
+  it("honours the seed catalog by membership (case-insensitive)", () => {
+    expect(inferQuoteSource("^set.bk")).toBe("yahoo");
+    expect(inferQuoteSource("ptt.bk")).toBe("yahoo");
   });
 });
 

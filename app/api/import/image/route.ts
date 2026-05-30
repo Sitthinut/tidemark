@@ -6,6 +6,7 @@ import {
   type DerivedRow,
   deriveRow,
   extractStructuredHoldings,
+  inferQuoteSource,
   isAllowedMimeType,
   OcrProviderUnavailableError,
 } from "@/lib/portfolio/ocr";
@@ -95,18 +96,20 @@ export async function POST(req: Request) {
     try {
       const extracted = await extractStructuredHoldings({ data: buffer, mimeType });
 
-      // One NAV lookup for all tickers, then derive per row.
-      const tickers = extracted.map((r) => r.ticker.trim().toUpperCase());
-      const navByTicker = new Map<string, number>();
-      if (tickers.length) {
-        for (const q of listFundQuotes(tickers)) {
-          if (q.nav > 0) navByTicker.set(q.ticker.toUpperCase(), q.nav);
+      // fund_quotes is keyed by the composite "source:ticker" cache key
+      // (lib/market/cache.ts), not the bare symbol — build the same key per row
+      // (same inferQuoteSource deriveRow uses) so the NAV lookup actually hits.
+      const keyFor = (ticker: string) =>
+        `${inferQuoteSource(ticker)}:${ticker.trim().toUpperCase()}`;
+      const navByKey = new Map<string, number>();
+      const keys = extracted.map((r) => keyFor(r.ticker));
+      if (keys.length) {
+        for (const q of listFundQuotes(keys)) {
+          if (q.nav > 0) navByKey.set(q.ticker, q.nav);
         }
       }
 
-      const rows: DerivedRow[] = extracted.map((r) =>
-        deriveRow(r, navByTicker.get(r.ticker.trim().toUpperCase())),
-      );
+      const rows: DerivedRow[] = extracted.map((r) => deriveRow(r, navByKey.get(keyFor(r.ticker))));
 
       return NextResponse.json({ rows }, { status: 200 });
     } catch (err) {
